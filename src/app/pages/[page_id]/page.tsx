@@ -219,6 +219,13 @@ export default async function Page({ params, searchParams }: { params: any; sear
   const p95ms = percentile(samplesMs, 95);
   const sampleCount = samplesMs.length;
 
+  // Failure / error rates from persisted page_states.fetch_errors
+  const failureCount = rows.filter(r => typeof (r as any).fetch_errors === 'number' && (r as any).fetch_errors > 0).length;
+  const totalFailures = rows.reduce((acc, r) => acc + (typeof (r as any).fetch_errors === 'number' ? (r as any).fetch_errors : 0), 0);
+  const failureRatePct = rows.length ? Math.round((failureCount / rows.length) * 100) : 0;
+  const lastFailureRow = rows.slice().reverse().find(r => typeof (r as any).fetch_errors === 'number' && (r as any).fetch_errors > 0);
+  const lastFailureAt = lastFailureRow ? Date.parse(lastFailureRow.generated_at) : null;
+
   // Sparkline over last 24h using persisted response_ms in rows
   const last24Start = Date.now() - 24 * 3600 * 1000;
   const rtSamples24 = rows.filter(r => {
@@ -360,7 +367,25 @@ export default async function Page({ params, searchParams }: { params: any; sear
             )}
           </div>
         </div>
-        <div className="col-span-2" />
+
+        <div className="dashboard-data rounded-lg border border-slate-800 bg-slate-900 p-4">
+          <div className="text-xs text-slate-400">Failure / error rate</div>
+          <div className="mt-2">
+            {rows.length === 0 ? (
+              <div className="text-sm text-slate-400">No history</div>
+            ) : (
+              <>
+                <div className="text-lg font-bold">{failureRatePct}%</div>
+                <div className="text-sm text-slate-400 mt-1">Failure samples: <span className="font-semibold">{failureCount}</span></div>
+                <div className="text-sm text-slate-400">Total failures: <span className="font-semibold">{totalFailures}</span></div>
+                <div className="text-xs text-slate-400 mt-3">Last failure: {lastFailureAt ? <LiveTimeAgo timestampMs={lastFailureAt} /> : '—'}</div>
+                <div className="text-xs text-slate-400 mt-2">Source: persisted fetch_errors on page_states</div>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div />
       </div>
 
       <div className="dashboard-data rounded-lg border border-slate-800 bg-slate-900 p-4">
