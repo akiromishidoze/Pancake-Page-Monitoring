@@ -63,6 +63,7 @@ function migrate(db: Database.Database) {
       activity_kind_change TEXT,
       hours_since_last_order REAL,
       hours_since_last_customer_activity REAL,
+      response_ms REAL,
       generated_at TEXT NOT NULL,
       FOREIGN KEY (run_id) REFERENCES runs(run_id) ON DELETE CASCADE
     );
@@ -130,6 +131,7 @@ export type PageStateRow = {
   activity_kind_change: string | null;
   hours_since_last_order: number | null;
   hours_since_last_customer_activity: number | null;
+  response_ms: number | null;
   generated_at: string;
 };
 
@@ -181,11 +183,11 @@ export function insertSnapshot(input: InsertSnapshotInput): { inserted: boolean 
     INSERT INTO page_states (
       run_id, page_id, shop_label, page_name, activity_kind, is_activated,
       is_canary, activation_reason, state_change, activity_kind_change,
-      hours_since_last_order, hours_since_last_customer_activity, generated_at
+      hours_since_last_order, hours_since_last_customer_activity, response_ms, generated_at
     ) VALUES (
       @run_id, @page_id, @shop_label, @page_name, @activity_kind, @is_activated,
       @is_canary, @activation_reason, @state_change, @activity_kind_change,
-      @hours_since_last_order, @hours_since_last_customer_activity, @generated_at
+      @hours_since_last_order, @hours_since_last_customer_activity, @response_ms, @generated_at
     )
   `);
 
@@ -211,8 +213,8 @@ export function insertSnapshot(input: InsertSnapshotInput): { inserted: boolean 
     });
 
     const allPages = [
-      ...input.active_pages.map((p) => ({ ...p, _is_active: 1 })),
-      ...input.inactive_pages.map((p) => ({ ...p, _is_active: 0 })),
+      ...input.active_pages.map((p) => ({ ...p, _is_active: 1, response_ms: (p as any).response_ms ?? (p as any).response_time_ms ?? (p as any).latency_ms ?? (p as any).fetch_latency_ms ?? null })),
+      ...input.inactive_pages.map((p) => ({ ...p, _is_active: 0, response_ms: (p as any).response_ms ?? (p as any).response_time_ms ?? (p as any).latency_ms ?? (p as any).fetch_latency_ms ?? null })),
     ];
 
     for (const p of allPages) {
@@ -229,6 +231,7 @@ export function insertSnapshot(input: InsertSnapshotInput): { inserted: boolean 
         activity_kind_change: p.activity_kind_change ?? null,
         hours_since_last_order: null,
         hours_since_last_customer_activity: null,
+        response_ms: (p as any).response_ms ?? null,
         generated_at: input.generated_at,
       });
     }
