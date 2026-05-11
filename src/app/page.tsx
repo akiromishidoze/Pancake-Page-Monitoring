@@ -4,6 +4,8 @@ import { StatusCard } from '@/components/StatusCard';
 import { RunNowButton } from '@/components/RunNowButton';
 import { RunStatusIndicator } from '@/components/RunStatusIndicator';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
+import { ActiveDonutChart } from '@/components/ActiveDonutChart';
+import { ActivityScatterPlot } from '@/components/ActivityScatterPlot';
 
 export default async function OverviewPage() {
   const result = await fetchReceiverStatus();
@@ -86,6 +88,21 @@ export default async function OverviewPage() {
             tone={(h?.alert_count ?? 0) > 0 ? 'red' : 'green'}
             subtitle={h?.outage_suspected ? 'Outage suspected' : 'No outage flagged'}
           />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-1">
+            <ActiveDonutChart
+              activeCount={data.totals?.active ?? 0}
+              inactiveCount={data.totals?.inactive ?? 0}
+            />
+          </div>
+          <div className="lg:col-span-2">
+            <ActivityScatterPlot
+              activePages={data.active_pages ?? []}
+              inactivePages={data.inactive_pages ?? []}
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
