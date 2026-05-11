@@ -7,6 +7,7 @@ import { fetchReceiverStatus } from '@/lib/receiver';
 import { getLatestPageStates, getRunCount } from '@/lib/db';
 import Link from 'next/link';
 import { PageFilters } from '@/components/PageFilters';
+import ShopCompare from '@/components/ShopCompare';
 
 type Row = {
   page_id: string;
@@ -101,6 +102,18 @@ export default async function PagesPage({
   const shops = Array.from(
     new Set(rows.map((r) => r.shop).filter((s): s is string => !!s)),
   ).sort();
+
+  // Insert per-shop breakdown / compare UI
+  const rowsForCompare = rows.map((s) => ({
+    page_id: s.page_id,
+    shop: s.shop ?? null,
+    name: s.name ?? null,
+    kind: s.kind ?? null,
+    is_activated: !!s.is_activated,
+    is_canary: !!s.is_canary,
+    reason: s.reason ?? null,
+    state_change: s.state_change ?? null,
+  }));
   const kinds = Array.from(
     new Set(rows.map((r) => r.kind).filter((k): k is string => !!k)),
   ).sort((a, b) => (KIND_RANK[b] ?? 0) - (KIND_RANK[a] ?? 0));
@@ -153,6 +166,11 @@ export default async function PagesPage({
       </div>
 
 <PageFilters shops={shops} kinds={kinds} />
+
+      {/* Per-shop breakdown & compare */}
+      <div className="mt-4">
+        <ShopCompare rows={rowsForCompare} shops={shops} />
+      </div>
 
       {sorted.length === 0 ? (
         <div className="dashboard-data rounded-lg border border-slate-800 bg-slate-900 p-6 text-slate-400">
