@@ -27,7 +27,7 @@ export default async function Page({ params }: { params: { page_id: string } }) 
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">Page metrics</h2>
-          <Link href="/pages/page" className="text-sm text-slate-400 underline">Back to pages</Link>
+          <Link href="/pages" className="text-sm text-slate-400 underline">Back to pages</Link>
         </div>
         <div className="dashboard-data rounded-lg border border-slate-800 bg-slate-900 p-6 text-slate-400">
           No history found for this page.

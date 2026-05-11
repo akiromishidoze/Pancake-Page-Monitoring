@@ -152,33 +152,6 @@ export default async function PagesPage({
         </p>
       </div>
 
-      {
-  // Tabs for quick shop selection
-}
-<div className="mb-4">
-  <div className="flex items-center gap-2">
-    {['All Shops', 'Shop 1', 'Shop 2', 'Shop 3'].map((t) => {
-      const isActive = (t === 'All Shops' && !sp.shop) || sp.shop === t;
-      const params = new URLSearchParams();
-      if (t !== 'All Shops') params.set('shop', t);
-      if (sp.kind) params.set('kind', sp.kind);
-      if (sp.status) params.set('status', sp.status);
-      if (sp.q) params.set('q', sp.q);
-      if (sp.canary) params.set('canary', sp.canary);
-      const href = `/pages/page${params.toString() ? `?${params.toString()}` : ''}`;
-      return (
-        <Link
-          key={t}
-          href={href}
-          className={`px-3 py-1 rounded text-sm font-medium ${isActive ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:bg-slate-800/30'}`}
-        >
-          {t}
-        </Link>
-      );
-    })}
-  </div>
-</div>
-
 <PageFilters shops={shops} kinds={kinds} />
 
       {sorted.length === 0 ? (
