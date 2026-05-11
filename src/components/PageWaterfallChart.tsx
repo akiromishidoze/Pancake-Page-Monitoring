@@ -26,15 +26,33 @@ export function PageWaterfallChart({ activePages, inactivePages }: PageWaterfall
   
   const totalCount = funnelCount + chatCount + directCount + inactiveCount;
 
-  // Build the waterfall data
-  // base is the transparent "bottom" bar that pushes the visible "val" bar up
-  const data = [
-    { name: 'Funnel', base: 0, val: funnelCount, fill: '#22c55e' }, // green-500
-    { name: 'Chat Only', base: funnelCount, val: chatCount, fill: '#84cc16' }, // lime-500
-    { name: 'Direct Orders', base: funnelCount + chatCount, val: directCount, fill: '#14b8a6' }, // teal-500
-    { name: 'Inactive', base: funnelCount + chatCount + directCount, val: inactiveCount, fill: '#64748b' }, // slate-500
-    { name: 'Total', base: 0, val: totalCount, fill: '#3b82f6' }, // blue-500
+  // If there's no data at all, show a friendly placeholder instead of an empty chart
+  if (totalCount === 0) {
+    return (
+      <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 flex items-center justify-center h-[400px]">
+        <div className="text-slate-400 text-sm">No page activity data</div>
+      </div>
+    );
+  }
+
+  // Build categories and filter out zero-valued buckets so they don't appear in legend/colors
+  const categories = [
+    { key: 'funnel', label: 'Funnel', count: funnelCount, fill: '#22c55e' },
+    { key: 'chat', label: 'Chat Only', count: chatCount, fill: '#84cc16' },
+    { key: 'direct', label: 'Direct Orders', count: directCount, fill: '#14b8a6' },
+    { key: 'inactive', label: 'Inactive', count: inactiveCount, fill: '#64748b' },
   ];
+
+  const visibleCats = categories.filter((c) => c.count > 0);
+  let cum = 0;
+  const data = visibleCats.map((c) => {
+    const item = { name: `${c.label} (${c.count})`, base: cum, val: c.count, fill: c.fill };
+    cum += c.count;
+    return item;
+  });
+
+  // Always include a total bar for context
+  data.push({ name: 'Total', base: 0, val: totalCount, fill: '#3b82f6' });
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {

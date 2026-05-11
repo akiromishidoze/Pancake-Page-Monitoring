@@ -20,10 +20,50 @@ function formatDurationSeconds(sec: number) {
   return parts.join(' ');
 }
 
-export default async function Page({ params, searchParams }: { params: { page_id: string }; searchParams?: { shop?: string } }) {
-  const pageId = params.page_id;
-  const shopFilter = searchParams?.shop;
+export default async function Page({ params, searchParams }: { params: any; searchParams?: any }) {
+  const resolvedParams = await params;
+  const pageId = resolvedParams.page_id;
+  const resolvedSearch = searchParams ? await searchParams : undefined;
+  const shopFilter = resolvedSearch?.shop;
   let rows = getPageHistory(pageId, 5000);
+
+  if (!rows || rows.length === 0) {
+    // Fallback: try fetching live receiver status to show immediate data if DB is cold
+    try {
+      const { fetchReceiverStatus } = await import('@/lib/receiver');
+      const live = await fetchReceiverStatus({ noCache: true });
+      if (live.ok) {
+        const active = live.data.active_pages ?? [];
+        const inactive = live.data.inactive_pages ?? [];
+        const all = [...active, ...inactive];
+        const p = all.find((pp) => String(pp.page_id ?? pp.id ?? '') === String(pageId));
+        if (p) {
+          // Build a single-row history from live data so the rest of the UI can render
+          rows = [
+            {
+              id: -1,
+              run_id: live.data.page_lists_run_id ?? live.data.latest_health?.run_id ?? '',
+              page_id: pageId,
+              shop_label: p.shop_label ?? p.shop ?? null,
+              page_name: p.name ?? null,
+              activity_kind: p.activity_kind ?? p.kind ?? null,
+              is_activated: active.some((x) => String(x.page_id ?? x.id ?? '') === String(pageId)) ? 1 : 0,
+              is_canary: p.is_canary ? 1 : 0,
+              activation_reason: p.activation_reason ?? p.reason ?? null,
+              state_change: p.state_change ?? null,
+              activity_kind_change: null,
+              hours_since_last_order: null,
+              hours_since_last_customer_activity: null,
+              response_ms: (p as any).response_ms ?? (p as any).response_time_ms ?? null,
+              generated_at: live.data.generated_at,
+            },
+          ];
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
 
   if (!rows || rows.length === 0) {
     return (
@@ -165,60 +205,8 @@ export default async function Page({ params, searchParams }: { params: { page_id
     shop_label: r.shop_label ?? r.shop_label,
   }));
 
-  // Response-time metrics: prefer canonical response_ms stored on page_states; fall back to raw_summary parsing
-  const samplesFromRows: number[] = rows.map((r) => (typeof (r as any).response_ms === 'number' ? (r as any).response_ms : null)).filter((v): v is number => v !== null);
-  let samplesMs: number[] = samplesFromRows.slice();
-
-  // If no persisted samples, try to extract from raw_summary in runs (backwards compatible)
-  if (!samplesMs.length) {
-    try {
-      const { getDb } = await import('@/lib/db');
-      const db = getDb();
-      const runStmt = db.prepare('SELECT raw_summary FROM runs WHERE run_id = ?');
-      const runIds = Array.from(new Set(rows.map(r => r.run_id)));
-      for (const rid of runIds) {
-        try {
-          const row = runStmt.get(rid) as { raw_summary: string } | undefined;
-          if (!row || !row.raw_summary) continue;
-          let parsed: any;
-          try { parsed = JSON.parse(row.raw_summary); } catch (e) { parsed = row.raw_summary; }
-          if (!parsed) continue;
-
-          const lists = [parsed.active_pages ?? [], parsed.inactive_pages ?? []];
-          for (const list of lists) {
-            for (const p of list) {
-              const pid = p.page_id ?? p.id ?? p.pageId ?? null;
-              if (!pid) continue;
-              if (String(pid) !== String(pageId)) continue;
-
-              const candFields = ['response_ms','response_time_ms','latency_ms','fetch_latency_ms','fetch_ms','response_ms_p50','p50_ms','avg_ms','avg_response_ms'];
-              for (const f of candFields) {
-                const v = p[f];
-                if (typeof v === 'number' && !Number.isNaN(v) && v >= 0) {
-                  samplesMs.push(v);
-                }
-              }
-
-              if (p.metrics && typeof p.metrics === 'object') {
-                for (const k of Object.keys(p.metrics)) {
-                  const v = p.metrics[k];
-                  if (typeof v === 'number' && v >= 0) samplesMs.push(v);
-                }
-              }
-
-              if (Array.isArray(p.response_times) && p.response_times.length) {
-                for (const t of p.response_times) if (typeof t === 'number') samplesMs.push(t);
-              }
-            }
-          }
-        } catch (e) {
-          // ignore per-run parse errors
-        }
-      }
-    } catch (e) {
-      // ignore
-    }
-  }
+  // Response-time metrics: use only persisted response_ms values from page_states (real data only)
+  const samplesMs: number[] = rows.map((r) => (typeof (r as any).response_ms === 'number' ? (r as any).response_ms : null)).filter((v): v is number => v !== null);
 
   function percentile(arr: number[], p: number) {
     if (!arr.length) return null;
@@ -231,7 +219,7 @@ export default async function Page({ params, searchParams }: { params: { page_id
   const p95ms = percentile(samplesMs, 95);
   const sampleCount = samplesMs.length;
 
-  // Sparkline over last 24h using persisted response_ms in rows (best effort)
+  // Sparkline over last 24h using persisted response_ms in rows
   const last24Start = Date.now() - 24 * 3600 * 1000;
   const rtSamples24 = rows.filter(r => {
     const ts = Date.parse(r.generated_at);
@@ -354,17 +342,22 @@ export default async function Page({ params, searchParams }: { params: { page_id
         <div className="dashboard-data rounded-lg border border-slate-800 bg-slate-900 p-4">
           <div className="text-xs text-slate-400">Response time</div>
           <div className="mt-2">
-            <div className="text-sm text-slate-400">Samples: <span className="font-semibold">{sampleCount}</span></div>
-            <div className="mt-2 text-lg font-bold">p50: <span className="ml-2 text-slate-200">{p50ms ? (p50ms < 1000 ? `${Math.round(p50ms)} ms` : `${(p50ms/1000).toFixed(1)} s`) : '—'}</span></div>
-            <div className="text-lg font-bold mt-1">p95: <span className="ml-2 text-slate-200">{p95ms ? (p95ms < 1000 ? `${Math.round(p95ms)} ms` : `${(p95ms/1000).toFixed(1)} s`) : '—'}</span></div>
-            {sparklinePath ? (
-              <div className="mt-3">
-                <svg width={sparklineWidth} height={sparklineHeight} viewBox={`0 0 ${sparklineWidth} ${sparklineHeight}`} className="rounded bg-slate-800/20">
-                  <path d={sparklinePath} fill="none" stroke="#60a5fa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
-            ) : null}
-            <div className="text-xs text-slate-400 mt-3">Note: values sourced from receiver raw summary when available.</div>
+            {sampleCount === 0 ? (
+              <div className="text-sm text-slate-400">No persisted response-time data</div>
+            ) : (
+              <>
+                <div className="mt-2 text-lg font-bold">p50: <span className="ml-2 text-slate-200">{p50ms ? (p50ms < 1000 ? `${Math.round(p50ms)} ms` : `${(p50ms/1000).toFixed(1)} s`) : '—'}</span></div>
+                <div className="text-lg font-bold mt-1">p95: <span className="ml-2 text-slate-200">{p95ms ? (p95ms < 1000 ? `${Math.round(p95ms)} ms` : `${(p95ms/1000).toFixed(1)} s`) : '—'}</span></div>
+                {sparklinePath ? (
+                  <div className="mt-3">
+                    <svg width={sparklineWidth} height={sparklineHeight} viewBox={`0 0 ${sparklineWidth} ${sparklineHeight}`} className="rounded bg-slate-800/20">
+                      <path d={sparklinePath} fill="none" stroke="#60a5fa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                ) : null}
+                <div className="text-xs text-slate-400 mt-3">Source: persisted measurements only</div>
+              </>
+            )}
           </div>
         </div>
         <div className="col-span-2" />
