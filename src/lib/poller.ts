@@ -3,7 +3,7 @@
 // Idempotent — same run_id is skipped on subsequent polls.
 
 import { fetchReceiverStatus } from './receiver';
-import { insertSnapshot } from './db';
+import { insertSnapshot, setSetting } from './db';
 
 const POLL_INTERVAL_MS = 60_000; // 60 seconds
 
@@ -20,7 +20,7 @@ export function startPoller() {
   setInterval(() => void runOne(), POLL_INTERVAL_MS);
 }
 
-async function runOne() {
+export async function runOne() {
   _lastPolledAt = new Date().toISOString();
   const result = await fetchReceiverStatus({ noCache: true });
 
@@ -67,6 +67,9 @@ async function runOne() {
     if (result.inserted) {
       _lastPolledRunId = run_id;
       console.log('[poller] inserted run', run_id);
+      // Reset the scheduler countdown to start exactly when the data is received locally
+      // This ensures the UI timer jumps exactly to 14:59 after the loading sequence completes
+      setSetting('last_scheduled_run', Date.now().toString());
     }
   } catch (err) {
     console.error('[poller] insert failed:', err);
@@ -80,4 +83,19 @@ export function getPollerStatus() {
     last_polled_run_id: _lastPolledRunId,
     interval_ms: POLL_INTERVAL_MS,
   };
+}
+
+let _isPolling = false;
+export async function pollIfNeeded() {
+  if (_isPolling) return;
+  if (_lastPolledAt && Date.now() - new Date(_lastPolledAt).getTime() < POLL_INTERVAL_MS) {
+    return;
+  }
+  
+  _isPolling = true;
+  try {
+    await runOne();
+  } finally {
+    _isPolling = false;
+  }
 }

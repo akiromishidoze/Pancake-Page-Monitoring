@@ -69,6 +69,11 @@ function migrate(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS page_states_page_id_time ON page_states(page_id, generated_at DESC);
     CREATE INDEX IF NOT EXISTS page_states_run_id ON page_states(run_id);
     CREATE INDEX IF NOT EXISTS page_states_kind_time ON page_states(activity_kind, generated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
 }
 
@@ -265,4 +270,21 @@ export function getRunCount(): number {
   const db = getDb();
   const row = db.prepare('SELECT COUNT(*) as c FROM runs').get() as { c: number };
   return row.c;
+}
+
+// ──── Settings ─────────────────────────────────────────────────────────
+
+export function getSetting(key: string): string | null {
+  const db = getDb();
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined;
+  return row ? row.value : null;
+}
+
+export function setSetting(key: string, value: string): void {
+  const db = getDb();
+  db.prepare(`
+    INSERT INTO settings (key, value)
+    VALUES (@key, @value)
+    ON CONFLICT(key) DO UPDATE SET value = @value
+  `).run({ key, value });
 }

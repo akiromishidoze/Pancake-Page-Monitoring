@@ -3,6 +3,7 @@
 // Client never sees the secret.
 
 import { NextResponse } from 'next/server';
+import { setSetting } from '@/lib/db';
 
 export async function POST() {
   const url = process.env.RUN_TRIGGER_URL;
@@ -34,6 +35,13 @@ export async function POST() {
         { status: 502 },
       );
     }
+
+    // Record that a run has been triggered to show the loading phase in the UI
+    const nowStr = Date.now().toString();
+    setSetting('last_trigger_time', nowStr);
+    
+    // Also reset the background scheduler countdown so it starts fresh from right now!
+    setSetting('last_scheduled_run', nowStr);
 
     const text = await res.text();
     return NextResponse.json({

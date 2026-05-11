@@ -16,7 +16,7 @@ export function StatusCard({
   title: string;
   value: string;
   tone: Tone;
-  subtitle?: string;
+  subtitle?: React.ReactNode;
 }) {
   return (
     <div className={`rounded-lg border p-4 ${toneClasses[tone]}`}>

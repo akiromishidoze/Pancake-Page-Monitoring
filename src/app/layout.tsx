@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { AutoRefresh } from '@/components/AutoRefresh';
+import { GlobalLoadingSequence } from '@/components/GlobalLoadingSequence';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -12,6 +14,8 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full antialiased">
       <body className="bg-slate-950 text-slate-100 min-h-screen">
+        <AutoRefresh />
+        <GlobalLoadingSequence />
         <header className="border-b border-slate-800 bg-slate-900">
           <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">

@@ -1,6 +1,9 @@
 import { fetchReceiverStatus } from '@/lib/receiver';
+import { getLatestRun, getSetting } from '@/lib/db';
 import { StatusCard } from '@/components/StatusCard';
 import { RunNowButton } from '@/components/RunNowButton';
+import { RunStatusIndicator } from '@/components/RunStatusIndicator';
+import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 
 export default async function OverviewPage() {
   const result = await fetchReceiverStatus();
@@ -22,65 +25,71 @@ export default async function OverviewPage() {
   const h = data.latest_health;
   const heartbeatFresh = data.status === 'fresh';
 
+  const localRun = getLatestRun();
+  const lastScheduledRunStr = getSetting('last_scheduled_run');
+  const lastScheduledRunMs = lastScheduledRunStr ? parseInt(lastScheduledRunStr, 10) : null;
+  
+  const lastUpdatedDisplay = localRun 
+    ? new Date(localRun.received_at).toLocaleString() 
+    : new Date(data.generated_at).toLocaleString();
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold">Overview</h2>
           <p className="text-sm text-slate-400 mt-1">
-            Last updated {new Date(data.generated_at).toLocaleString()}
+            Last updated {lastUpdatedDisplay}
           </p>
+          <RunStatusIndicator />
         </div>
         <RunNowButton />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatusCard
-          title="Heartbeat"
-          value={heartbeatFresh ? 'FRESH' : 'STALE'}
-          tone={heartbeatFresh ? 'green' : 'red'}
-          subtitle={
-            data.age_minutes !== null
-              ? `Last run ${data.age_minutes} min ago`
-              : 'No runs received'
-          }
-        />
-        <StatusCard
-          title="Run Quality"
-          value={(h?.run_quality ?? 'unknown').toUpperCase()}
-          tone={
-            h?.run_quality === 'full'
-              ? 'green'
-              : h?.run_quality === 'partial'
-                ? 'yellow'
-                : h?.run_quality === 'degraded'
+      <div className="dashboard-data space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatusCard
+            title="Heartbeat"
+            value={heartbeatFresh ? 'FRESH' : 'STALE'}
+            tone={heartbeatFresh ? 'green' : 'red'}
+            subtitle={<LiveTimeAgo timestampMs={lastScheduledRunMs} />}
+          />
+          <StatusCard
+            title="Run Quality"
+            value={(h?.run_quality ?? 'unknown').toUpperCase()}
+            tone={
+              h?.run_quality === 'full'
+                ? 'green'
+                : h?.run_quality === 'partial'
+                  ? 'yellow'
+                  : h?.run_quality === 'degraded'
+                    ? 'red'
+                    : 'gray'
+            }
+            subtitle={`Severity: ${h?.severity ?? '—'}`}
+          />
+          <StatusCard
+            title="Canary"
+            value={(h?.canary_status ?? 'unknown').toUpperCase()}
+            tone={
+              h?.canary_status === 'ok'
+                ? 'green'
+                : h?.canary_status === 'down'
                   ? 'red'
                   : 'gray'
-          }
-          subtitle={`Severity: ${h?.severity ?? '—'}`}
-        />
-        <StatusCard
-          title="Canary"
-          value={(h?.canary_status ?? 'unknown').toUpperCase()}
-          tone={
-            h?.canary_status === 'ok'
-              ? 'green'
-              : h?.canary_status === 'down'
-                ? 'red'
-                : 'gray'
-          }
-          subtitle={h?.canary_alert ? 'ALERT' : '—'}
-        />
-        <StatusCard
-          title="Alerts"
-          value={String(h?.alert_count ?? 0)}
-          tone={(h?.alert_count ?? 0) > 0 ? 'red' : 'green'}
-          subtitle={h?.outage_suspected ? 'Outage suspected' : 'No outage flagged'}
-        />
-      </div>
+            }
+            subtitle={h?.canary_alert ? 'ALERT' : '—'}
+          />
+          <StatusCard
+            title="Alerts"
+            value={String(h?.alert_count ?? 0)}
+            tone={(h?.alert_count ?? 0) > 0 ? 'red' : 'green'}
+            subtitle={h?.outage_suspected ? 'Outage suspected' : 'No outage flagged'}
+          />
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
           <h3 className="text-sm font-medium text-slate-400 uppercase">
             Receiver
           </h3>
@@ -149,6 +158,7 @@ export default async function OverviewPage() {
             </div>
           </dl>
         </div>
+      </div>
       </div>
     </div>
   );

@@ -154,13 +154,13 @@ export default async function PagesPage({
       <PageFilters shops={shops} kinds={kinds} />
 
       {sorted.length === 0 ? (
-        <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 text-slate-400">
+        <div className="dashboard-data rounded-lg border border-slate-800 bg-slate-900 p-6 text-slate-400">
           {totalAll === 0
             ? 'No page data yet. The poller will populate this table after the next n8n run completes.'
             : 'No pages match the current filters.'}
         </div>
       ) : (
-        <div className="rounded-lg border border-slate-800 bg-slate-900 overflow-hidden">
+        <div className="dashboard-data rounded-lg border border-slate-800 bg-slate-900 overflow-hidden">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-800/50">
               <tr className="text-left text-xs uppercase text-slate-400">
