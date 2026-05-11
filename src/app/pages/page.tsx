@@ -5,6 +5,7 @@
 
 import { fetchReceiverStatus } from '@/lib/receiver';
 import { getLatestPageStates, getRunCount } from '@/lib/db';
+import Link from 'next/link';
 import { PageFilters } from '@/components/PageFilters';
 
 type Row = {
@@ -151,7 +152,34 @@ export default async function PagesPage({
         </p>
       </div>
 
-      <PageFilters shops={shops} kinds={kinds} />
+      {
+  // Tabs for quick shop selection
+}
+<div className="mb-4">
+  <div className="flex items-center gap-2">
+    {['All Shops', 'Shop 1', 'Shop 2', 'Shop 3'].map((t) => {
+      const isActive = (t === 'All Shops' && !sp.shop) || sp.shop === t;
+      const params = new URLSearchParams();
+      if (t !== 'All Shops') params.set('shop', t);
+      if (sp.kind) params.set('kind', sp.kind);
+      if (sp.status) params.set('status', sp.status);
+      if (sp.q) params.set('q', sp.q);
+      if (sp.canary) params.set('canary', sp.canary);
+      const href = `/pages/page${params.toString() ? `?${params.toString()}` : ''}`;
+      return (
+        <Link
+          key={t}
+          href={href}
+          className={`px-3 py-1 rounded text-sm font-medium ${isActive ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:bg-slate-800/30'}`}
+        >
+          {t}
+        </Link>
+      );
+    })}
+  </div>
+</div>
+
+<PageFilters shops={shops} kinds={kinds} />
 
       {sorted.length === 0 ? (
         <div className="dashboard-data rounded-lg border border-slate-800 bg-slate-900 p-6 text-slate-400">
@@ -187,7 +215,7 @@ export default async function PagesPage({
                           canary
                         </span>
                       )}
-                      <span>{r.name ?? '—'}</span>
+                      <Link href={`/pages/${r.page_id}`} className="text-slate-100 hover:underline">{r.name ?? '—'}</Link>
                     </div>
                   </td>
                   <td className="px-4 py-3">
