@@ -140,9 +140,8 @@ export default async function Page({ params, searchParams }: { params: any; sear
   const uptime30d = computeWindowUptime(rows, 30 * 24 * 3600);
 
   // Derive incidents and MTTR / MTBF from state transitions in the history
-  type Incident = { startMs: number; endMs: number | null; durationSec: number | null; reason?: string | null };
+  type Incident = { startMs: number; endMs: number | null; durationSec: number | null; reason?: string | null; severity?: string; sla_breach?: boolean };
   const incidents: Incident[] = [];
-  let lastActive = rows.length ? rows[0].is_activated === 1 : false;
   let pendingStart: number | null = null;
   for (let i = 1; i < rows.length; i++) {
     const prev = rows[i - 1];
@@ -163,13 +162,26 @@ export default async function Page({ params, searchParams }: { params: any; sear
         pendingStart = tPrev;
       }
       const end = tCur;
-      incidents.push({ startMs: pendingStart, endMs: end, durationSec: Math.max(0, Math.floor((end - pendingStart) / 1000)), reason: cur.activation_reason ?? cur.state_change ?? null });
+      const dur = Math.max(0, Math.floor((end - pendingStart) / 1000));
+      incidents.push({ startMs: pendingStart, endMs: end, durationSec: dur, reason: cur.activation_reason ?? cur.state_change ?? null });
       pendingStart = null;
     }
   }
   // If there's an open incident at the end of history, close it at 'now'
   if (pendingStart !== null) {
-    incidents.push({ startMs: pendingStart, endMs: now, durationSec: Math.max(0, Math.floor((now - pendingStart) / 1000)), reason: null });
+    const dur = Math.max(0, Math.floor((now - pendingStart) / 1000));
+    incidents.push({ startMs: pendingStart, endMs: now, durationSec: dur, reason: null });
+  }
+
+  // Assign severity to incidents and flag SLA breach (basic heuristic)
+  for (const it of incidents) {
+    const d = it.durationSec ?? 0;
+    if (d >= 3600) it.severity = 'critical';
+    else if (d >= 300) it.severity = 'major';
+    else if (d >= 60) it.severity = 'minor';
+    else it.severity = 'info';
+    // SLA breach: if 24h uptime below 99% and incident lasted > 1 minute
+    it.sla_breach = uptime24.pct < 99 && (it.durationSec ?? 0) >= 60;
   }
 
   // Aggregate MTTR (mean time to repair) = mean downtime of incidents
@@ -190,6 +202,25 @@ export default async function Page({ params, searchParams }: { params: any; sear
 
   // Recent incidents (most recent first)
   const recentIncidents = incidents.slice(-10).reverse();
+
+  // Flapping detector: count state changes in recent windows (1h, 24h)
+  const nowMs = Date.now();
+  const start1h = nowMs - 3600 * 1000;
+  const start24h = nowMs - 24 * 3600 * 1000;
+  let changes1h = 0;
+  let changes24h = 0;
+  for (let i = 1; i < rows.length; i++) {
+    const prev = rows[i - 1];
+    const cur = rows[i];
+    const tPrev = Date.parse(prev.generated_at);
+    const tCur = Date.parse(cur.generated_at);
+    if (isNaN(tPrev) || isNaN(tCur)) continue;
+    if (prev.is_activated !== cur.is_activated) {
+      if (tCur >= start1h) changes1h++;
+      if (tCur >= start24h) changes24h++;
+    }
+  }
+  const flapping = changes1h >= 3 || changes24h >= 10;
 
   // For activity charts: produce counts from latest snapshot if present
   const activePages = rows.filter(r => r.is_activated === 1).map(r => ({
@@ -324,9 +355,10 @@ export default async function Page({ params, searchParams }: { params: any; sear
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead className="bg-slate-800/50">
-                  <tr className="text-left text-xs uppercase text-slate-400">
+                          <tr className="text-left text-xs uppercase text-slate-400">
                     <th className="px-3 py-2">Start</th>
                     <th className="px-3 py-2">Duration</th>
+                    <th className="px-3 py-2">Severity</th>
                     <th className="px-3 py-2">Reason</th>
                   </tr>
                 </thead>
@@ -335,7 +367,18 @@ export default async function Page({ params, searchParams }: { params: any; sear
                     <tr key={`${it.startMs}-${idx}`} className="hover:bg-slate-800/30">
                       <td className="px-3 py-2 text-slate-300">{new Date(it.startMs).toLocaleString()}</td>
                       <td className="px-3 py-2 text-slate-200">{it.durationSec ? formatDurationSeconds(it.durationSec) : '—'}</td>
-                      <td className="px-3 py-2 text-slate-400">{it.reason ?? '—'}</td>
+                      <td className="px-3 py-2">
+                        {it.severity === 'critical' ? (
+                          <span className="inline-block px-2 py-1 rounded text-xs font-mono bg-red-900/40 text-red-300 border border-red-800">critical</span>
+                        ) : it.severity === 'major' ? (
+                          <span className="inline-block px-2 py-1 rounded text-xs font-mono bg-amber-900/30 text-amber-300 border border-amber-800">major</span>
+                        ) : it.severity === 'minor' ? (
+                          <span className="inline-block px-2 py-1 rounded text-xs font-mono bg-yellow-900/30 text-yellow-300 border border-yellow-800">minor</span>
+                        ) : (
+                          <span className="inline-block px-2 py-1 rounded text-xs font-mono bg-slate-800/30 text-slate-400 border border-slate-700">info</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-slate-400">{it.reason ?? '—'}{it.sla_breach ? (<span className="ml-2 text-xs text-red-400 font-medium">SLA</span>) : null}</td>
                     </tr>
                   ))}
                 </tbody>
