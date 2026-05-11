@@ -18,9 +18,10 @@ interface PageWaterfallChartProps {
 }
 
 export function PageWaterfallChart({ activePages, inactivePages }: PageWaterfallChartProps) {
-  const funnelCount = activePages.filter(p => p.kind === 'funnel_converting').length;
-  const chatCount = activePages.filter(p => p.kind === 'chat_only').length;
-  const directCount = activePages.filter(p => p.kind === 'direct_orders_only').length;
+  // Support both `kind` and `activity_kind` fields from receiver payloads
+  const funnelCount = activePages.filter(p => (p.activity_kind ?? p.kind) === 'funnel_converting').length;
+  const chatCount = activePages.filter(p => (p.activity_kind ?? p.kind) === 'chat_only').length;
+  const directCount = activePages.filter(p => (p.activity_kind ?? p.kind) === 'direct_orders_only').length;
   const inactiveCount = inactivePages.length;
   
   const totalCount = funnelCount + chatCount + directCount + inactiveCount;

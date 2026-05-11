@@ -1,6 +1,8 @@
 import { getPageHistory } from '@/lib/db';
 import Link from 'next/link';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
+import { ActiveDonutChart } from '@/components/ActiveDonutChart';
+import { PageWaterfallChart } from '@/components/PageWaterfallChart';
 
 function formatDurationSeconds(sec: number) {
   if (sec <= 0) return '0s';
@@ -10,7 +12,7 @@ function formatDurationSeconds(sec: number) {
   sec %= 3600;
   const mins = Math.floor(sec / 60);
   const s = Math.floor(sec % 60);
-  const parts = [];
+  const parts: string[] = [];
   if (days) parts.push(`${days}d`);
   if (hours) parts.push(`${hours}h`);
   if (mins) parts.push(`${mins}m`);
@@ -18,9 +20,10 @@ function formatDurationSeconds(sec: number) {
   return parts.join(' ');
 }
 
-export default async function Page({ params }: { params: { page_id: string } }) {
+export default async function Page({ params, searchParams }: { params: { page_id: string }; searchParams?: { shop?: string } }) {
   const pageId = params.page_id;
-  const rows = getPageHistory(pageId, 2000);
+  const shopFilter = searchParams?.shop;
+  let rows = getPageHistory(pageId, 5000);
 
   if (!rows || rows.length === 0) {
     return (
@@ -36,11 +39,15 @@ export default async function Page({ params }: { params: { page_id: string } }) 
     );
   }
 
+  // Optionally filter to shop if requested
+  if (shopFilter) rows = rows.filter(r => (r.shop_label ?? r.shop_label) === shopFilter);
+
   // rows are ordered ASC by generated_at
   const latest = rows[rows.length - 1];
+
+  // Compute uptime/inactivity durations by walking samples
   let activeSeconds = 0;
   let inactiveSeconds = 0;
-
   for (let i = 0; i < rows.length - 1; i++) {
     const cur = rows[i];
     const next = rows[i + 1];
@@ -64,17 +71,113 @@ export default async function Page({ params }: { params: { page_id: string } }) 
   const total = activeSeconds + inactiveSeconds || 1;
   const pctActive = Math.round((activeSeconds / total) * 100);
 
+  // SLA scoring: simple bands
+  const sla = pctActive >= 99 ? 'Good' : pctActive >= 95 ? 'Warning' : 'Poor';
+
+  // Compute rolling uptime for common windows (24h, 7d, 30d)
+  function computeWindowUptime(rows: typeof rows, windowSeconds: number) {
+    const windowStart = now - windowSeconds * 1000;
+    let active = 0;
+    let totalSec = 0;
+    for (let i = 0; i < rows.length; i++) {
+      const cur = rows[i];
+      const tcur = Date.parse(cur.generated_at);
+      const tnext = i < rows.length - 1 ? Date.parse(rows[i + 1].generated_at) : now;
+      if (isNaN(tcur) || isNaN(tnext)) continue;
+      if (tnext < windowStart) continue; // this sample entirely before window
+      const start = Math.max(tcur, windowStart);
+      const end = Math.min(tnext, now);
+      const delta = Math.max(0, Math.floor((end - start) / 1000));
+      if (cur.is_activated === 1) active += delta;
+      totalSec += delta;
+    }
+    const pct = totalSec === 0 ? 0 : Math.round((active / totalSec) * 100);
+    return { pct, activeSeconds: active, totalSeconds: totalSec };
+  }
+
+  const uptime24 = computeWindowUptime(rows, 24 * 3600);
+  const uptime7d = computeWindowUptime(rows, 7 * 24 * 3600);
+  const uptime30d = computeWindowUptime(rows, 30 * 24 * 3600);
+
+  // Derive incidents and MTTR / MTBF from state transitions in the history
+  type Incident = { startMs: number; endMs: number | null; durationSec: number | null; reason?: string | null };
+  const incidents: Incident[] = [];
+  let lastActive = rows.length ? rows[0].is_activated === 1 : false;
+  let pendingStart: number | null = null;
+  for (let i = 1; i < rows.length; i++) {
+    const prev = rows[i - 1];
+    const cur = rows[i];
+    const tPrev = Date.parse(prev.generated_at);
+    const tCur = Date.parse(cur.generated_at);
+    if (isNaN(tPrev) || isNaN(tCur)) continue;
+
+    // active -> inactive : incident start
+    if (prev.is_activated === 1 && cur.is_activated !== 1) {
+      pendingStart = tCur;
+    }
+
+    // inactive -> active : incident end
+    if (prev.is_activated !== 1 && cur.is_activated === 1) {
+      if (pendingStart === null) {
+        // If we didn't record start, use prev timestamp as heuristic
+        pendingStart = tPrev;
+      }
+      const end = tCur;
+      incidents.push({ startMs: pendingStart, endMs: end, durationSec: Math.max(0, Math.floor((end - pendingStart) / 1000)), reason: cur.activation_reason ?? cur.state_change ?? null });
+      pendingStart = null;
+    }
+  }
+  // If there's an open incident at the end of history, close it at 'now'
+  if (pendingStart !== null) {
+    incidents.push({ startMs: pendingStart, endMs: now, durationSec: Math.max(0, Math.floor((now - pendingStart) / 1000)), reason: null });
+  }
+
+  // Aggregate MTTR (mean time to repair) = mean downtime of incidents
+  const downtimes = incidents.map((it) => it.durationSec ?? 0).filter((d) => d > 0);
+  const MTTRsec = downtimes.length ? Math.round(downtimes.reduce((a, b) => a + b, 0) / downtimes.length) : null;
+
+  // MTBF (mean time between failures) = mean uptime between incident end and next start
+  const uptimesBetween: number[] = [];
+  for (let i = 0; i < incidents.length - 1; i++) {
+    const cur = incidents[i];
+    const next = incidents[i + 1];
+    if (cur.endMs && next.startMs) {
+      const up = Math.max(0, Math.floor((next.startMs - cur.endMs) / 1000));
+      uptimesBetween.push(up);
+    }
+  }
+  const MTBFsec = uptimesBetween.length ? Math.round(uptimesBetween.reduce((a, b) => a + b, 0) / uptimesBetween.length) : null;
+
+  // Recent incidents (most recent first)
+  const recentIncidents = incidents.slice(-10).reverse();
+
+  // For activity charts: produce counts from latest snapshot if present
+  const activePages = rows.filter(r => r.is_activated === 1).map(r => ({
+    name: r.page_name ?? '—',
+    page_id: r.page_id,
+    kind: r.activity_kind ?? r.activity_kind,
+    shop_label: r.shop_label ?? r.shop_label,
+  }));
+  const inactivePages = rows.filter(r => r.is_activated !== 1).map(r => ({
+    name: r.page_name ?? '—',
+    page_id: r.page_id,
+    kind: r.activity_kind ?? r.activity_kind,
+    shop_label: r.shop_label ?? r.shop_label,
+  }));
+
+  const exportHref = `/api/pages/${encodeURIComponent(pageId)}/export${shopFilter ? `?shop=${encodeURIComponent(shopFilter)}` : ''}`;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Page metrics</h2>
-          <p className="text-sm text-slate-400 mt-1">
-            {latest.page_name ?? '—'} — {latest.shop_label ?? '—'}
-          </p>
+          <p className="text-sm text-slate-400 mt-1">{latest.page_name ?? '—'} — {latest.shop_label ?? '—'}</p>
         </div>
-        <div className="text-sm text-slate-400">
+        <div className="flex items-center gap-4">
           <LiveTimeAgo timestampMs={Date.parse(latest.generated_at)} />
+          <Link href="/pages" className="text-sm text-slate-400 underline">Back to pages</Link>
+          <a href={exportHref} className="text-sm text-slate-400 underline">Export CSV</a>
         </div>
       </div>
 
@@ -90,15 +193,70 @@ export default async function Page({ params }: { params: { page_id: string } }) 
           </div>
           <div className="text-xs text-slate-400 mt-2">Activity: {latest.activity_kind ?? '—'}</div>
           <div className="text-xs text-slate-400">Shop: {latest.shop_label ?? '—'}</div>
+          <div className="text-xs text-slate-400 mt-3">SLA: <span className="font-semibold">{sla}</span></div>
         </div>
 
-        <div className="dashboard-data rounded-lg border border-slate-800 bg-slate-900 p-4 col-span-2">
-          <div className="text-xs text-slate-400">Uptime (based on stored snapshots)</div>
-          <div className="mt-2 flex items-baseline gap-4">
-            <div className="text-2xl font-semibold">{formatDurationSeconds(activeSeconds)}</div>
-            <div className="text-sm text-slate-400">active • {pctActive}%</div>
-            <div className="text-sm text-slate-400">inactive: {formatDurationSeconds(inactiveSeconds)}</div>
+        <div className="col-span-2 grid grid-cols-2 gap-4">
+          <div>
+            <ActiveDonutChart activeCount={activePages.length} inactiveCount={inactivePages.length} />
           </div>
+          <div>
+            <PageWaterfallChart activePages={activePages as any} inactivePages={inactivePages as any} />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4">
+        <div className="dashboard-data rounded-lg border border-slate-800 bg-slate-900 p-4">
+          <div className="text-xs text-slate-400">Rolling uptime</div>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            <div className="text-center">
+              <div className="text-sm font-semibold">24h</div>
+              <div className="text-lg font-bold mt-1">{uptime24.pct}%</div>
+              <div className="text-xs text-slate-400 mt-1">Active {formatDurationSeconds(uptime24.activeSeconds)}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-sm font-semibold">7d</div>
+              <div className="text-lg font-bold mt-1">{uptime7d.pct}%</div>
+              <div className="text-xs text-slate-400 mt-1">Active {formatDurationSeconds(uptime7d.activeSeconds)}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-sm font-semibold">30d</div>
+              <div className="text-lg font-bold mt-1">{uptime30d.pct}%</div>
+              <div className="text-xs text-slate-400 mt-1">Active {formatDurationSeconds(uptime30d.activeSeconds)}</div>
+            </div>
+          </div>
+
+          <div className="mt-4 text-xs text-slate-400">MTTR: <span className="font-semibold">{MTTRsec ? formatDurationSeconds(MTTRsec) : '—'}</span></div>
+          <div className="text-xs text-slate-400">MTBF: <span className="font-semibold">{MTBFsec ? formatDurationSeconds(MTBFsec) : '—'}</span></div>
+        </div>
+
+        <div className="col-span-2 dashboard-data rounded-lg border border-slate-800 bg-slate-900 p-4">
+          <div className="text-sm text-slate-200 font-medium mb-3">Recent incidents</div>
+          {recentIncidents.length === 0 ? (
+            <div className="text-sm text-slate-400">No incidents detected in history.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-800/50">
+                  <tr className="text-left text-xs uppercase text-slate-400">
+                    <th className="px-3 py-2">Start</th>
+                    <th className="px-3 py-2">Duration</th>
+                    <th className="px-3 py-2">Reason</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {recentIncidents.map((it, idx) => (
+                    <tr key={`${it.startMs}-${idx}`} className="hover:bg-slate-800/30">
+                      <td className="px-3 py-2 text-slate-300">{new Date(it.startMs).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-slate-200">{it.durationSec ? formatDurationSeconds(it.durationSec) : '—'}</td>
+                      <td className="px-3 py-2 text-slate-400">{it.reason ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 
@@ -116,7 +274,7 @@ export default async function Page({ params }: { params: { page_id: string } }) 
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {rows.slice(-200).reverse().map((r, i) => (
+              {rows.slice(-500).reverse().map((r, i) => (
                 <tr key={`${r.id}-${i}`} className="hover:bg-slate-800/30">
                   <td className="px-3 py-2 text-slate-300">{new Date(r.generated_at).toLocaleString()}</td>
                   <td className="px-3 py-2">
