@@ -266,6 +266,18 @@ export function getLatestPageStates(): PageStateRow[] {
     .all() as PageStateRow[];
 }
 
+export function getPageHistory(pageId: string, limit = 1000): PageStateRow[] {
+  const db = getDb();
+  return db
+    .prepare(
+      `SELECT * FROM page_states
+       WHERE page_id = ?
+       ORDER BY generated_at ASC
+       LIMIT ?`,
+    )
+    .all(pageId, limit) as PageStateRow[];
+}
+
 export function getRunCount(): number {
   const db = getDb();
   const row = db.prepare('SELECT COUNT(*) as c FROM runs').get() as { c: number };
