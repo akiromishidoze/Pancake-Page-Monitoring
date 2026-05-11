@@ -5,7 +5,7 @@ import { RunNowButton } from '@/components/RunNowButton';
 import { RunStatusIndicator } from '@/components/RunStatusIndicator';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { ActiveDonutChart } from '@/components/ActiveDonutChart';
-import { ActivityScatterPlot } from '@/components/ActivityScatterPlot';
+import { PageWaterfallChart } from '@/components/PageWaterfallChart';
 
 export default async function OverviewPage() {
   const result = await fetchReceiverStatus();
@@ -98,7 +98,7 @@ export default async function OverviewPage() {
             />
           </div>
           <div className="lg:col-span-2">
-            <ActivityScatterPlot
+            <PageWaterfallChart
               activePages={data.active_pages ?? []}
               inactivePages={data.inactive_pages ?? []}
             />
