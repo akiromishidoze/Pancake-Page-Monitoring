@@ -281,22 +281,43 @@ export function insertSnapshot(input: InsertSnapshotInput): { inserted: boolean 
 
 // ──── Read helpers ─────────────────────────────────────────────────────
 
-export function getLatestRun(): RunRow | undefined {
+export function getLatestRun(endpointId?: string): RunRow | undefined {
   const db = getDb();
+  if (endpointId) {
+    return db
+      .prepare('SELECT * FROM runs WHERE endpoint_id = ? ORDER BY generated_at DESC LIMIT 1')
+      .get(endpointId) as RunRow | undefined;
+  }
   return db.prepare('SELECT * FROM runs ORDER BY generated_at DESC LIMIT 1').get() as
     | RunRow
     | undefined;
 }
 
-export function getRecentRuns(limit = 50): RunRow[] {
+export function getRecentRuns(limit = 50, endpointId?: string): RunRow[] {
   const db = getDb();
+  if (endpointId) {
+    return db
+      .prepare('SELECT * FROM runs WHERE endpoint_id = ? ORDER BY generated_at DESC LIMIT ?')
+      .all(endpointId, limit) as RunRow[];
+  }
   return db
     .prepare('SELECT * FROM runs ORDER BY generated_at DESC LIMIT ?')
     .all(limit) as RunRow[];
 }
 
-export function getLatestPageStates(): PageStateRow[] {
+export function getLatestPageStates(endpointId?: string): PageStateRow[] {
   const db = getDb();
+  if (endpointId) {
+    return db
+      .prepare(
+        `SELECT ps.* FROM page_states ps
+         JOIN runs r ON r.run_id = ps.run_id
+         WHERE r.endpoint_id = ?
+         AND r.run_id = (SELECT run_id FROM runs WHERE endpoint_id = ? ORDER BY generated_at DESC LIMIT 1)
+         ORDER BY ps.shop_label, ps.page_name`,
+      )
+      .all(endpointId, endpointId) as PageStateRow[];
+  }
   return db
     .prepare(
       `SELECT ps.* FROM page_states ps
@@ -401,8 +422,12 @@ export function touchEndpoint(id: string): void {
   db.prepare('UPDATE endpoints SET last_used_at = ? WHERE id = ?').run(new Date().toISOString(), id);
 }
 
-export function getRunCount(): number {
+export function getRunCount(endpointId?: string): number {
   const db = getDb();
+  if (endpointId) {
+    const row = db.prepare('SELECT COUNT(*) as c FROM runs WHERE endpoint_id = ?').get(endpointId) as { c: number };
+    return row.c;
+  }
   const row = db.prepare('SELECT COUNT(*) as c FROM runs').get() as { c: number };
   return row.c;
 }

@@ -1,5 +1,5 @@
 import { fetchReceiverStatus } from '@/lib/receiver';
-import { getLatestRun, getRunCount, getSetting } from '@/lib/db';
+import { getLatestRun, getRunCount, getSetting, listEndpoints } from '@/lib/db';
 import { StatusCard } from '@/components/StatusCard';
 import { RunNowButton } from '@/components/RunNowButton';
 import { RunStatusIndicator } from '@/components/RunStatusIndicator';
@@ -7,8 +7,20 @@ import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { ActiveDonutChart } from '@/components/ActiveDonutChart';
 import { PageWaterfallChart } from '@/components/PageWaterfallChart';
 import { BackfillButton } from '@/components/BackfillButton';
+import { EndpointFilter } from '@/components/EndpointFilter';
 
-export default async function OverviewPage() {
+type SearchParams = {
+  endpoint_id?: string;
+};
+
+export default async function OverviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const sp = await searchParams;
+  const endpointId = sp.endpoint_id;
+
   const result = await fetchReceiverStatus();
 
   if (!result.ok) {
@@ -28,20 +40,25 @@ export default async function OverviewPage() {
   const h = data.latest_health;
   const heartbeatFresh = data.status === 'fresh';
 
-  const localRun = getLatestRun();
-  const dbRunCount = getRunCount();
+  const localRun = getLatestRun(endpointId);
+  const dbRunCount = getRunCount(endpointId);
   const lastScheduledRunStr = getSetting('last_scheduled_run');
   const lastScheduledRunMs = lastScheduledRunStr ? parseInt(lastScheduledRunStr, 10) : null;
-  
-  const lastUpdatedDisplay = localRun 
-    ? new Date(localRun.received_at).toLocaleString() 
+
+  const lastUpdatedDisplay = localRun
+    ? new Date(localRun.received_at).toLocaleString()
     : new Date(data.generated_at).toLocaleString();
+
+  const endpoints = listEndpoints().map((ep) => ({ id: ep.id, name: ep.name }));
 
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold">Overview</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-bold">Overview</h2>
+            <EndpointFilter endpoints={endpoints} />
+          </div>
           <p className="text-sm text-slate-400 mt-1">
             Last updated {lastUpdatedDisplay}
           </p>
@@ -139,6 +156,10 @@ export default async function OverviewPage() {
                 {data.last_backup_rejected ? 'YES' : 'no'}
               </dd>
             </div>
+            <div className="flex justify-between">
+              <dt className="text-slate-400">DB runs (filtered)</dt>
+              <dd className="font-mono">{dbRunCount}</dd>
+            </div>
           </dl>
           {dbRunCount < 5 && (
             <BackfillButton />
@@ -179,8 +200,8 @@ export default async function OverviewPage() {
               <dd className="font-mono">{h?.fetch_errors_customers ?? 0}</dd>
             </div>
           </dl>
+          </div>
         </div>
-      </div>
       </div>
     </div>
   );
