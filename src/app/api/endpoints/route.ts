@@ -30,6 +30,7 @@ export async function POST(req: Request) {
     name: body.name,
     url: body.url || null,
     api_key: body.api_key,
+    access_token: body.access_token || null,
     token_expires_at: body.token_expires_at || null,
     is_active: body.is_active ?? 1,
   });

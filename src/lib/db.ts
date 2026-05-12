@@ -23,6 +23,7 @@ export function getDb(): Database.Database {
   _db = new Database(DB_PATH);
   _db.pragma('journal_mode = WAL');
   _db.pragma('synchronous = NORMAL');
+  _db.pragma('foreign_keys = ON');
   migrate(_db);
   return _db;
 }
@@ -31,6 +32,11 @@ function migrate(db: Database.Database) {
   // Migrate existing database: add endpoint_id column if missing
   try {
     db.exec(`ALTER TABLE runs ADD COLUMN endpoint_id TEXT REFERENCES endpoints(id) ON DELETE SET NULL`);
+  } catch {
+    // column already exists
+  }
+  try {
+    db.exec(`ALTER TABLE endpoints ADD COLUMN access_token TEXT`);
   } catch {
     // column already exists
   }
@@ -98,6 +104,18 @@ function migrate(db: Database.Database) {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS platform_pages (
+      id TEXT PRIMARY KEY,
+      endpoint_id TEXT NOT NULL,
+      page_name TEXT NOT NULL,
+      page_url TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (endpoint_id) REFERENCES endpoints(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS platform_pages_endpoint_idx ON platform_pages(endpoint_id);
   `);
 }
 
@@ -347,6 +365,7 @@ export type EndpointRow = {
   name: string;
   url: string | null;
   api_key: string;
+  access_token: string | null;
   token_expires_at: string | null;
   is_active: number;
   created_at: string;
@@ -363,6 +382,21 @@ export function getEndpoint(id: string): EndpointRow | undefined {
   return db.prepare('SELECT * FROM endpoints WHERE id = ?').get(id) as EndpointRow | undefined;
 }
 
+export function getEndpointByName(name: string): EndpointRow | undefined {
+  const db = getDb();
+  return db.prepare('SELECT * FROM endpoints WHERE name = ?').get(name) as EndpointRow | undefined;
+}
+
+export function slugify(name: string): string {
+  return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+}
+
+export function getEndpointBySlug(slug: string): EndpointRow | undefined {
+  const db = getDb();
+  const all = db.prepare('SELECT * FROM endpoints').all() as EndpointRow[];
+  return all.find((e) => slugify(e.name) === slug);
+}
+
 export function getEndpointByApiKey(apiKey: string): EndpointRow | undefined {
   const db = getDb();
   return db.prepare('SELECT * FROM endpoints WHERE api_key = ? AND is_active = 1').get(apiKey) as EndpointRow | undefined;
@@ -373,6 +407,7 @@ export function upsertEndpoint(input: {
   name: string;
   url?: string | null;
   api_key: string;
+  access_token?: string | null;
   token_expires_at?: string | null;
   is_active?: number;
 }): EndpointRow {
@@ -383,13 +418,14 @@ export function upsertEndpoint(input: {
   if (input.id) {
     db.prepare(`
       UPDATE endpoints SET name=@name, url=@url, api_key=@api_key,
-        token_expires_at=@token_expires_at, is_active=@is_active
+        access_token=@access_token, token_expires_at=@token_expires_at, is_active=@is_active
       WHERE id=@id
     `).run({
       id: input.id,
       name: input.name,
       url: input.url ?? null,
       api_key: input.api_key,
+      access_token: input.access_token ?? null,
       token_expires_at: input.token_expires_at ?? null,
       is_active: input.is_active ?? 1,
     });
@@ -397,13 +433,14 @@ export function upsertEndpoint(input: {
   }
 
   db.prepare(`
-    INSERT INTO endpoints (id, name, url, api_key, token_expires_at, is_active, created_at)
-    VALUES (@id, @name, @url, @api_key, @token_expires_at, @is_active, @created_at)
+    INSERT INTO endpoints (id, name, url, api_key, access_token, token_expires_at, is_active, created_at)
+    VALUES (@id, @name, @url, @api_key, @access_token, @token_expires_at, @is_active, @created_at)
   `).run({
     id,
     name: input.name,
     url: input.url ?? null,
     api_key: input.api_key,
+    access_token: input.access_token ?? null,
     token_expires_at: input.token_expires_at ?? null,
     is_active: input.is_active ?? 1,
     created_at: now,
@@ -414,6 +451,7 @@ export function upsertEndpoint(input: {
 
 export function deleteEndpoint(id: string): void {
   const db = getDb();
+  db.prepare('DELETE FROM platform_pages WHERE endpoint_id = ?').run(id);
   db.prepare('DELETE FROM endpoints WHERE id = ?').run(id);
 }
 
@@ -430,6 +468,80 @@ export function getRunCount(endpointId?: string): number {
   }
   const row = db.prepare('SELECT COUNT(*) as c FROM runs').get() as { c: number };
   return row.c;
+}
+
+// ──── Platform Pages ────────────────────────────────────────────────────
+
+export type PlatformPageRow = {
+  id: string;
+  endpoint_id: string;
+  page_name: string;
+  page_url: string | null;
+  is_active: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export function listPlatformPages(endpointId?: string): PlatformPageRow[] {
+  const db = getDb();
+  if (endpointId) {
+    return db
+      .prepare('SELECT * FROM platform_pages WHERE endpoint_id = ? ORDER BY page_name ASC')
+      .all(endpointId) as PlatformPageRow[];
+  }
+  return db.prepare('SELECT * FROM platform_pages ORDER BY page_name ASC').all() as PlatformPageRow[];
+}
+
+export function getPlatformPage(id: string): PlatformPageRow | undefined {
+  const db = getDb();
+  return db.prepare('SELECT * FROM platform_pages WHERE id = ?').get(id) as PlatformPageRow | undefined;
+}
+
+export function upsertPlatformPage(input: {
+  id?: string;
+  endpoint_id: string;
+  page_name: string;
+  page_url?: string | null;
+  is_active?: number;
+}): PlatformPageRow {
+  const db = getDb();
+  const id = input.id || crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  if (input.id) {
+    db.prepare(`
+      UPDATE platform_pages SET page_name=@page_name, page_url=@page_url,
+        is_active=@is_active, updated_at=@updated_at
+      WHERE id=@id
+    `).run({
+      id: input.id,
+      page_name: input.page_name,
+      page_url: input.page_url ?? null,
+      is_active: input.is_active ?? 1,
+      updated_at: now,
+    });
+    return getPlatformPage(input.id)!;
+  }
+
+  db.prepare(`
+    INSERT INTO platform_pages (id, endpoint_id, page_name, page_url, is_active, created_at, updated_at)
+    VALUES (@id, @endpoint_id, @page_name, @page_url, @is_active, @created_at, @updated_at)
+  `).run({
+    id,
+    endpoint_id: input.endpoint_id,
+    page_name: input.page_name,
+    page_url: input.page_url ?? null,
+    is_active: input.is_active ?? 1,
+    created_at: now,
+    updated_at: now,
+  });
+
+  return getPlatformPage(id)!;
+}
+
+export function deletePlatformPage(id: string): void {
+  const db = getDb();
+  db.prepare('DELETE FROM platform_pages WHERE id = ?').run(id);
 }
 
 // ──── Settings ─────────────────────────────────────────────────────────

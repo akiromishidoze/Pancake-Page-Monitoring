@@ -12,7 +12,7 @@ export function Sidebar() {
     return prefs;
   });
 
-  const isPagesActive = pathname === '/pages' || pathname?.startsWith('/pages/pancake');
+  const isPagesActive = pathname === '/pages' || pathname?.startsWith('/pages/platform');
 
   function toggle(key: string) {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -66,14 +66,14 @@ export function Sidebar() {
             {expanded.pages && (
               <div className="ml-4 mt-1 space-y-1">
                 <Link
-                  href="/pages/pancake"
+                  href="/pages"
                   className={`block px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                    pathname?.startsWith('/pages/pancake')
+                    pathname === '/pages'
                       ? 'bg-slate-800 text-white'
                       : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
                   }`}
                 >
-                  Pancake Platform
+                  Platforms
                 </Link>
               </div>
             )}
