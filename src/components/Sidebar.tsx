@@ -2,14 +2,21 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useState } from 'react';
 
 export function Sidebar() {
   const pathname = usePathname();
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
+    const prefs: Record<string, boolean> = {};
+    if (pathname?.startsWith('/pages')) prefs.pages = true;
+    return prefs;
+  });
 
-  const links = [
-    { name: 'Overview', href: '/' },
-    { name: 'Pages', href: '/pages' },
-  ];
+  const isPagesActive = pathname === '/pages' || pathname?.startsWith('/pages/pancake');
+
+  function toggle(key: string) {
+    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
 
   return (
     <aside className="w-64 border-r border-slate-800 bg-slate-900 flex-shrink-0 flex flex-col h-full">
@@ -18,25 +25,60 @@ export function Sidebar() {
           Navigation
         </h2>
         <nav className="mt-4 space-y-1">
-          {links.map((link) => {
-            const isActive = pathname === link.href;
-            return (
-              <Link
-                key={link.name}
-                href={link.href}
-                className={`block px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                  isActive
-                    ? 'bg-slate-800 text-white'
-                    : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
-                }`}
-              >
-                {link.name}
-              </Link>
-            );
-          })}
-        </nav>
+          <Link
+            href="/"
+            className={`block px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+              pathname === '/'
+                ? 'bg-slate-800 text-white'
+                : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+            }`}
+          >
+            Overview
+          </Link>
 
-        {/* Shop tabs removed — now using platform cards in /pages */}
+          {/* Pages — expandable */}
+          <div>
+            <button
+              onClick={() => toggle('pages')}
+              className={`w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer ${
+                isPagesActive
+                  ? 'bg-slate-800 text-white'
+                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+              }`}
+            >
+              <span>Pages</span>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={`transition-transform ${expanded.pages ? 'rotate-90' : ''}`}
+              >
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </button>
+
+            {expanded.pages && (
+              <div className="ml-4 mt-1 space-y-1">
+                <Link
+                  href="/pages/pancake"
+                  className={`block px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    pathname?.startsWith('/pages/pancake')
+                      ? 'bg-slate-800 text-white'
+                      : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                  }`}
+                >
+                  Pancake Platform
+                </Link>
+              </div>
+            )}
+          </div>
+        </nav>
       </div>
 
       <div className="border-t border-slate-800 p-4">
