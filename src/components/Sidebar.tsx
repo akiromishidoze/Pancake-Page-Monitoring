@@ -11,6 +11,7 @@ export function Sidebar() {
     if (pathname?.startsWith('/pages')) prefs.pages = true;
     return prefs;
   });
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const isPagesActive = pathname === '/pages' || pathname?.startsWith('/pages/platform');
   const isBotCakeActive = pathname === '/pages/platform/botcake-platform';
@@ -19,8 +20,12 @@ export function Sidebar() {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
   }
 
-  return (
-    <aside className="w-64 border-r border-slate-800 bg-slate-900 flex-shrink-0 flex flex-col h-full">
+  function closeMobile() {
+    setMobileOpen(false);
+  }
+
+  const sidebarContent = (
+    <div className="flex flex-col h-full">
       <div className="p-6 flex-1 flex flex-col">
         <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
           Navigation
@@ -28,6 +33,7 @@ export function Sidebar() {
         <nav className="mt-4 space-y-1">
           <Link
             href="/"
+            onClick={closeMobile}
             className={`block px-3 py-2 text-sm font-medium rounded-md transition-colors ${
               pathname === '/'
                 ? 'bg-slate-800 text-white'
@@ -39,6 +45,7 @@ export function Sidebar() {
 
           <Link
             href="/runs"
+            onClick={closeMobile}
             className={`block px-3 py-2 text-sm font-medium rounded-md transition-colors ${
               pathname === '/runs'
                 ? 'bg-slate-800 text-white'
@@ -48,7 +55,6 @@ export function Sidebar() {
             Run History
           </Link>
 
-          {/* Pages — expandable */}
           <div>
             <button
               onClick={() => toggle('pages')}
@@ -79,6 +85,7 @@ export function Sidebar() {
               <div className="ml-4 mt-1 space-y-1">
                 <Link
                   href="/pages"
+                  onClick={closeMobile}
                   className={`block px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                     pathname === '/pages' || (pathname?.startsWith('/pages/platform') && !isBotCakeActive)
                       ? 'bg-slate-800 text-white'
@@ -89,6 +96,7 @@ export function Sidebar() {
                 </Link>
                 <Link
                   href="/pages/platform/botcake-platform"
+                  onClick={closeMobile}
                   className={`block px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                     isBotCakeActive
                       ? 'bg-slate-800 text-white'
@@ -106,6 +114,7 @@ export function Sidebar() {
       <div className="border-t border-slate-800 p-4">
         <Link
           href="/settings"
+          onClick={closeMobile}
           className={`flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
             pathname === '/settings'
               ? 'bg-slate-800 text-white'
@@ -120,6 +129,38 @@ export function Sidebar() {
           <span className="text-xs">Settings</span>
         </Link>
       </div>
-    </aside>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Desktop sidebar */}
+      <aside className="hidden lg:flex w-64 border-r border-slate-800 bg-slate-900 flex-shrink-0 flex-col h-full">
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-black/60" onClick={closeMobile} />
+          <aside className="relative w-64 h-full border-r border-slate-800 bg-slate-900 flex-shrink-0 flex flex-col">
+            {sidebarContent}
+          </aside>
+        </div>
+      )}
+
+      {/* Mobile hamburger */}
+      <button
+        onClick={() => setMobileOpen(true)}
+        className="lg:hidden fixed bottom-4 left-4 z-40 w-12 h-12 rounded-full bg-blue-900/80 border border-blue-700 text-blue-300 flex items-center justify-center shadow-lg hover:bg-blue-800 transition-colors cursor-pointer"
+        title="Open navigation"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+      </button>
+    </>
   );
 }

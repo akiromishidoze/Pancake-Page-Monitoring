@@ -8,6 +8,7 @@ export function NotificationSettings() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     fetch('/api/notify-settings')
@@ -81,6 +82,30 @@ export function NotificationSettings() {
           >
             {loading ? 'Saving…' : 'Save'}
           </button>
+          {configured && (
+            <button
+              type="button"
+              disabled={testing}
+              onClick={async () => {
+                setTesting(true);
+                setError('');
+                setSuccess('');
+                try {
+                  const res = await fetch('/api/test-notification', { method: 'POST' });
+                  const data = await res.json();
+                  if (data.ok) setSuccess('Test notification sent to Slack');
+                  else setError(data.error || 'Test failed');
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : 'Test failed');
+                } finally {
+                  setTesting(false);
+                }
+              }}
+              className="text-xs px-3 py-1.5 rounded border border-green-700 bg-green-900/20 text-green-300 hover:bg-green-800/30 disabled:opacity-50 transition-colors cursor-pointer"
+            >
+              {testing ? 'Sending…' : 'Test Slack'}
+            </button>
+          )}
           {slackWebhook && (
             <button
               type="button"

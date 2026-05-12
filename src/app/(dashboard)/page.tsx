@@ -1,4 +1,4 @@
-import { getLatestRun, getRunCount, getSetting, listEndpoints, getEndpoint, getLatestPageStates } from '@/lib/db';
+import { getLatestRun, getRunCount, getSetting, listEndpoints, getEndpoint, getLatestPageStates, getRecentRuns } from '@/lib/db';
 import { StatusCard } from '@/components/StatusCard';
 import { RunNowButton } from '@/components/RunNowButton';
 import { RunStatusIndicator } from '@/components/RunStatusIndicator';
@@ -6,6 +6,7 @@ import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { ActiveDonutChart } from '@/components/ActiveDonutChart';
 import { PageWaterfallChart } from '@/components/PageWaterfallChart';
 import { EndpointFilter } from '@/components/EndpointFilter';
+import { AlertSparkline } from '@/components/AlertSparkline';
 
 type SearchParams = {
   endpoint_id?: string;
@@ -37,18 +38,34 @@ async function BotCakeSection() {
   const pages = getLatestPageStates('botcake-platform');
   if (pages.length === 0) return null;
 
+  const uniquePages = new Set(pages.map(p => p.page_id)).size;
+
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
       <h3 className="text-lg font-semibold text-slate-200 mb-4">BotCake Platform</h3>
+      <p className="text-xs text-slate-400 mb-4">
+        {uniquePages} page{uniquePages !== 1 ? 's' : ''} monitored via BotCake API.
+        BotCake does not expose activity kind or status data — all pages shown as active.
+      </p>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-1">
           <ActiveDonutChart activeCount={pages.length} inactiveCount={0} />
         </div>
         <div className="lg:col-span-2">
-          <PageWaterfallChart
-            activePages={pages.map((p) => ({ page_id: p.page_id, name: p.page_name ?? p.page_id, kind: null, is_activated: true }))}
-            inactivePages={[]}
-          />
+          <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 flex items-center justify-center h-[400px]">
+            <div className="text-slate-400 text-sm text-center">
+              <div className="text-4xl font-bold text-slate-200 mb-2">{uniquePages}</div>
+              <div>pages active</div>
+              {uniquePages > 0 && (
+                <div className="mt-3 text-xs text-slate-500 max-h-32 overflow-y-auto">
+                  {pages.slice(0, 20).map(p => (
+                    <div key={p.page_id} className="truncate">{p.page_name ?? p.page_id}</div>
+                  ))}
+                  {uniquePages > 20 && <div className="text-slate-600 mt-1">…and {uniquePages - 20} more</div>}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -67,6 +84,7 @@ export default async function OverviewPage({
   const filteredShopLabel = endpoint?.shop_label ?? null;
 
   const localRun = getLatestRun(endpointId);
+  const recentRuns = getRecentRuns(50, endpointId);
   const dbRunCount = getRunCount(endpointId);
   const totalRunCount = getRunCount();
   const lastScheduledRunStr = getSetting('last_scheduled_run');
@@ -113,82 +131,90 @@ export default async function OverviewPage({
         {!isFiltered && (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatusCard
-                title="Heartbeat"
-                value={heartbeatFresh === null ? '—' : heartbeatFresh ? 'FRESH' : 'STALE'}
-                tone={heartbeatFresh === true ? 'green' : heartbeatFresh === false ? 'red' : 'gray'}
-                subtitle={<LiveTimeAgo timestampMs={lastScheduledRunMs} />}
-              />
-              <StatusCard
-                title="Run Quality"
-                value={(runQuality ?? 'unknown').toUpperCase()}
-                tone={runQuality === 'full' ? 'green' : runQuality === 'partial' ? 'yellow' : runQuality === 'degraded' ? 'red' : 'gray'}
-                subtitle={`Severity: ${severity ?? '—'}`}
-              />
-              <StatusCard
-                title="Canary"
-                value={(canaryStatus ?? 'unknown').toUpperCase()}
-                tone={canaryStatus === 'ok' ? 'green' : canaryStatus === 'down' ? 'red' : 'gray'}
-                subtitle={canaryAlert ? 'ALERT' : '—'}
-              />
-              <StatusCard
-                title="Alerts"
-                value={String(alertCount)}
-                tone={alertCount > 0 ? 'red' : 'green'}
-                subtitle={outageSuspected ? 'Outage suspected' : 'No outage flagged'}
-              />
-            </div>
+                  <StatusCard
+                    title="Heartbeat"
+                    value={heartbeatFresh === null ? '—' : heartbeatFresh ? 'FRESH' : 'STALE'}
+                    tone={heartbeatFresh === true ? 'green' : heartbeatFresh === false ? 'red' : 'gray'}
+                    subtitle={<LiveTimeAgo timestampMs={lastScheduledRunMs} />}
+                  />
+                  <StatusCard
+                    title="Run Quality"
+                    value={(runQuality ?? 'unknown').toUpperCase()}
+                    tone={runQuality === 'full' ? 'green' : runQuality === 'partial' ? 'yellow' : runQuality === 'degraded' ? 'red' : 'gray'}
+                    subtitle={`Severity: ${severity ?? '—'}`}
+                  />
+                  <StatusCard
+                    title="Canary"
+                    value={(canaryStatus ?? 'unknown').toUpperCase()}
+                    tone={canaryStatus === 'ok' ? 'green' : canaryStatus === 'down' ? 'red' : 'gray'}
+                    subtitle={canaryAlert ? 'ALERT' : '—'}
+                  />
+                  <StatusCard
+                    title="Alerts"
+                    value={String(alertCount)}
+                    tone={alertCount > 0 ? 'red' : 'green'}
+                    subtitle={outageSuspected ? 'Outage suspected' : 'No outage flagged'}
+                  />
+                </div>
 
-            <div className="space-y-8">
-              <PancakeSection />
-              <BotCakeSection />
-            </div>
+                {recentRuns.length > 1 && (
+                  <div className="rounded-lg border border-slate-800 bg-slate-900 p-4 flex items-center gap-4">
+                    <div className="text-xs text-slate-400 uppercase shrink-0">Alert Trend (last {recentRuns.length} runs)</div>
+                    <AlertSparkline runs={recentRuns.map(r => ({ alert_count: r.alert_count ?? 0, generated_at: r.generated_at }))} />
+                    <div className="text-xs text-slate-500">Red dots = alerts</div>
+                  </div>
+                )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
-                <h3 className="text-sm font-medium text-slate-400 uppercase">Database</h3>
-                <dl className="mt-3 space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <dt className="text-slate-400">Total runs</dt>
-                    <dd className="font-mono">{totalRunCount}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-slate-400">Platforms</dt>
-                    <dd className="font-mono">{endpoints.length}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-slate-400">Last run ID</dt>
-                    <dd className="font-mono text-xs">{runId ?? '—'}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-slate-400">Ingest endpoint</dt>
-                    <dd className="font-mono text-xs">POST /api/ingest</dd>
-                  </div>
-                </dl>
-              </div>
+                <div className="space-y-8">
+                  <PancakeSection />
+                  <BotCakeSection />
+                </div>
 
-              <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
-                <h3 className="text-sm font-medium text-slate-400 uppercase">Run details</h3>
-                <dl className="mt-3 space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <dt className="text-slate-400">Run ID</dt>
-                    <dd className="font-mono text-xs">{runId ?? '—'}</dd>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
+                    <h3 className="text-sm font-medium text-slate-400 uppercase">Database</h3>
+                    <dl className="mt-3 space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <dt className="text-slate-400">Total runs</dt>
+                        <dd className="font-mono">{totalRunCount}</dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt className="text-slate-400">Platforms</dt>
+                        <dd className="font-mono">{endpoints.length}</dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt className="text-slate-400">Last run ID</dt>
+                        <dd className="font-mono text-xs">{runId ?? '—'}</dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt className="text-slate-400">Ingest endpoint</dt>
+                        <dd className="font-mono text-xs">POST /api/ingest</dd>
+                      </div>
+                    </dl>
                   </div>
-                  <div className="flex justify-between">
-                    <dt className="text-slate-400">Rule version</dt>
-                    <dd className="font-mono">v{ruleVersion ?? '—'}</dd>
+
+                  <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
+                    <h3 className="text-sm font-medium text-slate-400 uppercase">Run details</h3>
+                    <dl className="mt-3 space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <dt className="text-slate-400">Run ID</dt>
+                        <dd className="font-mono text-xs">{runId ?? '—'}</dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt className="text-slate-400">Rule version</dt>
+                        <dd className="font-mono">v{ruleVersion ?? '—'}</dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt className="text-slate-400">In maintenance</dt>
+                        <dd className="font-mono">{inMaintenance ? 'YES' : 'no'}</dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt className="text-slate-400">Data source</dt>
+                        <dd className="font-mono text-xs">{localRun ? (localRun.endpoint_id === 'botcake-platform' ? 'BotCake API' : 'Pancake / Ingest') : '—'}</dd>
+                      </div>
+                    </dl>
                   </div>
-                  <div className="flex justify-between">
-                    <dt className="text-slate-400">In maintenance</dt>
-                    <dd className="font-mono">{inMaintenance ? 'YES' : 'no'}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-slate-400">Data source</dt>
-                    <dd className="font-mono text-xs">{localRun ? (localRun.endpoint_id === 'botcake-platform' ? 'BotCake API' : 'Pancake / Ingest') : '—'}</dd>
-                  </div>
-                </dl>
-              </div>
-            </div>
+                </div>
           </>
         )}
 

@@ -1,5 +1,6 @@
 import { getDb, listEndpoints } from '@/lib/db';
 import { PlatformFilter } from '@/components/PlatformFilter';
+import { Pagination } from '@/components/Pagination';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,9 +61,17 @@ export default async function RunsPage({
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <label className="text-xs text-slate-400">Filter by platform:</label>
-        <PlatformFilter endpoints={endpoints.map(e => ({ id: e.id, name: e.name }))} selected={endpointId || undefined} />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <label className="text-xs text-slate-400">Filter by platform:</label>
+          <PlatformFilter endpoints={endpoints.map(e => ({ id: e.id, name: e.name }))} selected={endpointId || undefined} />
+        </div>
+        <a
+          href={`/api/export?format=csv${endpointId ? `&endpoint_id=${encodeURIComponent(endpointId)}` : ''}`}
+          className="text-xs px-3 py-1.5 rounded border border-slate-700 text-slate-400 hover:bg-slate-800 transition-colors"
+        >
+          Export CSV
+        </a>
       </div>
 
       {rows.length === 0 ? (
@@ -123,25 +132,7 @@ export default async function RunsPage({
       )}
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          {page > 1 && (
-            <a
-              href={endpointId ? `/runs?endpoint_id=${encodeURIComponent(endpointId)}&page=${page - 1}` : `/runs?page=${page - 1}`}
-              className="px-3 py-1.5 rounded border border-slate-700 text-xs text-slate-400 hover:bg-slate-800 transition-colors"
-            >
-              Previous
-            </a>
-          )}
-          <span className="text-xs text-slate-500">Page {page} of {totalPages}</span>
-          {page < totalPages && (
-            <a
-              href={endpointId ? `/runs?endpoint_id=${encodeURIComponent(endpointId)}&page=${page + 1}` : `/runs?page=${page + 1}`}
-              className="px-3 py-1.5 rounded border border-slate-700 text-xs text-slate-400 hover:bg-slate-800 transition-colors"
-            >
-              Next
-            </a>
-          )}
-        </div>
+        <Pagination page={page} totalPages={totalPages} endpointId={endpointId} />
       )}
     </div>
   );
