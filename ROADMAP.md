@@ -2,9 +2,10 @@
 
 ## High Priority
 
-- [ ] **Deploy properly** — Dockerfile + docker-compose (Next.js + SQLite volume), pm2/systemd for process management, Nginx/Caddy reverse proxy with automatic SSL
-- [ ] **Backup the SQLite database** — daily cron or built-in scheduler to dump `/data/monitor.sqlite` to S3, Dropbox, or local rotating archive
-- [ ] **Changeable credentials** — add "Change Password" option in Settings so you're not stuck with admin/admin
+- [x] **Deploy properly** — Dockerfile + docker-compose (Next.js + SQLite volume)
+- [ ] **Process management** — pm2/systemd for production, Nginx/Caddy reverse proxy with automatic SSL
+- [x] **Backup the SQLite database** — daily cron or built-in scheduler (`/api/backup`, auto every 24h, keeps last 30)
+- [x] **Changeable credentials** — "Login Credentials" form in Settings, stores in settings table
 
 ## Medium Priority
 
