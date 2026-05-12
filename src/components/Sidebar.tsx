@@ -11,6 +11,7 @@ export function Sidebar() {
   const links = [
     { name: 'Overview', href: '/' },
     { name: 'Pages', href: '/pages' },
+    { name: 'Settings', href: '/settings' },
   ];
 
   return (

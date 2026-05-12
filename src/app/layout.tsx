@@ -5,8 +5,8 @@ import { Sidebar } from '@/components/Sidebar';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Pancake Monitor',
-  description: 'Real-time monitoring dashboard for Pancake page health',
+  title: 'Page Monitor',
+  description: 'Real-time monitoring dashboard for page health',
 };
 
 export default function RootLayout({

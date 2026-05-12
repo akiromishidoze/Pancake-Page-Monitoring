@@ -30,8 +30,8 @@ export async function POST(req: Request) {
   const run_id = body.run_id || body.generated_at || `ingest_${Date.now()}`;
   const rows = body.rows ?? [];
   const summary = body.summary ?? {};
-  const activePages = [];
-  const inactivePages = [];
+  const activePages: any[] = [];
+  const inactivePages: any[] = [];
 
   for (const r of rows) {
     const isAct = r.is_activated === true;

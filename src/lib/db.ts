@@ -28,6 +28,13 @@ export function getDb(): Database.Database {
 }
 
 function migrate(db: Database.Database) {
+  // Migrate existing database: add endpoint_id column if missing
+  try {
+    db.exec(`ALTER TABLE runs ADD COLUMN endpoint_id TEXT REFERENCES endpoints(id) ON DELETE SET NULL`);
+  } catch {
+    // column already exists
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS runs (
       run_id TEXT PRIMARY KEY,
