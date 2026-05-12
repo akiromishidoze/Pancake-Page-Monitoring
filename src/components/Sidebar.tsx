@@ -13,6 +13,7 @@ export function Sidebar() {
   });
 
   const isPagesActive = pathname === '/pages' || pathname?.startsWith('/pages/platform');
+  const isBotCakeActive = pathname === '/pages/platform/botcake-platform';
 
   function toggle(key: string) {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -68,12 +69,22 @@ export function Sidebar() {
                 <Link
                   href="/pages"
                   className={`block px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                    pathname === '/pages'
+                    pathname === '/pages' || (pathname?.startsWith('/pages/platform') && !isBotCakeActive)
                       ? 'bg-slate-800 text-white'
                       : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
                   }`}
                 >
                   Pancake Platform
+                </Link>
+                <Link
+                  href="/pages/platform/botcake-platform"
+                  className={`block px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    isBotCakeActive
+                      ? 'bg-slate-800 text-white'
+                      : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                  }`}
+                >
+                  BotCake Platform
                 </Link>
               </div>
             )}

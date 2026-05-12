@@ -72,14 +72,21 @@ export default async function PlatformPage({
     notFound();
   }
 
+  const isBotCake = platform.id === 'botcake-platform';
+
   const [allRows, managedPages] = await Promise.all([
-    loadRows(),
+    isBotCake
+      ? (await fetchBotCakePages(platform.access_token ?? '')).map((bc) => ({
+          page_id: bc.page_id, shop: null, name: bc.name ?? bc.page_id, kind: null, is_activated: true, is_canary: false, reason: null,
+        } satisfies Row))
+      : loadRows(),
     listPlatformPages(platform.id),
   ]);
 
   const shops = Array.from(new Set(allRows.map((r) => r.shop).filter((s): s is string => !!s))).sort();
+  const hasShops = shops.length > 0;
   const selectedShop = sp.shop || shops[0] || '';
-  const shopRows = selectedShop ? allRows.filter((r) => r.shop === selectedShop) : [];
+  const shopRows = hasShops ? allRows.filter((r) => r.shop === selectedShop) : allRows;
   const activeCount = shopRows.filter((r) => r.is_activated).length;
   const inactiveCount = shopRows.length - activeCount;
 
@@ -94,35 +101,42 @@ export default async function PlatformPage({
 
       <div>
         <h2 className="text-2xl font-bold">{platform.name}</h2>
-        <p className="text-sm text-slate-400 mt-1">
-          {allRows.length} pages across {shops.length} shop{shops.length !== 1 ? 's' : ''}
-        </p>
+        {hasShops && (
+          <p className="text-sm text-slate-400 mt-1">
+            {allRows.length} pages across {shops.length} shop{shops.length !== 1 ? 's' : ''}
+          </p>
+        )}
       </div>
 
-      <div className="border-b border-slate-800">
-        <nav className="flex gap-1 -mb-px">
-          {shops.map((shop) => (
-            <Link key={shop} href={`/pages/platform/${slug}?shop=${encodeURIComponent(shop)}`}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${shop === selectedShop ? 'border-blue-500 text-blue-300' : 'border-transparent text-slate-500 hover:text-slate-300 hover:border-slate-600'}`}
-            >{shop}</Link>
-          ))}
-        </nav>
-      </div>
+      {hasShops && (
+        <>
+          <div className="border-b border-slate-800">
+            <nav className="flex gap-1 -mb-px">
+              {shops.map((shop) => (
+                <Link key={shop} href={`/pages/platform/${slug}?shop=${encodeURIComponent(shop)}`}
+                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${shop === selectedShop ? 'border-blue-500 text-blue-300' : 'border-transparent text-slate-500 hover:text-slate-300 hover:border-slate-600'}`}
+                >{shop}</Link>
+              ))}
+            </nav>
+          </div>
 
-      <div className="flex items-center gap-4 text-sm">
-        <span className="text-slate-300 font-medium">{selectedShop}</span>
-        <span className="text-slate-500">{shopRows.length} pages</span>
-        <span className="text-green-400">{activeCount} active</span>
-        <span className="text-red-400">{inactiveCount} inactive</span>
-      </div>
+          <div className="flex items-center gap-4 text-sm">
+            <span className="text-slate-300 font-medium">{selectedShop}</span>
+            <span className="text-slate-500">{shopRows.length} pages</span>
+            <span className="text-green-400">{activeCount} active</span>
+            <span className="text-red-400">{inactiveCount} inactive</span>
+          </div>
+        </>
+      )}
 
       {shopRows.length === 0 ? (
-        <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 text-slate-400">No page data for this shop.</div>
+        <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 text-slate-400">No page data for this platform.</div>
       ) : (
         <div className="dashboard-data rounded-lg border border-slate-800 bg-slate-900 overflow-hidden">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-800/50">
               <tr className="text-left text-xs uppercase text-slate-400">
+                {!hasShops && <th className="px-4 py-3 font-medium">Shop ID</th>}
                 <th className="px-4 py-3 font-medium">Page</th>
                 <th className="px-4 py-3 font-medium">Activity</th>
                 <th className="px-4 py-3 font-medium">Status</th>
@@ -132,6 +146,7 @@ export default async function PlatformPage({
             <tbody className="divide-y divide-slate-800">
               {shopRows.map((r, i) => (
                 <tr key={`${r.page_id || 'noid'}-${r.name || ''}-${i}`} className="hover:bg-slate-800/30">
+                  {!hasShops && <td className="px-4 py-3 text-slate-400 text-xs font-mono">{r.page_id}</td>}
                   <td className="px-4 py-3 text-slate-100">
                     <div className="flex items-center gap-2">
                       {r.is_canary && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase font-bold bg-amber-900/40 text-amber-300 border border-amber-800">canary</span>}

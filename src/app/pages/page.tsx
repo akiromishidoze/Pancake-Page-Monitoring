@@ -10,7 +10,7 @@ const KIND_TONE: Record<string, string> = {
 };
 
 export default async function PlatformsPage() {
-  const endpoints = listEndpoints().filter((e) => e.is_active);
+  const endpoints = listEndpoints().filter((e) => e.is_active && !e.url?.includes('botcake.io'));
   const dbCount = getRunCount();
 
   // Compute per-platform page stats from monitoring data
