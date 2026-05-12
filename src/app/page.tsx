@@ -1,6 +1,5 @@
 import { fetchReceiverStatus } from '@/lib/receiver';
-import { fetchBotCakePages } from '@/lib/botcake';
-import { getLatestRun, getRunCount, getSetting, listEndpoints, getEndpoint } from '@/lib/db';
+import { getLatestRun, getRunCount, getSetting, listEndpoints, getEndpoint, getLatestPageStates } from '@/lib/db';
 import { StatusCard } from '@/components/StatusCard';
 import { RunNowButton } from '@/components/RunNowButton';
 import { RunStatusIndicator } from '@/components/RunStatusIndicator';
@@ -41,10 +40,7 @@ async function PancakeSection({ data, shopLabel }: { data: any; shopLabel: strin
 }
 
 async function BotCakeSection() {
-  const ep = getEndpoint('botcake-platform');
-  if (!ep?.access_token) return null;
-
-  const pages = await fetchBotCakePages(ep.access_token);
+  const pages = getLatestPageStates('botcake-platform');
   if (pages.length === 0) return null;
 
   return (
@@ -56,7 +52,7 @@ async function BotCakeSection() {
         </div>
         <div className="lg:col-span-2">
           <PageWaterfallChart
-            activePages={pages.map((p) => ({ page_id: p.page_id, name: p.name, kind: null, is_activated: true }))}
+            activePages={pages.map((p) => ({ page_id: p.page_id, name: p.page_name ?? p.page_id, kind: null, is_activated: true }))}
             inactivePages={[]}
           />
         </div>

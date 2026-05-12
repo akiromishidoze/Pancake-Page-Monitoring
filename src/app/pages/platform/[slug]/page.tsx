@@ -22,10 +22,10 @@ type Row = {
   reason: string | null;
 };
 
-async function loadRows(): Promise<Row[]> {
-  const dbCount = getRunCount();
+async function loadRows(endpointId?: string): Promise<Row[]> {
+  const dbCount = endpointId ? getRunCount(endpointId) : getRunCount();
   if (dbCount > 0) {
-    const states = getLatestPageStates();
+    const states = getLatestPageStates(endpointId);
     return states.map((s) => ({
       page_id: s.page_id,
       shop: s.shop_label,
@@ -72,14 +72,8 @@ export default async function PlatformPage({
     notFound();
   }
 
-  const isBotCake = platform.id === 'botcake-platform';
-
   const [allRows, managedPages] = await Promise.all([
-    isBotCake
-      ? (await fetchBotCakePages(platform.access_token ?? '')).map((bc) => ({
-          page_id: bc.page_id, shop: null, name: bc.name ?? bc.page_id, kind: null, is_activated: true, is_canary: false, reason: null,
-        } satisfies Row))
-      : loadRows(),
+    loadRows(platform.id),
     listPlatformPages(platform.id),
   ]);
 
