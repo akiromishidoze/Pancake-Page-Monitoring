@@ -1,11 +1,12 @@
 import { fetchReceiverStatus } from '@/lib/receiver';
-import { getLatestRun, getSetting } from '@/lib/db';
+import { getLatestRun, getRunCount, getSetting } from '@/lib/db';
 import { StatusCard } from '@/components/StatusCard';
 import { RunNowButton } from '@/components/RunNowButton';
 import { RunStatusIndicator } from '@/components/RunStatusIndicator';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { ActiveDonutChart } from '@/components/ActiveDonutChart';
 import { PageWaterfallChart } from '@/components/PageWaterfallChart';
+import { BackfillButton } from '@/components/BackfillButton';
 
 export default async function OverviewPage() {
   const result = await fetchReceiverStatus();
@@ -28,6 +29,7 @@ export default async function OverviewPage() {
   const heartbeatFresh = data.status === 'fresh';
 
   const localRun = getLatestRun();
+  const dbRunCount = getRunCount();
   const lastScheduledRunStr = getSetting('last_scheduled_run');
   const lastScheduledRunMs = lastScheduledRunStr ? parseInt(lastScheduledRunStr, 10) : null;
   
@@ -138,6 +140,9 @@ export default async function OverviewPage() {
               </dd>
             </div>
           </dl>
+          {dbRunCount < 5 && (
+            <BackfillButton />
+          )}
         </div>
 
         <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">

@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
-
 const nextConfig: NextConfig = {
-  /* config options here */
+  turbopack: {
+    root: '/home/jm/Desktop/BotCake Page Monitoring',
+  },
 };
-
 export default nextConfig;

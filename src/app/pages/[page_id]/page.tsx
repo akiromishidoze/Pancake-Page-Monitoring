@@ -55,6 +55,7 @@ export default async function Page({ params, searchParams }: { params: any; sear
               hours_since_last_order: null,
               hours_since_last_customer_activity: null,
               response_ms: (p as any).response_ms ?? (p as any).response_time_ms ?? null,
+              fetch_errors: typeof (p as any).fetch_errors === 'number' ? (p as any).fetch_errors : 0,
               generated_at: live.data.generated_at,
             },
           ];
@@ -115,16 +116,16 @@ export default async function Page({ params, searchParams }: { params: any; sear
   const sla = pctActive >= 99 ? 'Good' : pctActive >= 95 ? 'Warning' : 'Poor';
 
   // Compute rolling uptime for common windows (24h, 7d, 30d)
-  function computeWindowUptime(rows: typeof rows, windowSeconds: number) {
+  function computeWindowUptime(rowData: typeof rows, windowSeconds: number) {
     const windowStart = now - windowSeconds * 1000;
     let active = 0;
     let totalSec = 0;
-    for (let i = 0; i < rows.length; i++) {
-      const cur = rows[i];
+    for (let i = 0; i < rowData.length; i++) {
+      const cur = rowData[i];
       const tcur = Date.parse(cur.generated_at);
-      const tnext = i < rows.length - 1 ? Date.parse(rows[i + 1].generated_at) : now;
+      const tnext = i < rowData.length - 1 ? Date.parse(rowData[i + 1].generated_at) : now;
       if (isNaN(tcur) || isNaN(tnext)) continue;
-      if (tnext < windowStart) continue; // this sample entirely before window
+      if (tnext < windowStart) continue;
       const start = Math.max(tcur, windowStart);
       const end = Math.min(tnext, now);
       const delta = Math.max(0, Math.floor((end - start) / 1000));
