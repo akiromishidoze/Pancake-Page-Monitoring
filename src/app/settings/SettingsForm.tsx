@@ -7,6 +7,7 @@ type Endpoint = {
   name: string;
   url: string | null;
   api_key: string;
+  access_token: string | null;
   token_expires_at: string | null;
   is_active: number;
   created_at: string;
@@ -36,9 +37,10 @@ export function SettingsForm({ initialEndpoints }: { initialEndpoints: Endpoint[
       }
       setSuccess(isNew ? 'Endpoint created' : 'Endpoint updated');
       setEditing(null);
-      const refresh = await fetch('/api/endpoints');
-      const refBody = await refresh.json();
-      if (refBody.ok) setEndpoints(refBody.endpoints);
+      setEndpoints((prev) => {
+        if (isNew) return [...prev, data as Endpoint];
+        return prev.map((e) => (e.id === data.id ? { ...e, ...data } as Endpoint : e));
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
     }
@@ -74,7 +76,7 @@ export function SettingsForm({ initialEndpoints }: { initialEndpoints: Endpoint[
         <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
           <h3 className="text-sm font-medium text-slate-200">Data Sources</h3>
           <button
-            onClick={() => setEditing({ name: '', api_key: '', url: '', token_expires_at: '' })}
+            onClick={() => setEditing({ name: '', api_key: '', url: '', access_token: '', token_expires_at: '' })}
             className="text-xs px-3 py-1.5 rounded border border-blue-700 bg-blue-900/30 text-blue-300 hover:bg-blue-800/40 transition-colors cursor-pointer"
           >
             + Add Endpoint
@@ -97,6 +99,7 @@ export function SettingsForm({ initialEndpoints }: { initialEndpoints: Endpoint[
               <div className="mt-1 text-xs text-slate-500 space-y-0.5">
                 {ep.url && <div>URL: {ep.url}</div>}
                 <div>Key: {ep.api_key}</div>
+                {(ep as any).access_token && <div>Token: {(ep as any).access_token}</div>}
                 {ep.token_expires_at && <div>Expires: {new Date(ep.token_expires_at).toLocaleString()}</div>}
                 {ep.last_used_at && <div>Last used: {new Date(ep.last_used_at).toLocaleString()}</div>}
               </div>
@@ -167,6 +170,17 @@ export function SettingsForm({ initialEndpoints }: { initialEndpoints: Endpoint[
                   value={editing.token_expires_at ? editing.token_expires_at.slice(0, 16) : ''}
                   onChange={(e) => setEditing({ ...editing, token_expires_at: e.target.value ? new Date(e.target.value).toISOString() : '' })}
                   className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Access Token</label>
+                <input
+                  type="text"
+                  value={editing.access_token ?? ''}
+                  onChange={(e) => setEditing({ ...editing, access_token: e.target.value })}
+                  className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200 font-mono"
+                  placeholder="eyJ..."
                 />
               </div>
 

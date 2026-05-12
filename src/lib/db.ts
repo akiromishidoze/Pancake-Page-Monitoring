@@ -40,6 +40,11 @@ function migrate(db: Database.Database) {
   } catch {
     // column already exists
   }
+  try {
+    db.exec(`ALTER TABLE endpoints ADD COLUMN shop_label TEXT`);
+  } catch {
+    // column already exists
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS runs (
@@ -370,6 +375,7 @@ export type EndpointRow = {
   is_active: number;
   created_at: string;
   last_used_at: string | null;
+  shop_label: string | null;
 };
 
 export function listEndpoints(): EndpointRow[] {

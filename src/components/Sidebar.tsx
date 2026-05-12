@@ -73,7 +73,7 @@ export function Sidebar() {
                       : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
                   }`}
                 >
-                  Platforms
+                  Pancake Platform
                 </Link>
               </div>
             )}

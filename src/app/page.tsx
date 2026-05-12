@@ -1,5 +1,5 @@
 import { fetchReceiverStatus } from '@/lib/receiver';
-import { getLatestRun, getRunCount, getSetting, listEndpoints } from '@/lib/db';
+import { getLatestRun, getRunCount, getSetting, listEndpoints, getEndpoint } from '@/lib/db';
 import { StatusCard } from '@/components/StatusCard';
 import { RunNowButton } from '@/components/RunNowButton';
 import { RunStatusIndicator } from '@/components/RunStatusIndicator';
@@ -40,8 +40,19 @@ export default async function OverviewPage({
   const h = data.latest_health;
   const heartbeatFresh = data.status === 'fresh';
 
+  const endpoint = endpointId ? getEndpoint(endpointId) : undefined;
+  const filteredShopLabel = endpoint?.shop_label ?? null;
+
+  let activePages = data.active_pages ?? [];
+  let inactivePages = data.inactive_pages ?? [];
+  if (filteredShopLabel) {
+    activePages = activePages.filter((p: any) => (p.shop_label ?? p.shop) === filteredShopLabel);
+    inactivePages = inactivePages.filter((p: any) => (p.shop_label ?? p.shop) === filteredShopLabel);
+  }
+
   const localRun = getLatestRun(endpointId);
   const dbRunCount = getRunCount(endpointId);
+  const totalRunCount = getRunCount();
   const lastScheduledRunStr = getSetting('last_scheduled_run');
   const lastScheduledRunMs = lastScheduledRunStr ? parseInt(lastScheduledRunStr, 10) : null;
 
@@ -112,14 +123,14 @@ export default async function OverviewPage({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-1">
             <ActiveDonutChart
-              activeCount={data.totals?.active ?? 0}
-              inactiveCount={data.totals?.inactive ?? 0}
+              activeCount={activePages.length}
+              inactiveCount={inactivePages.length}
             />
           </div>
           <div className="lg:col-span-2">
             <PageWaterfallChart
-              activePages={data.active_pages ?? []}
-              inactivePages={data.inactive_pages ?? []}
+              activePages={activePages}
+              inactivePages={inactivePages}
             />
           </div>
         </div>
@@ -161,7 +172,7 @@ export default async function OverviewPage({
               <dd className="font-mono">{dbRunCount}</dd>
             </div>
           </dl>
-          {dbRunCount < 5 && (
+          {totalRunCount < 5 && (
             <BackfillButton />
           )}
         </div>

@@ -19,8 +19,8 @@ export function PlatformSettings({ endpoint: initial }: { endpoint: Endpoint }) 
     id: initial.id,
     name: initial.name,
     url: initial.url || '',
-    api_key: '',
-    access_token: '',
+    api_key: initial.api_key,
+    access_token: initial.access_token || '',
     is_active: initial.is_active,
   });
   const [error, setError] = useState('');
@@ -29,7 +29,7 @@ export function PlatformSettings({ endpoint: initial }: { endpoint: Endpoint }) 
   async function save() {
     setError('');
     setSuccess('');
-    if (!form.name) { setError('Platform name is required'); return; }
+    if (!form.name) { setError('Shop name is required'); return; }
     if (!form.api_key) { setError('API Key is required'); return; }
 
     try {
@@ -53,7 +53,7 @@ export function PlatformSettings({ endpoint: initial }: { endpoint: Endpoint }) 
   }
 
   async function remove() {
-    if (!confirm(`Delete platform "${initial.name}" and all its pages? This cannot be undone.`)) return;
+    if (!confirm(`Delete shop "${initial.name}" and all its pages? This cannot be undone.`)) return;
     setError('');
     setSuccess('');
     try {
@@ -69,10 +69,10 @@ export function PlatformSettings({ endpoint: initial }: { endpoint: Endpoint }) 
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-medium text-slate-200">Platform Settings</h3>
+        <h3 className="text-sm font-medium text-slate-200">Shop Settings</h3>
         <button onClick={remove}
           className="text-xs px-3 py-1.5 rounded border border-red-800 text-red-400 hover:bg-red-900/30 transition-colors cursor-pointer">
-          Delete Platform
+          Delete Shop
         </button>
       </div>
 
@@ -81,19 +81,19 @@ export function PlatformSettings({ endpoint: initial }: { endpoint: Endpoint }) 
 
       <div className="space-y-3">
         <div>
-          <label className="block text-xs text-slate-400 mb-1">Platform Name *</label>
+          <label className="block text-xs text-slate-400 mb-1">Shop Name *</label>
           <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
             className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200" />
         </div>
         <div>
-          <label className="block text-xs text-slate-400 mb-1">URL (endpoint / HTTP request)</label>
+          <label className="block text-xs text-slate-400 mb-1">Shop URL</label>
           <input type="text" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })}
             className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200" placeholder="https://..." />
         </div>
         <div>
           <label className="block text-xs text-slate-400 mb-1">API Key *</label>
           <input type="text" value={form.api_key} onChange={(e) => setForm({ ...form, api_key: e.target.value })}
-            className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200 font-mono" placeholder="sk-..." />
+            className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200 font-mono" />
         </div>
         <div>
           <label className="block text-xs text-slate-400 mb-1">Access Token</label>
