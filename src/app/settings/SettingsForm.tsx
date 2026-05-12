@@ -14,11 +14,24 @@ type Endpoint = {
   last_used_at: string | null;
 };
 
+function mask(val: string | null | undefined) {
+  if (!val) return '';
+  if (val.length <= 8) return '••••••••';
+  return val.slice(0, 4) + '••••••••' + val.slice(-4);
+}
+
 export function SettingsForm({ initialEndpoints }: { initialEndpoints: Endpoint[] }) {
   const [endpoints, setEndpoints] = useState<Endpoint[]>(initialEndpoints);
   const [editing, setEditing] = useState<Partial<Endpoint> | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  const botcakeEndpoint = endpoints.find(
+    (e) => e.id === 'botcake-platform' || e.url?.includes('botcake.io'),
+  );
+  const shopEndpoints = endpoints.filter(
+    (e) => e.id !== 'botcake-platform' && !e.url?.includes('botcake.io'),
+  );
 
   async function save(data: Partial<Endpoint>) {
     setError('');
@@ -61,6 +74,40 @@ export function SettingsForm({ initialEndpoints }: { initialEndpoints: Endpoint[
     }
   }
 
+  function renderEndpointRow(ep: Endpoint) {
+    return (
+      <div key={ep.id} className="px-4 py-3 border-b border-slate-800 last:border-0 flex items-center justify-between">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className={`inline-block w-2 h-2 rounded-full ${ep.is_active ? 'bg-green-500' : 'bg-red-500'}`} />
+            <span className="text-sm font-medium text-slate-200">{ep.name}</span>
+          </div>
+          <div className="mt-1 text-xs text-slate-500 space-y-0.5">
+            {ep.url && <div>URL: {ep.url}</div>}
+            <div>Key: <span className="font-mono text-slate-400">{mask(ep.api_key)}</span></div>
+            {ep.access_token && <div>Token: <span className="font-mono text-slate-400">{mask(ep.access_token)}</span></div>}
+            {ep.token_expires_at && <div>Expires: {new Date(ep.token_expires_at).toLocaleString()}</div>}
+            {ep.last_used_at && <div>Last used: {new Date(ep.last_used_at).toLocaleString()}</div>}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 ml-4 shrink-0">
+          <button
+            onClick={() => setEditing(ep)}
+            className="text-xs px-2 py-1 rounded border border-slate-700 text-slate-400 hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            Edit
+          </button>
+          <button
+            onClick={() => remove(ep.id)}
+            className="text-xs px-2 py-1 rounded border border-red-800 text-red-400 hover:bg-red-900/30 transition-colors cursor-pointer"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const now = new Date().toISOString().slice(0, 16);
 
   return (
@@ -72,54 +119,35 @@ export function SettingsForm({ initialEndpoints }: { initialEndpoints: Endpoint[
         <div className="rounded-lg border border-green-800 bg-green-900/20 p-3 text-sm text-green-300">{success}</div>
       )}
 
+      {/* BotCake Platform card */}
+      {botcakeEndpoint && (
+        <div className="rounded-lg border border-slate-800 bg-slate-900 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-800/40">
+            <h3 className="text-sm font-semibold text-slate-200">BotCake Platform</h3>
+          </div>
+          {renderEndpointRow(botcakeEndpoint)}
+        </div>
+      )}
+
+      {/* Pancake Shops card */}
       <div className="rounded-lg border border-slate-800 bg-slate-900 overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-          <h3 className="text-sm font-medium text-slate-200">Data Sources</h3>
+        <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-800/40">
+          <h3 className="text-sm font-semibold text-slate-200">Pancake Shops</h3>
           <button
             onClick={() => setEditing({ name: '', api_key: '', url: '', access_token: '', token_expires_at: '' })}
             className="text-xs px-3 py-1.5 rounded border border-blue-700 bg-blue-900/30 text-blue-300 hover:bg-blue-800/40 transition-colors cursor-pointer"
           >
-            + Add Endpoint
+            + Add Shop
           </button>
         </div>
 
-        {endpoints.length === 0 && (
+        {shopEndpoints.length === 0 && (
           <div className="p-6 text-sm text-slate-400 text-center">
-            No endpoints configured yet. Add one to receive monitoring data.
+            No shops configured yet. Add one to receive monitoring data.
           </div>
         )}
 
-        {endpoints.map((ep) => (
-          <div key={ep.id} className="px-4 py-3 border-b border-slate-800 last:border-0 flex items-center justify-between">
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <span className={`inline-block w-2 h-2 rounded-full ${ep.is_active ? 'bg-green-500' : 'bg-red-500'}`} />
-                <span className="text-sm font-medium text-slate-200">{ep.name}</span>
-              </div>
-              <div className="mt-1 text-xs text-slate-500 space-y-0.5">
-                {ep.url && <div>URL: {ep.url}</div>}
-                <div>Key: {ep.api_key}</div>
-                {(ep as any).access_token && <div>Token: {(ep as any).access_token}</div>}
-                {ep.token_expires_at && <div>Expires: {new Date(ep.token_expires_at).toLocaleString()}</div>}
-                {ep.last_used_at && <div>Last used: {new Date(ep.last_used_at).toLocaleString()}</div>}
-              </div>
-            </div>
-            <div className="flex items-center gap-2 ml-4">
-              <button
-                onClick={() => setEditing(ep)}
-                className="text-xs px-2 py-1 rounded border border-slate-700 text-slate-400 hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                Edit
-              </button>
-              <button
-                onClick={() => remove(ep.id)}
-                className="text-xs px-2 py-1 rounded border border-red-800 text-red-400 hover:bg-red-900/30 transition-colors cursor-pointer"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        ))}
+        {shopEndpoints.map((ep) => renderEndpointRow(ep))}
       </div>
 
       {editing && (
