@@ -28,42 +28,8 @@ export default async function Page({ params, searchParams }: { params: any; sear
   let rows = getPageHistory(pageId, 5000);
 
   if (!rows || rows.length === 0) {
-    // Fallback: try fetching live receiver status to show immediate data if DB is cold
-    try {
-      const { fetchReceiverStatus } = await import('@/lib/receiver');
-      const live = await fetchReceiverStatus({ noCache: true });
-      if (live.ok) {
-        const active = live.data.active_pages ?? [];
-        const inactive = live.data.inactive_pages ?? [];
-        const all = [...active, ...inactive];
-        const p = all.find((pp) => String(pp.page_id ?? pp.id ?? '') === String(pageId));
-        if (p) {
-          // Build a single-row history from live data so the rest of the UI can render
-          rows = [
-            {
-              id: -1,
-              run_id: live.data.page_lists_run_id ?? live.data.latest_health?.run_id ?? '',
-              page_id: pageId,
-              shop_label: p.shop_label ?? p.shop ?? null,
-              page_name: p.name ?? null,
-              activity_kind: p.activity_kind ?? p.kind ?? null,
-              is_activated: active.some((x) => String(x.page_id ?? x.id ?? '') === String(pageId)) ? 1 : 0,
-              is_canary: p.is_canary ? 1 : 0,
-              activation_reason: p.activation_reason ?? p.reason ?? null,
-              state_change: p.state_change ?? null,
-              activity_kind_change: null,
-              hours_since_last_order: null,
-              hours_since_last_customer_activity: null,
-              response_ms: (p as any).response_ms ?? (p as any).response_time_ms ?? null,
-              fetch_errors: typeof (p as any).fetch_errors === 'number' ? (p as any).fetch_errors : 0,
-              generated_at: live.data.generated_at,
-            },
-          ];
-        }
-      }
-    } catch (e) {
-      // ignore
-    }
+    // No history yet — data will appear once the poller or an external system
+    // pushes snapshots via /api/ingest.
   }
 
   if (!rows || rows.length === 0) {

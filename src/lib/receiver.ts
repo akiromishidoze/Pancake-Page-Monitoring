@@ -1,6 +1,3 @@
-// Server-side fetch wrapper for the n8n receiver's status endpoint.
-// Reads RECEIVER_URL and MONITOR_SECRET from env; never expose secret to client.
-
 export type LatestHealth = {
   captured_at: string;
   run_id: string | null;
@@ -62,7 +59,6 @@ export type StatusResponse = {
   last_backup_rejected: boolean;
   last_backup_rejected_at: string | null;
   last_backup_rejected_size_bytes: number | null;
-  // Phase 2 fields (added by receiver upgrade)
   totals?: { total: number; active: number; inactive: number } | null;
   by_shop?: Record<string, ShopBreakdown> | null;
   active_pages?: SlimPage[];
@@ -75,35 +71,3 @@ export type StatusResponse = {
 export type FetchResult =
   | { ok: true; data: StatusResponse }
   | { ok: false; error: string; status?: number };
-
-export async function fetchReceiverStatus(opts?: {
-  noCache?: boolean;
-}): Promise<FetchResult> {
-  const url = process.env.RECEIVER_URL;
-  const secret = process.env.MONITOR_SECRET;
-
-  if (!url || !secret) {
-    return {
-      ok: false,
-      error: 'RECEIVER_URL or MONITOR_SECRET env var not set',
-    };
-  }
-
-  try {
-    const res = await fetch(url, {
-      headers: { 'X-Monitor-Secret': secret },
-      next: opts?.noCache
-        ? { revalidate: 0 }
-        : { revalidate: 60 },
-    });
-
-    if (!res.ok) {
-      return { ok: false, error: `HTTP ${res.status}`, status: res.status };
-    }
-
-    const data = (await res.json()) as StatusResponse;
-    return { ok: true, data };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
-}

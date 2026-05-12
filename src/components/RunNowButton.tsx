@@ -72,7 +72,7 @@ export function RunNowButton() {
 
   async function handleClick() {
     setStatus({ phase: 'running' });
-    window.dispatchEvent(new Event('run-started')); // Instantly trigger the UI loading sequence globally
+    window.dispatchEvent(new Event('run-started'));
     
     try {
       const res = await fetch('/api/run', { method: 'POST' });
@@ -88,7 +88,7 @@ export function RunNowButton() {
       });
       setTimeout(() => {
         startTransition(() => router.refresh());
-      }, 75_000);
+      }, 10_000);
     } catch (e) {
       setStatus({
         phase: 'error',
@@ -169,7 +169,7 @@ export function RunNowButton() {
 
       {status.phase === 'success' && (
         <span className="text-xs text-slate-400 max-w-xs text-right">
-          {status.message} Auto-refresh in ~75s.
+          {status.message}
         </span>
       )}
       {status.phase === 'error' && (

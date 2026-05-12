@@ -331,7 +331,9 @@ export function getRecentRuns(limit = 50, endpointId?: string): RunRow[] {
 export function getLatestPageStates(endpointId?: string): PageStateRow[] {
   const db = getDb();
   if (endpointId) {
-    return db
+    const endpoint = endpointId ? getEndpoint(endpointId) : undefined;
+
+    const rows = db
       .prepare(
         `SELECT ps.* FROM page_states ps
          JOIN runs r ON r.run_id = ps.run_id
@@ -340,12 +342,34 @@ export function getLatestPageStates(endpointId?: string): PageStateRow[] {
          ORDER BY ps.shop_label, ps.page_name`,
       )
       .all(endpointId, endpointId) as PageStateRow[];
+
+    if (rows.length > 0) return rows;
+
+    // Fallback: match by shop_label on legacy runs (no endpoint_id)
+    if (endpoint?.shop_label) {
+      return db
+        .prepare(
+          `SELECT ps.* FROM page_states ps
+           JOIN runs r ON r.run_id = ps.run_id
+           WHERE r.endpoint_id IS NULL
+           AND ps.shop_label = ?
+           AND r.run_id = (SELECT run_id FROM runs WHERE endpoint_id IS NULL ORDER BY generated_at DESC LIMIT 1)
+           ORDER BY ps.page_name`,
+        )
+        .all(endpoint.shop_label) as PageStateRow[];
+    }
+
+    return [];
   }
   return db
     .prepare(
       `SELECT ps.* FROM page_states ps
        JOIN runs r ON r.run_id = ps.run_id
-       WHERE r.run_id = (SELECT run_id FROM runs ORDER BY generated_at DESC LIMIT 1)
+       WHERE r.run_id = (
+         SELECT run_id FROM runs
+         WHERE endpoint_id IS NULL OR endpoint_id != 'botcake-platform'
+         ORDER BY generated_at DESC LIMIT 1
+       )
        ORDER BY ps.shop_label, ps.page_name`,
     )
     .all() as PageStateRow[];

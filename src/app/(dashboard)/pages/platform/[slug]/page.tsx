@@ -1,6 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
-import { fetchReceiverStatus } from '@/lib/receiver';
-import { getLatestPageStates, getRunCount, getEndpointBySlug, listPlatformPages, listEndpoints, upsertEndpoint } from '@/lib/db';
+import { getLatestPageStates, getEndpointBySlug, listPlatformPages, listEndpoints, upsertEndpoint } from '@/lib/db';
 import Link from 'next/link';
 import { ManagedPagesSection } from '@/components/ManagedPagesSection';
 import { PlatformSettings } from '@/components/PlatformSettings';
@@ -23,35 +22,16 @@ type Row = {
 };
 
 async function loadRows(endpointId?: string): Promise<Row[]> {
-  const dbCount = endpointId ? getRunCount(endpointId) : getRunCount();
-  if (dbCount > 0) {
-    const states = getLatestPageStates(endpointId);
-    return states.map((s) => ({
-      page_id: s.page_id,
-      shop: s.shop_label,
-      name: s.page_name,
-      kind: s.activity_kind,
-      is_activated: s.is_activated === 1,
-      is_canary: s.is_canary === 1,
-      reason: s.activation_reason,
-    }));
-  }
-
-  const live = await fetchReceiverStatus();
-  if (!live.ok) return [];
-
-  return [
-    ...(live.data.active_pages ?? []).map((p: any) => ({
-      page_id: p.page_id ?? p.id ?? '', shop: p.shop_label ?? p.shop ?? null,
-      name: p.name, kind: p.activity_kind ?? p.kind ?? null,
-      is_activated: true, is_canary: p.is_canary ?? false, reason: p.activation_reason ?? p.reason ?? null,
-    })),
-    ...(live.data.inactive_pages ?? []).map((p: any) => ({
-      page_id: p.page_id ?? p.id ?? '', shop: p.shop_label ?? p.shop ?? null,
-      name: p.name, kind: p.activity_kind ?? p.kind ?? null,
-      is_activated: false, is_canary: p.is_canary ?? false, reason: p.activation_reason ?? p.reason ?? null,
-    })),
-  ];
+  const states = getLatestPageStates(endpointId);
+  return states.map((s) => ({
+    page_id: s.page_id,
+    shop: s.shop_label,
+    name: s.page_name,
+    kind: s.activity_kind,
+    is_activated: s.is_activated === 1,
+    is_canary: s.is_canary === 1,
+    reason: s.activation_reason,
+  }));
 }
 
 export default async function PlatformPage({
