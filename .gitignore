@@ -40,6 +40,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# dead dashboard/ subdirectory (stale copy with oversized binaries)
+/dashboard/
+
 # local SQLite data
 /data
 *.sqlite

@@ -2,7 +2,8 @@
 // Schema is migrated on first import (idempotent).
 //
 // Tables:
-//   runs        — one row per snapshot received from the n8n receiver
+//   endpoints   — configured data sources (name, API key, expiration, etc.)
+//   runs        — one row per snapshot received from any endpoint
 //   page_states — one row per (run × page) for fast per-page queries
 
 import Database from 'better-sqlite3';
@@ -30,6 +31,7 @@ function migrate(db: Database.Database) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS runs (
       run_id TEXT PRIMARY KEY,
+      endpoint_id TEXT,
       generated_at TEXT NOT NULL,
       received_at TEXT NOT NULL,
       heartbeat_ok INTEGER,
@@ -45,8 +47,10 @@ function migrate(db: Database.Database) {
       active_pages INTEGER,
       inactive_pages INTEGER,
       receiver_sd_size_bytes INTEGER,
-      raw_summary TEXT
+      raw_summary TEXT,
+      FOREIGN KEY (endpoint_id) REFERENCES endpoints(id) ON DELETE SET NULL
     );
+    CREATE INDEX IF NOT EXISTS runs_endpoint_id_idx ON runs(endpoint_id);
     CREATE INDEX IF NOT EXISTS runs_generated_at_idx ON runs(generated_at DESC);
 
     CREATE TABLE IF NOT EXISTS page_states (
@@ -71,6 +75,17 @@ function migrate(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS page_states_page_id_time ON page_states(page_id, generated_at DESC);
     CREATE INDEX IF NOT EXISTS page_states_run_id ON page_states(run_id);
     CREATE INDEX IF NOT EXISTS page_states_kind_time ON page_states(activity_kind, generated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS endpoints (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      url TEXT,
+      api_key TEXT NOT NULL,
+      token_expires_at TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      last_used_at TEXT
+    );
 
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
@@ -100,6 +115,7 @@ export type SlimPage = {
 
 export type RunRow = {
   run_id: string;
+  endpoint_id: string | null;
   generated_at: string;
   received_at: string;
   heartbeat_ok: number | null;
@@ -141,6 +157,7 @@ export type PageStateRow = {
 
 export type InsertSnapshotInput = {
   run_id: string;
+  endpoint_id?: string;
   generated_at: string;
   heartbeat_ok: boolean;
   run_quality: string | null;
@@ -169,12 +186,12 @@ export function insertSnapshot(input: InsertSnapshotInput): { inserted: boolean 
 
   const insertRun = db.prepare(`
     INSERT INTO runs (
-      run_id, generated_at, received_at, heartbeat_ok, run_quality, severity,
+      run_id, endpoint_id, generated_at, received_at, heartbeat_ok, run_quality, severity,
       canary_status, canary_alert, outage_suspected, alert_count, rule_version,
       in_maintenance_window, total_pages, active_pages, inactive_pages,
       receiver_sd_size_bytes, raw_summary
     ) VALUES (
-      @run_id, @generated_at, @received_at, @heartbeat_ok, @run_quality, @severity,
+      @run_id, @endpoint_id, @generated_at, @received_at, @heartbeat_ok, @run_quality, @severity,
       @canary_status, @canary_alert, @outage_suspected, @alert_count, @rule_version,
       @in_maintenance_window, @total_pages, @active_pages, @inactive_pages,
       @receiver_sd_size_bytes, @raw_summary
@@ -196,6 +213,7 @@ export function insertSnapshot(input: InsertSnapshotInput): { inserted: boolean 
   const insertAll = db.transaction(() => {
     insertRun.run({
       run_id: input.run_id,
+      endpoint_id: input.endpoint_id ?? null,
       generated_at: input.generated_at,
       received_at: new Date().toISOString(),
       heartbeat_ok: input.heartbeat_ok ? 1 : 0,
@@ -292,6 +310,88 @@ export function getPageHistory(pageId: string, limit = 1000): PageStateRow[] {
        LIMIT ?`,
     )
     .all(pageId, limit) as PageStateRow[];
+}
+
+// ──── Endpoints ───────────────────────────────────────────────────────
+
+export type EndpointRow = {
+  id: string;
+  name: string;
+  url: string | null;
+  api_key: string;
+  token_expires_at: string | null;
+  is_active: number;
+  created_at: string;
+  last_used_at: string | null;
+};
+
+export function listEndpoints(): EndpointRow[] {
+  const db = getDb();
+  return db.prepare('SELECT * FROM endpoints ORDER BY created_at DESC').all() as EndpointRow[];
+}
+
+export function getEndpoint(id: string): EndpointRow | undefined {
+  const db = getDb();
+  return db.prepare('SELECT * FROM endpoints WHERE id = ?').get(id) as EndpointRow | undefined;
+}
+
+export function getEndpointByApiKey(apiKey: string): EndpointRow | undefined {
+  const db = getDb();
+  return db.prepare('SELECT * FROM endpoints WHERE api_key = ? AND is_active = 1').get(apiKey) as EndpointRow | undefined;
+}
+
+export function upsertEndpoint(input: {
+  id?: string;
+  name: string;
+  url?: string | null;
+  api_key: string;
+  token_expires_at?: string | null;
+  is_active?: number;
+}): EndpointRow {
+  const db = getDb();
+  const id = input.id || crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  if (input.id) {
+    db.prepare(`
+      UPDATE endpoints SET name=@name, url=@url, api_key=@api_key,
+        token_expires_at=@token_expires_at, is_active=@is_active
+      WHERE id=@id
+    `).run({
+      id: input.id,
+      name: input.name,
+      url: input.url ?? null,
+      api_key: input.api_key,
+      token_expires_at: input.token_expires_at ?? null,
+      is_active: input.is_active ?? 1,
+    });
+    return getEndpoint(input.id)!;
+  }
+
+  db.prepare(`
+    INSERT INTO endpoints (id, name, url, api_key, token_expires_at, is_active, created_at)
+    VALUES (@id, @name, @url, @api_key, @token_expires_at, @is_active, @created_at)
+  `).run({
+    id,
+    name: input.name,
+    url: input.url ?? null,
+    api_key: input.api_key,
+    token_expires_at: input.token_expires_at ?? null,
+    is_active: input.is_active ?? 1,
+    created_at: now,
+  });
+
+  return getEndpoint(id)!;
+}
+
+export function deleteEndpoint(id: string): void {
+  const db = getDb();
+  db.prepare('DELETE FROM endpoints WHERE id = ?').run(id);
+}
+
+export function touchEndpoint(id: string): void {
+  const db = getDb();
+  db.prepare('UPDATE endpoints SET last_used_at = ? WHERE id = ?').run(new Date().toISOString(), id);
 }
 
 export function getRunCount(): number {
