@@ -1,4 +1,5 @@
 import { getDb, listEndpoints } from '@/lib/db';
+import { PlatformFilter } from '@/components/PlatformFilter';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,19 +62,7 @@ export default async function RunsPage({
 
       <div className="flex items-center gap-3">
         <label className="text-xs text-slate-400">Filter by platform:</label>
-        <select
-          className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-200"
-          defaultValue={endpointId || ''}
-          onChange={(e) => {
-            const val = e.target.value;
-            window.location.href = val ? `/runs?endpoint_id=${encodeURIComponent(val)}` : '/runs';
-          }}
-        >
-          <option value="">All platforms</option>
-          {endpoints.map((ep) => (
-            <option key={ep.id} value={ep.id}>{ep.name}</option>
-          ))}
-        </select>
+        <PlatformFilter endpoints={endpoints.map(e => ({ id: e.id, name: e.name }))} selected={endpointId || undefined} />
       </div>
 
       {rows.length === 0 ? (
