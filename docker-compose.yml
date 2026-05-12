@@ -1,0 +1,12 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./data:/app/data
+      - ./backups:/app/backups
+    environment:
+      - PORT=3001
+      - FB_ACCESS_TOKEN=${FB_ACCESS_TOKEN:-}
+    restart: unless-stopped

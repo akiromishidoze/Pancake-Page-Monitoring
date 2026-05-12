@@ -2,6 +2,7 @@ import { getSetting, setSetting } from './db';
 import { refreshAll } from './poller';
 
 const SCHEDULER_POLL_MS = 5_000;
+const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 let _started = false;
 
@@ -13,6 +14,26 @@ export function startScheduler() {
   setInterval(() => {
     checkAndRun().catch(err => console.error('[scheduler] Error in checkAndRun:', err));
   }, SCHEDULER_POLL_MS);
+
+  setInterval(() => {
+    checkBackup().catch(err => console.error('[scheduler] Backup error:', err));
+  }, 60_000);
+}
+
+async function checkBackup() {
+  const last = getSetting('last_backup_time');
+  const lastMs = last ? parseInt(last, 10) : 0;
+  const now = Date.now();
+  if (now - lastMs < BACKUP_INTERVAL_MS) return;
+
+  try {
+    const { backup } = await import('./backup');
+    const file = backup();
+    setSetting('last_backup_time', now.toString());
+    console.log('[scheduler] backup created:', file);
+  } catch (err) {
+    console.error('[scheduler] backup failed:', err);
+  }
 }
 
 export async function checkAndRun() {
