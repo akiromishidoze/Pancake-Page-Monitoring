@@ -16,11 +16,11 @@ export type LatestHealth = {
 };
 
 export type SlimPage = {
-  shop?: string;
-  shop_label?: string;
+  shop?: string | null;
+  shop_label?: string | null;
   name: string;
-  page_id?: string;
-  id?: string;
+  page_id?: string | null;
+  id?: string | null;
   kind?: string | null;
   activity_kind?: string | null;
   reason?: string | null;

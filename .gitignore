@@ -49,3 +49,4 @@ next-env.d.ts
 *.sqlite-journal
 *.sqlite-wal
 *.sqlite-shm
+ROADMAP.md

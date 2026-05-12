@@ -1,5 +1,6 @@
 import { fetchBotCakePages } from './botcake';
 import { getEndpoint, insertSnapshot, getSetting, setSetting } from './db';
+import { broadcastSSE } from './sse';
 
 const POLL_INTERVAL_MS = 60_000;
 
@@ -82,6 +83,7 @@ async function refreshBotCake() {
     if (result.inserted) {
       console.log('[poller] botcake: inserted', pages.length, 'pages, run', runId);
       setSetting('last_scheduled_run', Date.now().toString());
+      broadcastSSE('refresh', JSON.stringify({ source: 'botcake-poller', run_id: runId }));
     }
   } catch (err) {
     console.error('[poller] botcake: refresh failed:', err);

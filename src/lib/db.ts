@@ -121,17 +121,32 @@ function migrate(db: Database.Database) {
       FOREIGN KEY (endpoint_id) REFERENCES endpoints(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS platform_pages_endpoint_idx ON platform_pages(endpoint_id);
+
+    CREATE TABLE IF NOT EXISTS platform_connectors (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      platform_type TEXT NOT NULL,
+      api_url TEXT NOT NULL,
+      auth_header TEXT,
+      auth_token TEXT,
+      json_path TEXT,
+      interval_ms INTEGER NOT NULL DEFAULT 60000,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS platform_connectors_active ON platform_connectors(is_active);
   `);
 }
 
 // ──── Types ────────────────────────────────────────────────────────────
 
 export type SlimPage = {
-  shop?: string;
-  shop_label?: string;
+  shop?: string | null;
+  shop_label?: string | null;
   name: string;
-  page_id?: string;
-  id?: string;
+  page_id?: string | null;
+  id?: string | null;
   kind?: string | null;
   activity_kind?: string | null;
   reason?: string | null;
@@ -572,6 +587,119 @@ export function upsertPlatformPage(input: {
 export function deletePlatformPage(id: string): void {
   const db = getDb();
   db.prepare('DELETE FROM platform_pages WHERE id = ?').run(id);
+}
+
+// ──── Platform Connectors ─────────────────────────────────────────────
+
+export type PlatformConnectorRow = {
+  id: string;
+  name: string;
+  platform_type: string;
+  api_url: string;
+  auth_header: string | null;
+  auth_token: string | null;
+  json_path: string | null;
+  interval_ms: number;
+  is_active: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export function listPlatformConnectors(): PlatformConnectorRow[] {
+  const db = getDb();
+  return db.prepare('SELECT * FROM platform_connectors ORDER BY name ASC').all() as PlatformConnectorRow[];
+}
+
+export function getPlatformConnector(id: string): PlatformConnectorRow | undefined {
+  const db = getDb();
+  return db.prepare('SELECT * FROM platform_connectors WHERE id = ?').get(id) as PlatformConnectorRow | undefined;
+}
+
+export function upsertPlatformConnector(input: {
+  id?: string;
+  name: string;
+  platform_type: string;
+  api_url: string;
+  auth_header?: string | null;
+  auth_token?: string | null;
+  json_path?: string | null;
+  interval_ms?: number;
+  is_active?: number;
+}): PlatformConnectorRow {
+  const db = getDb();
+  const id = input.id || crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  if (input.id) {
+    db.prepare(`
+      UPDATE platform_connectors SET name=@name, platform_type=@platform_type, api_url=@api_url,
+        auth_header=@auth_header, auth_token=@auth_token, json_path=@json_path,
+        interval_ms=@interval_ms, is_active=@is_active, updated_at=@updated_at
+      WHERE id=@id
+    `).run({
+      id: input.id,
+      name: input.name,
+      platform_type: input.platform_type,
+      api_url: input.api_url,
+      auth_header: input.auth_header ?? null,
+      auth_token: input.auth_token ?? null,
+      json_path: input.json_path ?? null,
+      interval_ms: input.interval_ms ?? 60000,
+      is_active: input.is_active ?? 1,
+      updated_at: now,
+    });
+    return getPlatformConnector(input.id)!;
+  }
+
+  // Ensure FK reference exists in endpoints table
+  const endpointExists = db.prepare('SELECT 1 FROM endpoints WHERE id = ?').get(id);
+  if (!endpointExists) {
+    db.prepare(`
+      INSERT INTO endpoints (id, name, url, api_key, is_active, created_at)
+      VALUES (@id, @name, @url, @api_key, @is_active, @created_at)
+    `).run({
+      id,
+      name: `${input.name} (Connector)`,
+      url: input.api_url,
+      api_key: `connector_${id}`,
+      is_active: 1,
+      created_at: now,
+    });
+  }
+
+  db.prepare(`
+    INSERT INTO platform_connectors (id, name, platform_type, api_url, auth_header, auth_token, json_path, interval_ms, is_active, created_at, updated_at)
+    VALUES (@id, @name, @platform_type, @api_url, @auth_header, @auth_token, @json_path, @interval_ms, @is_active, @created_at, @updated_at)
+  `).run({
+    id,
+    name: input.name,
+    platform_type: input.platform_type,
+    api_url: input.api_url,
+    auth_header: input.auth_header ?? null,
+    auth_token: input.auth_token ?? null,
+    json_path: input.json_path ?? null,
+    interval_ms: input.interval_ms ?? 60000,
+    is_active: input.is_active ?? 1,
+    created_at: now,
+    updated_at: now,
+  });
+
+  return getPlatformConnector(id)!;
+}
+
+export function deletePlatformConnector(id: string): void {
+  const db = getDb();
+  db.prepare('DELETE FROM platform_connectors WHERE id = ?').run(id);
+  db.prepare('DELETE FROM endpoints WHERE id = ?').run(id);
+}
+
+// ──── Data Retention ──────────────────────────────────────────────────
+
+export function pruneOldRuns(retentionDays: number): number {
+  const db = getDb();
+  const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+  const result = db.prepare('DELETE FROM runs WHERE generated_at < ?').run(cutoff);
+  return result.changes;
 }
 
 // ──── Settings ─────────────────────────────────────────────────────────

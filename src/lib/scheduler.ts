@@ -1,8 +1,9 @@
-import { getSetting, setSetting } from './db';
+import { getSetting, setSetting, pruneOldRuns } from './db';
 import { refreshAll } from './poller';
 
 const SCHEDULER_POLL_MS = 5_000;
 const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 let _started = false;
 
@@ -17,6 +18,10 @@ export function startScheduler() {
 
   setInterval(() => {
     checkBackup().catch(err => console.error('[scheduler] Backup error:', err));
+  }, 60_000);
+
+  setInterval(() => {
+    checkPrune().catch(err => console.error('[scheduler] Prune error:', err));
   }, 60_000);
 }
 
@@ -33,6 +38,29 @@ async function checkBackup() {
     console.log('[scheduler] backup created:', file);
   } catch (err) {
     console.error('[scheduler] backup failed:', err);
+  }
+}
+
+async function checkPrune() {
+  const last = getSetting('last_prune_time');
+  const lastMs = last ? parseInt(last, 10) : 0;
+  const now = Date.now();
+  if (now - lastMs < PRUNE_INTERVAL_MS) return;
+
+  const retentionStr = getSetting('retention_days');
+  if (!retentionStr) return;
+
+  const retentionDays = parseInt(retentionStr, 10);
+  if (isNaN(retentionDays) || retentionDays <= 0) return;
+
+  try {
+    const deleted = pruneOldRuns(retentionDays);
+    setSetting('last_prune_time', now.toString());
+    if (deleted > 0) {
+      console.log(`[scheduler] pruned ${deleted} runs older than ${retentionDays} days`);
+    }
+  } catch (err) {
+    console.error('[scheduler] prune failed:', err);
   }
 }
 

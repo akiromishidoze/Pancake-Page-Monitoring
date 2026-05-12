@@ -2,6 +2,8 @@ import { listEndpoints } from '@/lib/db';
 import { SettingsForm } from './SettingsForm';
 import { ChangeCredentials } from '@/components/ChangeCredentials';
 import { NotificationSettings } from '@/components/NotificationSettings';
+import { ConnectorsSettings } from '@/components/ConnectorsSettings';
+import { DataRetentionSettings } from '@/components/DataRetentionSettings';
 
 export default async function SettingsPage() {
   const endpoints = listEndpoints().map((e) => ({
@@ -27,7 +29,11 @@ export default async function SettingsPage() {
 
       <SettingsForm initialEndpoints={endpoints} />
 
+      <ConnectorsSettings />
+
       <NotificationSettings />
+
+      <DataRetentionSettings />
 
       <ChangeCredentials />
     </div>

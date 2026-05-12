@@ -37,6 +37,17 @@ export function Sidebar() {
             Overview
           </Link>
 
+          <Link
+            href="/runs"
+            className={`block px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+              pathname === '/runs'
+                ? 'bg-slate-800 text-white'
+                : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+            }`}
+          >
+            Run History
+          </Link>
+
           {/* Pages — expandable */}
           <div>
             <button

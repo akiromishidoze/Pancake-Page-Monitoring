@@ -13,8 +13,8 @@ type SearchParams = {
 
 async function PancakeSection({ endpointId }: { endpointId?: string }) {
   const pages = getLatestPageStates(endpointId);
-  const activePages = pages.filter((p) => p.is_activated);
-  const inactivePages = pages.filter((p) => !p.is_activated);
+  const activePages = pages.filter((p) => p.is_activated).map((p) => ({ page_id: p.page_id, name: p.page_name ?? p.page_id, kind: p.activity_kind ?? null, is_activated: true }));
+  const inactivePages = pages.filter((p) => !p.is_activated).map((p) => ({ page_id: p.page_id, name: p.page_name ?? p.page_id, kind: p.activity_kind ?? null, is_activated: false }));
 
   if (pages.length === 0) return null;
 

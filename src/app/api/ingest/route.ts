@@ -1,10 +1,11 @@
 // POST /api/ingest — standalone receiver endpoint for monitoring snapshots.
-// External systems (n8n workflows, scripts, etc.) POST their data here.
+// External systems (scripts, CI/CD, etc.) POST their data here.
 // Authenticated via X-Api-Key header matched against the endpoints table.
 
 import { NextResponse } from 'next/server';
 import { getEndpointByApiKey, insertSnapshot, touchEndpoint } from '@/lib/db';
 import { checkAlertsForRun } from '@/lib/notify';
+import { broadcastSSE } from '@/lib/sse';
 
 export async function POST(req: Request) {
   const apiKey = req.headers.get('x-api-key') || req.headers.get('X-Api-Key');
@@ -82,6 +83,7 @@ export async function POST(req: Request) {
 
     if (result.inserted) {
       touchEndpoint(endpoint.id);
+      broadcastSSE('refresh', JSON.stringify({ source: 'ingest', run_id, endpoint_id: endpoint.id }));
       // Fire-and-forget alert check for the new run
       checkAlertsForRun(run_id).catch(e => console.error('[ingest] alert check error:', e));
     }

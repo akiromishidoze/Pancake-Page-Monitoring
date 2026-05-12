@@ -1,0 +1,17 @@
+monitor.yourdomain.com {
+    reverse_proxy localhost:3001 {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    header {
+        X-Accel-Buffering no
+    }
+
+    encode gzip
+
+    log {
+        output file /var/log/caddy/page-monitor.log
+    }
+}

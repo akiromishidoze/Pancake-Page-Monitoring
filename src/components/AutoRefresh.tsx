@@ -1,20 +1,39 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
-export function AutoRefresh({ intervalMs = 60000 }: { intervalMs?: number }) {
+export function AutoRefresh() {
   const router = useRouter();
+  const esRef = useRef<EventSource | null>(null);
+  const refreshCounterRef = useRef(0);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      // Seamlessly fetch new RSC payload and merge it
-      router.refresh();
-    }, intervalMs);
+    function connect() {
+      const es = new EventSource('/api/sse');
+      esRef.current = es;
 
-    return () => clearInterval(interval);
-  }, [router, intervalMs]);
+      es.addEventListener('connected', () => {
+        console.log('[sse] connected');
+      });
 
-  // This component is purely functional and renders nothing
+      es.addEventListener('refresh', () => {
+        refreshCounterRef.current += 1;
+        router.refresh();
+      });
+
+      es.addEventListener('error', () => {
+        es.close();
+        setTimeout(connect, 3000);
+      });
+    }
+
+    connect();
+
+    return () => {
+      if (esRef.current) esRef.current.close();
+    };
+  }, [router]);
+
   return null;
 }
