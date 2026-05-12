@@ -4,6 +4,7 @@
 
 import { NextResponse } from 'next/server';
 import { getEndpointByApiKey, insertSnapshot, touchEndpoint } from '@/lib/db';
+import { checkAlertsForRun } from '@/lib/notify';
 
 export async function POST(req: Request) {
   const apiKey = req.headers.get('x-api-key') || req.headers.get('X-Api-Key');
@@ -81,6 +82,8 @@ export async function POST(req: Request) {
 
     if (result.inserted) {
       touchEndpoint(endpoint.id);
+      // Fire-and-forget alert check for the new run
+      checkAlertsForRun(run_id).catch(e => console.error('[ingest] alert check error:', e));
     }
 
     return NextResponse.json({
