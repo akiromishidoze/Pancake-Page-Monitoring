@@ -1,8 +1,3 @@
-// Page List screen — sortable, filterable table of all monitored pages.
-// Reads from SQLite (latest snapshot) populated by the background poller.
-// Falls back to live receiver fetch if SQLite is empty (cold start).
-// Filter state lives in URL search params: ?shop=…&kind=…&status=…&q=…&canary=1
-
 import { fetchReceiverStatus } from '@/lib/receiver';
 import { getLatestPageStates, getRunCount } from '@/lib/db';
 import Link from 'next/link';
@@ -51,7 +46,6 @@ async function loadRows(): Promise<{ rows: Row[]; source: 'db' | 'live' | 'none'
     return { rows, source: 'db' };
   }
 
-  // Cold start: pull live from receiver
   const live = await fetchReceiverStatus();
   if (!live.ok) return { rows: [], source: 'none' };
 
@@ -90,6 +84,21 @@ type SearchParams = {
   canary?: string;
 };
 
+function computePlatformSummary(rows: Row[]) {
+  const map = new Map<string, { total: number; active: number; inactive: number; kinds: Map<string, number> }>();
+  for (const r of rows) {
+    const shop = r.shop ?? 'Uncategorized';
+    if (!map.has(shop)) map.set(shop, { total: 0, active: 0, inactive: 0, kinds: new Map() });
+    const entry = map.get(shop)!;
+    entry.total++;
+    if (r.is_activated) entry.active++;
+    else entry.inactive++;
+    const kind = r.kind ?? 'none';
+    entry.kinds.set(kind, (entry.kinds.get(kind) ?? 0) + 1);
+  }
+  return map;
+}
+
 export default async function PagesPage({
   searchParams,
 }: {
@@ -97,13 +106,80 @@ export default async function PagesPage({
 }) {
   const sp = await searchParams;
   const { rows, source } = await loadRows();
+  const selectedShop = sp.shop;
 
-  // Distinct shops + kinds for filter dropdowns (computed from full row set)
+  // ─── Platform List View ──────────────────────────────────────────────
+  if (!selectedShop) {
+    const platforms = computePlatformSummary(rows);
+    const platformNames = Array.from(platforms.keys()).sort();
+    const totalAll = rows.length;
+
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-2xl font-bold">Platforms</h2>
+          <p className="text-sm text-slate-400 mt-1">
+            {totalAll} pages across {platformNames.length} platform{platformNames.length !== 1 ? 's' : ''}
+            {source !== 'none' && (
+              <span className="ml-2 text-xs text-slate-500">
+                (data: {source === 'db' ? 'SQLite' : 'live receiver'})
+              </span>
+            )}
+          </p>
+        </div>
+
+        {platformNames.length === 0 ? (
+          <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 text-slate-400">
+            No page data yet. The poller will populate this table after the next run completes.
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {platformNames.map((shop) => {
+              const s = platforms.get(shop)!;
+              const topKinds = Array.from(s.kinds.entries())
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 3);
+              return (
+                <Link
+                  key={shop}
+                  href={`/pages?shop=${encodeURIComponent(shop)}`}
+                  className="rounded-lg border border-slate-800 bg-slate-900 p-5 hover:border-slate-600 hover:bg-slate-800/50 transition-all block"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-base font-semibold text-slate-100">{shop}</h3>
+                    <span className="text-xs text-slate-500">{s.total} pages</span>
+                  </div>
+                  <div className="flex gap-3 text-sm">
+                    <span className="text-green-400 font-medium">{s.active} active</span>
+                    <span className="text-red-400 font-medium">{s.inactive} inactive</span>
+                  </div>
+                  {topKinds.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {topKinds.map(([kind, count]) => (
+                        <span
+                          key={kind}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] border ${KIND_TONE[kind] ?? KIND_TONE.none}`}
+                        >
+                          {kind}
+                          <span className="opacity-60">{count}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ─── Shop-specific Table View ────────────────────────────────────────
   const shops = Array.from(
     new Set(rows.map((r) => r.shop).filter((s): s is string => !!s)),
   ).sort();
 
-  // Insert per-shop breakdown / compare UI
   const rowsForCompare = rows.map((s) => ({
     page_id: s.page_id,
     shop: s.shop ?? null,
@@ -118,10 +194,9 @@ export default async function PagesPage({
     new Set(rows.map((r) => r.kind).filter((k): k is string => !!k)),
   ).sort((a, b) => (KIND_RANK[b] ?? 0) - (KIND_RANK[a] ?? 0));
 
-  // Apply filters
   const q = (sp.q ?? '').trim().toLowerCase();
   const filtered = rows.filter((r) => {
-    if (sp.shop && r.shop !== sp.shop) return false;
+    if (selectedShop && r.shop !== selectedShop) return false;
     if (sp.kind && r.kind !== sp.kind) return false;
     if (sp.status === 'active' && !r.is_activated) return false;
     if (sp.status === 'inactive' && r.is_activated) return false;
@@ -130,7 +205,6 @@ export default async function PagesPage({
     return true;
   });
 
-  // Sort: active by kind strength desc, alphabetical fallback; inactive last
   const sorted = [...filtered].sort((a, b) => {
     if (a.is_activated !== b.is_activated) return a.is_activated ? -1 : 1;
     const aRank = KIND_RANK[a.kind ?? ''] ?? 0;
@@ -150,7 +224,16 @@ export default async function PagesPage({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold">Pages</h2>
+        <Link
+          href="/pages"
+          className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 mb-2 transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+          All Platforms
+        </Link>
+        <h2 className="text-2xl font-bold">{selectedShop}</h2>
         <p className="text-sm text-slate-400 mt-1">
           {showingAll
             ? `${totalAll} pages monitored`
@@ -165,15 +248,14 @@ export default async function PagesPage({
         </p>
       </div>
 
-<PageFilters shops={shops} kinds={kinds} />
+      <PageFilters shops={shops} kinds={kinds} />
 
-      {/* Per-shop breakdown & compare */}
       <div className="mt-4">
         <ShopCompare rows={rowsForCompare} shops={shops} />
       </div>
 
       {sorted.length === 0 ? (
-        <div className="dashboard-data rounded-lg border border-slate-800 bg-slate-900 p-6 text-slate-400">
+        <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 text-slate-400">
           {totalAll === 0
             ? 'No page data yet. The poller will populate this table after the next n8n run completes.'
             : 'No pages match the current filters.'}
