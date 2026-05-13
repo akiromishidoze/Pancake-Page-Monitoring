@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server';
 import { getSetting } from '@/lib/db';
 import { checkAndRun } from '@/lib/scheduler';
 import { pollIfNeeded } from '@/lib/poller';
+import { requireApiAuth } from '@/lib/auth';
 
 export async function GET() {
+  const auth = await requireApiAuth(); if (auth) return auth;
   try {
     void checkAndRun().catch(e => console.error('[lazy-cron] scheduler err:', e));
     void pollIfNeeded().catch(e => console.error('[lazy-cron] poller err:', e));

@@ -1,3 +1,4 @@
+import { NextResponse } from 'next/server';
 import { getSetting, setSetting } from './db';
 
 const DEFAULT_EMAIL = 'admin';
@@ -23,4 +24,14 @@ export function validateSession(token: string | null | undefined): boolean {
 
 export function clearSession(): void {
   setSetting('session_token', '');
+}
+
+export async function requireApiAuth(): Promise<NextResponse | null> {
+  const { cookies } = await import('next/headers');
+  const cookieStore = await cookies();
+  const session = cookieStore.get('session')?.value;
+  if (!validateSession(session)) {
+    return NextResponse.json({ ok: false, error: 'Not authenticated' }, { status: 401 });
+  }
+  return null;
 }

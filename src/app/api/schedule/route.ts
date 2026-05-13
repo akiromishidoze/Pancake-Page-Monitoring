@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getSetting, setSetting } from '@/lib/db';
+import { requireApiAuth } from '@/lib/auth';
 
 export async function GET() {
+  const auth = await requireApiAuth(); if (auth) return auth;
   try {
     const interval = getSetting('schedule_interval') || 'off';
     return NextResponse.json({ ok: true, interval });
@@ -14,6 +16,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const auth = await requireApiAuth(); if (auth) return auth;
   try {
     const body = await req.json();
     const { interval } = body;

@@ -3,8 +3,10 @@
 
 import { NextResponse } from 'next/server';
 import { listEndpoints, upsertEndpoint } from '@/lib/db';
+import { requireApiAuth } from '@/lib/auth';
 
 export async function GET() {
+  const auth = await requireApiAuth(); if (auth) return auth;
   const endpoints = listEndpoints();
   const safe = endpoints.map((e) => ({
     ...e,
@@ -14,6 +16,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const auth = await requireApiAuth(); if (auth) return auth;
   let body: any;
   try {
     body = await req.json();

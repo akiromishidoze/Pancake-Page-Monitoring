@@ -6,6 +6,7 @@ import { getDb } from '@/lib/db';
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
+import { requireApiAuth } from '@/lib/auth';
 
 const BACKUPS_DIR = path.join(process.cwd(), 'backups');
 
@@ -14,6 +15,7 @@ function ensureDir() {
 }
 
 export async function POST() {
+  const auth = await requireApiAuth(); if (auth) return auth;
   try {
     ensureDir();
     const db = getDb();
@@ -44,6 +46,7 @@ export async function POST() {
 }
 
 export async function GET() {
+  const auth = await requireApiAuth(); if (auth) return auth;
   ensureDir();
   const files = fs.readdirSync(BACKUPS_DIR)
     .filter(f => f.startsWith('monitor_') && f.endsWith('.sqlite'))

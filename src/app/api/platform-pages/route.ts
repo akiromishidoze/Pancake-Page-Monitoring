@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { listPlatformPages, upsertPlatformPage } from '@/lib/db';
+import { requireApiAuth } from '@/lib/auth';
 
 export async function GET(req: Request) {
+  const auth = await requireApiAuth(); if (auth) return auth;
   const url = new URL(req.url);
   const endpointId = url.searchParams.get('endpoint_id') || undefined;
   const pages = listPlatformPages(endpointId);
@@ -9,6 +11,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const auth = await requireApiAuth(); if (auth) return auth;
   let body: any;
   try {
     body = await req.json();

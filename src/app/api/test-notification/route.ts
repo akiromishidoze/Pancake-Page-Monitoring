@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getSetting } from '@/lib/db';
 import { sendAlert } from '@/lib/notify';
+import { requireApiAuth } from '@/lib/auth';
 
 export async function POST() {
+  const auth = await requireApiAuth(); if (auth) return auth;
   const webhook = getSetting('notify_slack_webhook');
   if (!webhook) {
     return NextResponse.json({ ok: false, error: 'No Slack webhook configured' }, { status: 400 });

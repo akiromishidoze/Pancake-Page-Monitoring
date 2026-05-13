@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { validateSession } from '@/lib/auth';
+import { requireApiAuth, validateSession } from '@/lib/auth';
 import { getSetting, setSetting } from '@/lib/db';
 
 export async function GET() {
+  const auth = await requireApiAuth(); if (auth) return auth;
   const slackWebhook = getSetting('notify_slack_webhook') || '';
   return NextResponse.json({
     ok: true,
