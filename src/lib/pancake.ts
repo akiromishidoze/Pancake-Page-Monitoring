@@ -64,7 +64,7 @@ async function fetchWithRetry(url: string, retries = 2): Promise<Response> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 20_000);
+      const timer = setTimeout(() => controller.abort(), 30_000);
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timer);
       return res;
@@ -81,7 +81,7 @@ export async function fetchPancakeActivePageIds(
   shopId: number,
   pageSize: number = 1000,
 ): Promise<Set<string>> {
-  const cutoffMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const cutoffMs = Date.now() - 14 * 24 * 60 * 60 * 1000;
   const allIds = new Set<string>();
   const BATCH = 5;
   const MAX_BATCHES = 4;
