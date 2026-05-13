@@ -1,5 +1,5 @@
 import { fetchBotCakePages } from './botcake';
-import { fetchPancakeShops, fetchPancakePages, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop } from './pancake';
+import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop } from './pancake';
 import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, type SlimPage } from './db';
 import { broadcastSSE } from './sse';
 
@@ -117,10 +117,22 @@ async function refreshPancake() {
 
   const shopById = new Map(shops.filter(s => TARGET_SHOP_IDS.includes(s.id)).map(s => [s.id, s]));
 
+  const activePageIdsByShop = new Map<number, Set<string>>();
+  await Promise.all(TARGET_SHOP_IDS.map(async (sid) => {
+    try {
+      const ids = await fetchPancakeActivePageIds(token, sid);
+      activePageIdsByShop.set(sid, ids);
+    } catch (err) {
+      console.error(`[poller] pancake: orders failed for shop ${sid}:`, err);
+    }
+  }));
+
   for (const ep of endpoints) {
     const shopId = parseInt(ep.id, 10);
     const shop = shopById.get(shopId);
     if (!shop) continue;
+
+    const orderPageIds = activePageIdsByShop.get(shopId) ?? new Set<string>();
 
     const ts = new Date().toISOString();
     const runId = `pancake_refresh_${now}_${ep.id}`;
@@ -128,6 +140,8 @@ async function refreshPancake() {
     const activePages: SlimPage[] = [];
     const inactivePages: SlimPage[] = [];
     for (const p of shop.pages) {
+      const hasOrders = orderPageIds.has(p.id);
+      const apiActive = p.is_activated === true;
       const base = {
         shop_label: ep.shop_label ?? null, shop: ep.shop_label ?? null,
         name: p.name,
@@ -140,7 +154,7 @@ async function refreshPancake() {
         response_ms: null,
         fetch_errors: 0,
       };
-      (p.is_activated === true ? activePages : inactivePages).push(base);
+      (hasOrders || apiActive ? activePages : inactivePages).push(base);
     }
 
     const result = insertSnapshot({
@@ -156,7 +170,7 @@ async function refreshPancake() {
     });
 
     if (result.inserted) {
-      console.log(`[poller] pancake ${ep.name}: inserted ${shop.pages.length} pages, run ${runId}`);
+      console.log(`[poller] pancake ${ep.name}: ${activePages.length} active / ${inactivePages.length} inactive (${shop.pages.length} total), run ${runId}`);
       broadcastSSE('refresh', JSON.stringify({ source: 'pancake-poller', run_id: runId, endpoint_id: ep.id }));
     }
   }
