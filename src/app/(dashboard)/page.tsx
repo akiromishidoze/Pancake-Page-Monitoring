@@ -53,18 +53,17 @@ async function BotCakeSection() {
           <ActiveDonutChart activeCount={pages.length} inactiveCount={0} />
         </div>
         <div className="lg:col-span-2">
-          <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 flex items-center justify-center h-[400px]">
-            <div className="text-slate-400 text-sm text-center">
-              <div className="text-4xl font-bold text-slate-200 mb-2">{uniquePages}</div>
-              <div>page{uniquePages !== 1 ? 's' : ''} active</div>
-              {uniquePages > 0 && (
-                <div className="mt-3 text-xs text-slate-500 max-h-32 overflow-y-auto text-left">
-                  {pages.slice(0, 20).map(p => (
-                    <Link key={p.page_id} href={`/pages/${p.page_id}`} className="block truncate hover:text-blue-300 transition-colors">{p.page_name ?? p.page_id}</Link>
-                  ))}
-                  {uniquePages > 20 && <div className="text-slate-600 mt-1">…and {uniquePages - 20} more</div>}
-                </div>
-              )}
+          <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 h-[400px] flex flex-col">
+            <div className="flex items-baseline gap-2 mb-3 shrink-0">
+              <span className="text-2xl font-bold text-slate-200">{uniquePages}</span>
+              <span className="text-sm text-slate-400">page{uniquePages !== 1 ? 's' : ''} active</span>
+            </div>
+            <div className="flex-1 overflow-y-auto text-sm space-y-0.5">
+              {pages.map(p => (
+                <Link key={p.page_id} href={`/pages/${p.page_id}`} className="block truncate hover:text-blue-300 transition-colors text-slate-400">
+                  {p.page_name ?? p.page_id}
+                </Link>
+              ))}
             </div>
           </div>
         </div>
