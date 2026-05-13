@@ -1,4 +1,5 @@
 import { fetchBotCakePages } from './botcake';
+import { fetchPancakeShops, TARGET_SHOP_IDS, type PancakeShop } from './pancake';
 import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, type SlimPage } from './db';
 import { broadcastSSE } from './sse';
 
@@ -97,75 +98,61 @@ async function refreshPancake() {
   _pancakeLastRefresh = now;
 
   const endpoints = listEndpoints().filter(ep => ep.id !== 'botcake-platform' && ep.url && ep.access_token && ep.is_active);
+  if (endpoints.length === 0) return;
+
+  const token = endpoints[0].access_token!;
+  let shops: PancakeShop[];
+  try {
+    shops = await fetchPancakeShops(token);
+  } catch (err) {
+    console.error('[poller] pancake: failed to fetch shops:', err);
+    return;
+  }
+
+  const targetIds = TARGET_SHOP_IDS;
+  const shopById = new Map(shops.filter(s => targetIds.includes(s.id)).map(s => [s.id, s]));
 
   for (const ep of endpoints) {
-    if (!ep.url) continue;
-    try {
-      const baseUrl = ep.url.replace(/\/+$/, '');
-      const url = new URL(baseUrl);
-      if (ep.access_token) url.searchParams.set('access_token', ep.access_token);
-      const res = await fetch(url.toString(), {
-        headers: { 'Content-Type': 'application/json' },
-      });
+    const shopId = parseInt(ep.id, 10);
+    const shop = shopById.get(shopId);
+    if (!shop) continue;
 
-      if (!res.ok) { console.warn(`[poller] pancake ${ep.name}: HTTP ${res.status}`); continue; }
+    const ts = new Date().toISOString();
+    const runId = `pancake_refresh_${now}_${ep.id}`;
 
-      const data = await res.json();
-      const runId = `pancake_refresh_${now}_${ep.id}`;
-      const ts = new Date().toISOString();
+    const activePages: SlimPage[] = [];
+    const inactivePages: SlimPage[] = [];
+    for (const p of shop.pages) {
+      const slim: SlimPage = {
+        shop_label: ep.shop_label ?? null, shop: ep.shop_label ?? null,
+        name: p.name,
+        page_id: p.id, id: p.id,
+        activity_kind: null, kind: null,
+        activation_reason: null, reason: null,
+        last_order_at: null, last_customer_activity_at: null,
+        state_change: null, activity_kind_change: null,
+        is_canary: false,
+        response_ms: null,
+        fetch_errors: 0,
+      };
+      activePages.push(slim);
+    }
 
-      let rows: Array<Record<string, unknown>> = [];
-      if (data.pages && Array.isArray(data.pages)) {
-        rows = (data.pages as Array<Record<string, unknown>>).filter(
-          r => String(r.shop_id ?? '') === ep.id
-        );
-      } else if (data.categorized && Array.isArray(data.categorized.activated)) {
-        const allPages = [
-          ...(data.categorized as { activated: unknown[]; inactivated?: unknown[] }).activated,
-          ...((data.categorized as { activated: unknown[]; inactivated?: unknown[] }).inactivated ?? []),
-        ] as Array<Record<string, unknown>>;
-        rows = allPages.filter(r => String(r.shop_id ?? '') === ep.id);
-      } else if (Array.isArray(data)) rows = data;
-      else if (data.rows && Array.isArray(data.rows)) rows = data.rows as Array<Record<string, unknown>>;
-      else if (data.data && Array.isArray(data.data)) rows = data.data as Array<Record<string, unknown>>;
-      else { console.warn(`[poller] pancake ${ep.name}: unexpected response format`); continue; }
+    const result = insertSnapshot({
+      run_id: runId, endpoint_id: ep.id, generated_at: ts,
+      heartbeat_ok: true, run_quality: 'full', severity: null,
+      canary_status: 'ok', canary_alert: false, outage_suspected: false, alert_count: 0,
+      rule_version: null, in_maintenance_window: false,
+      total_pages: shop.pages.length,
+      active_pages_count: activePages.length, inactive_pages_count: 0,
+      receiver_sd_size_bytes: null,
+      raw_summary: { source: 'pancake-shops-poller', endpoint: ep.name, page_count: shop.pages.length },
+      active_pages: activePages, inactive_pages: inactivePages,
+    });
 
-      const activePages: SlimPage[] = [];
-      const inactivePages: SlimPage[] = [];
-      for (const r of rows) {
-        const isAct = r.is_activated !== false;
-        const slim: SlimPage = {
-          shop_label: ep.shop_label ?? null, shop: ep.shop_label ?? null,
-          name: (r.page_name as string) ?? (r.name as string) ?? (r.page_id as string) ?? 'Unknown',
-          page_id: (r.page_id as string) ?? (r.id as string) ?? '', id: (r.page_id as string) ?? (r.id as string) ?? '',
-          activity_kind: (r.activity_kind as string | null) ?? (r.kind as string | null) ?? null, kind: (r.activity_kind as string | null) ?? (r.kind as string | null) ?? null,
-          activation_reason: (r.activation_reason as string | null) ?? (r.reason as string | null) ?? null, reason: (r.activation_reason as string | null) ?? (r.reason as string | null) ?? null,
-          last_order_at: (r.last_order_at as string | null) ?? null, last_customer_activity_at: (r.last_customer_activity_at as string | null) ?? null,
-          state_change: (r.state_change as string | null) ?? null, activity_kind_change: (r.activity_kind_change as string | null) ?? null,
-          is_canary: r.is_canary === true,
-          response_ms: (r.response_ms as number | null) ?? (r.response_time_ms as number | null) ?? null,
-          fetch_errors: typeof r.fetch_errors === 'number' ? r.fetch_errors : 0,
-        };
-        (isAct ? activePages : inactivePages).push(slim);
-      }
-
-      const result = insertSnapshot({
-        run_id: runId, endpoint_id: ep.id, generated_at: ts,
-        heartbeat_ok: true, run_quality: 'full', severity: null,
-        canary_status: 'ok', canary_alert: false, outage_suspected: false, alert_count: 0,
-        rule_version: null, in_maintenance_window: false,
-        total_pages: rows.length, active_pages_count: activePages.length, inactive_pages_count: inactivePages.length,
-        receiver_sd_size_bytes: null,
-        raw_summary: { source: 'pancake-poller', endpoint: ep.name, page_count: rows.length },
-        active_pages: activePages, inactive_pages: inactivePages,
-      });
-
-      if (result.inserted) {
-        console.log(`[poller] pancake ${ep.name}: inserted ${rows.length} pages, run ${runId}`);
-        broadcastSSE('refresh', JSON.stringify({ source: 'pancake-poller', run_id: runId, endpoint_id: ep.id }));
-      }
-    } catch (err) {
-      console.error(`[poller] pancake ${ep.name}: error:`, err);
+    if (result.inserted) {
+      console.log(`[poller] pancake ${ep.name}: inserted ${shop.pages.length} pages, run ${runId}`);
+      broadcastSSE('refresh', JSON.stringify({ source: 'pancake-poller', run_id: runId, endpoint_id: ep.id }));
     }
   }
 }
