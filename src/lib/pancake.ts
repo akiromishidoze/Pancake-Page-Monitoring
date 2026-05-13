@@ -81,7 +81,7 @@ export async function fetchPancakeActivePageIds(
   shopId: number,
   pageSize: number = 1000,
 ): Promise<Set<string>> {
-  const cutoffMs = Date.now() - 14 * 24 * 60 * 60 * 1000;
+  const cutoffMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const allIds = new Set<string>();
   const BATCH = 5;
   const MAX_BATCHES = 4;
@@ -120,7 +120,7 @@ export async function fetchPancakeActivePageIdsFromCustomers(
   shopId: number,
   pageSize: number = 1000,
 ): Promise<Set<string>> {
-  const cutoffMs = Date.now() - 14 * 24 * 60 * 60 * 1000;
+  const cutoffMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const allIds = new Set<string>();
   const BATCH = 5;
   const MAX_BATCHES = 4;
