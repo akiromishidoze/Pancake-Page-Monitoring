@@ -27,19 +27,21 @@ async function PancakeSection({ endpointId }: { endpointId?: string }) {
 
   if (allPages.length === 0) return null;
 
-  const activePages = allPages.filter((p) => p.is_activated);
-  const inactivePages = allPages.filter((p) => !p.is_activated);
-  const activeCount = activePages.length;
-  const inactiveCount = inactivePages.length;
+  const activeCount = allPages.filter((p) => p.is_activated === 1).length;
+  const inactiveCount = allPages.filter((p) => p.is_activated !== 1).length;
 
-  const shopBreakdown = PANCAKE_ENDPOINT_IDS.map((eid) => {
+  const rawBreakdown = PANCAKE_ENDPOINT_IDS.map((eid) => {
     const ep = getEndpoint(eid);
     if (!ep) return null;
     const shopPages = allPages.filter((p) => p.shop_label === ep.shop_label);
-    const shopActive = shopPages.filter((p) => p.is_activated).length;
-    const shopInactive = shopPages.length - shopActive;
-    return { label: ep.shop_label ?? ep.name, total: shopPages.length, active: shopActive, inactive: shopInactive };
+    return {
+      label: ep.shop_label ?? ep.name,
+      total: shopPages.length,
+      active: shopPages.filter((p) => p.is_activated === 1).length,
+      inactive: shopPages.filter((p) => p.is_activated !== 1).length,
+    };
   }).filter(Boolean);
+  const shopBreakdown = rawBreakdown as NonNullable<typeof rawBreakdown[number]>[];
 
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
@@ -71,11 +73,11 @@ async function PancakeSection({ endpointId }: { endpointId?: string }) {
                 </thead>
                 <tbody className="divide-y divide-slate-800">
                   {shopBreakdown.map((s) => (
-                    <tr key={s!.label} className="text-slate-300">
-                      <td className="py-2 pr-4">{s!.label}</td>
-                      <td className="py-2 pr-4 font-mono text-xs">{s!.total}</td>
-                      <td className="py-2 pr-4 text-green-400 font-mono text-xs">{s!.active}</td>
-                      <td className="py-2 text-red-400 font-mono text-xs">{s!.inactive}</td>
+                    <tr key={s.label} className="text-slate-300">
+                      <td className="py-2 pr-4">{s.label}</td>
+                      <td className="py-2 pr-4 font-mono text-xs">{s.total}</td>
+                      <td className="py-2 pr-4 text-green-400 font-mono text-xs">{s.active}</td>
+                      <td className="py-2 text-red-400 font-mono text-xs">{s.inactive}</td>
                     </tr>
                   ))}
                 </tbody>

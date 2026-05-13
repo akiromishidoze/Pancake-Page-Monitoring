@@ -63,8 +63,8 @@ export default async function PlatformPage({
   const shopRows = hasShops ? allRows.filter((r) => r.shop === selectedShop) : allRows;
   const shopCounts = Object.fromEntries(shops.map(s => [s, allRows.filter(r => r.shop === s).length]));
   const allKindsNull = allRows.every(r => !r.kind);
-  const activeCount = shopRows.filter((r) => r.is_activated).length;
-  const inactiveCount = shopRows.length - activeCount;
+  const activeCount = shopRows.filter((r) => r.is_activated === true).length;
+  const inactiveCount = shopRows.filter((r) => r.is_activated === false).length;
 
   return (
     <div className="space-y-6">
@@ -130,7 +130,13 @@ export default async function PlatformPage({
                     </div>
                   </td>
                   {!allKindsNull && <td className="px-4 py-3"><span className={`inline-block px-2 py-1 rounded text-xs font-mono border ${KIND_TONE[r.kind ?? 'none'] ?? KIND_TONE.none}`}>{r.kind ?? 'unknown'}</span></td>}
-                  <td className="px-4 py-3"><span className={`inline-block px-2 py-1 rounded text-xs font-mono ${r.is_activated ? 'bg-green-900/40 text-green-300 border border-green-800' : 'bg-red-900/30 text-red-400 border border-red-900'}`}>{r.is_activated ? 'active' : 'inactive'}</span></td>
+                    <td className="px-4 py-3">
+                      {r.is_activated ? (
+                        <span className="inline-block px-2 py-1 rounded text-xs font-mono bg-green-900/40 text-green-300 border border-green-800">active</span>
+                      ) : (
+                        <span className="inline-block px-2 py-1 rounded text-xs font-mono bg-red-900/40 text-red-300 border border-red-800">inactive</span>
+                      )}
+                    </td>
                   <td className="px-4 py-3 text-slate-400 text-xs max-w-md truncate" title={r.reason ?? ''}>{r.reason ?? '—'}</td>
                 </tr>
               ))}

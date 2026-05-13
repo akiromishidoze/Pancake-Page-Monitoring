@@ -128,8 +128,7 @@ async function refreshPancake() {
     const activePages: SlimPage[] = [];
     const inactivePages: SlimPage[] = [];
     for (const p of shop.pages) {
-      const isAct = p.is_activated !== false;
-      const slim: SlimPage = {
+      const base = {
         shop_label: ep.shop_label ?? null, shop: ep.shop_label ?? null,
         name: p.name,
         page_id: p.id, id: p.id,
@@ -141,7 +140,7 @@ async function refreshPancake() {
         response_ms: null,
         fetch_errors: 0,
       };
-      (isAct ? activePages : inactivePages).push(slim);
+      (p.is_activated === true ? activePages : inactivePages).push(base);
     }
 
     const result = insertSnapshot({

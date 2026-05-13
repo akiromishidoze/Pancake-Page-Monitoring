@@ -13,8 +13,7 @@ export function ActiveDonutChart({ activeCount, inactiveCount }: ActiveDonutChar
     { name: 'Inactive', value: inactiveCount },
   ];
 
-  // Colors without gradients per user request
-  const COLORS = ['#22c55e', '#64748b']; // green-500, slate-500
+  const COLORS = ['#22c55e', '#64748b'];
 
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 flex flex-col h-[400px]">

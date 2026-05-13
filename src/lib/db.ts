@@ -227,6 +227,7 @@ export type InsertSnapshotInput = {
   raw_summary: object;
   active_pages: SlimPage[];
   inactive_pages: SlimPage[];
+  unknown_pages?: SlimPage[];
 };
 
 export function insertSnapshot(input: InsertSnapshotInput): { inserted: boolean } {
@@ -294,6 +295,12 @@ export function insertSnapshot(input: InsertSnapshotInput): { inserted: boolean 
       ...input.inactive_pages.map((p) => ({
         ...p,
         _is_active: 0,
+        response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
+        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
+      })),
+      ...(input.unknown_pages ?? []).map((p) => ({
+        ...p,
+        _is_active: null,
         response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
         fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
       })),
