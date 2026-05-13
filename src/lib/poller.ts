@@ -3,7 +3,6 @@ import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, typ
 import { broadcastSSE } from './sse';
 
 const POLL_INTERVAL_MS = 60_000;
-const PANCAKE_API_PATH_DEFAULT = '/api/monitoring/pages';
 
 let _started = false;
 let _lastPolledAt: string | null = null;
@@ -97,15 +96,16 @@ async function refreshPancake() {
   if (now - _pancakeLastRefresh < POLL_INTERVAL_MS) return;
   _pancakeLastRefresh = now;
 
-  const apiPath = getSetting('pancake_api_path') || PANCAKE_API_PATH_DEFAULT;
   const endpoints = listEndpoints().filter(ep => ep.id !== 'botcake-platform' && ep.url && ep.access_token && ep.is_active);
 
   for (const ep of endpoints) {
     if (!ep.url) continue;
     try {
       const baseUrl = ep.url.replace(/\/+$/, '');
-      const res = await fetch(`${baseUrl}${apiPath}`, {
-        headers: { Authorization: `Bearer ${ep.access_token}`, 'Content-Type': 'application/json' },
+      const url = new URL(baseUrl);
+      if (ep.access_token) url.searchParams.set('access_token', ep.access_token);
+      const res = await fetch(url.toString(), {
+        headers: { 'Content-Type': 'application/json' },
       });
 
       if (!res.ok) { console.warn(`[poller] pancake ${ep.name}: HTTP ${res.status}`); continue; }
@@ -115,9 +115,12 @@ async function refreshPancake() {
       const ts = new Date().toISOString();
 
       let rows: Array<Record<string, unknown>> = [];
-      if (Array.isArray(data)) rows = data;
+      if (data.pages && Array.isArray(data.pages)) {
+        rows = (data.pages as Array<Record<string, unknown>>).filter(
+          r => String(r.shop_id ?? '') === ep.id
+        );
+      } else if (Array.isArray(data)) rows = data;
       else if (data.rows && Array.isArray(data.rows)) rows = data.rows as Array<Record<string, unknown>>;
-      else if (data.pages && Array.isArray(data.pages)) rows = data.pages as Array<Record<string, unknown>>;
       else if (data.data && Array.isArray(data.data)) rows = data.data as Array<Record<string, unknown>>;
       else { console.warn(`[poller] pancake ${ep.name}: unexpected response format`); continue; }
 
