@@ -60,28 +60,57 @@ export function mergePagesActivation(
   }));
 }
 
+async function fetchWithRetry(url: string, retries = 2): Promise<Response> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 20_000);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timer);
+      return res;
+    } catch (err) {
+      if (attempt === retries) throw err;
+      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+    }
+  }
+  throw new Error('unreachable');
+}
+
 export async function fetchPancakeActivePageIds(
   token: string,
   shopId: number,
   pageSize: number = 1000,
-  maxPages: number = 3,
 ): Promise<Set<string>> {
+  const cutoffMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const allIds = new Set<string>();
-  for (let page = 1; page <= maxPages; page++) {
-    const res = await fetch(
-      `${PANCAKE_API}/shops/${shopId}/orders?access_token=${encodeURIComponent(token)}&page_size=${pageSize}&page_number=${page}`,
-      { headers: { 'Content-Type': 'application/json' } },
-    );
-    if (!res.ok) throw new Error(`Pancake orders API HTTP ${res.status}`);
-    const data = await res.json() as { data?: Array<{ page_id?: string | number }> };
-    let count = 0;
-    for (const order of data.data ?? []) {
-      if (order.page_id) {
-        allIds.add(String(order.page_id));
-        count++;
+  const BATCH = 5;
+  const MAX_BATCHES = 4;
+
+  for (let batch = 0; batch < MAX_BATCHES; batch++) {
+    const pageOffset = batch * BATCH;
+    const pageNumbers = Array.from({ length: BATCH }, (_, i) => pageOffset + i + 1);
+
+    const results = await Promise.all(pageNumbers.map(page =>
+      fetchWithRetry(
+        `${PANCAKE_API}/shops/${shopId}/orders?access_token=${encodeURIComponent(token)}&page_size=${pageSize}&page_number=${page}`,
+      ).then(r => r.json()).catch(() => null as { data?: Array<{ page_id?: string | number; inserted_at?: string }> } | null)
+    ));
+
+    for (const data of results) {
+      if (!data?.data) continue;
+      for (const order of data.data) {
+        if (!order.inserted_at || !order.page_id) continue;
+        if (new Date(order.inserted_at).getTime() >= cutoffMs) {
+          allIds.add(String(order.page_id));
+        }
       }
     }
-    if (count === 0) break;
+
+    const last = results[results.length - 1];
+    if (!last?.data?.length) break;
+    if (last.data.length < pageSize) break;
+    const newestOnLast = last.data[0]?.inserted_at;
+    if (newestOnLast && new Date(newestOnLast).getTime() < cutoffMs) break;
   }
   return allIds;
 }
