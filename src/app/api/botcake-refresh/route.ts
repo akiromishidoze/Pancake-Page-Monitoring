@@ -4,19 +4,20 @@
 import { NextResponse } from 'next/server';
 import { getEndpointByApiKey, insertSnapshot } from '@/lib/db';
 import { fetchBotCakePages } from '@/lib/botcake';
+import { cors, corsOptions } from '@/lib/cors';
 
 async function handler(apiKey: string | null) {
   if (!apiKey) {
-    return NextResponse.json({ ok: false, error: 'Missing X-Api-Key header or ?key=' }, { status: 401 });
+    return cors(NextResponse.json({ ok: false, error: 'Missing X-Api-Key header or ?key=' }, { status: 401 }));
   }
 
   const endpoint = getEndpointByApiKey(apiKey);
   if (!endpoint || endpoint.id !== 'botcake-platform') {
-    return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+    return cors(NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 }));
   }
 
   if (!endpoint.access_token) {
-    return NextResponse.json({ ok: false, error: 'BotCake endpoint has no access_token configured' }, { status: 400 });
+    return cors(NextResponse.json({ ok: false, error: 'BotCake endpoint has no access_token configured' }, { status: 400 }));
   }
 
   const pages = await fetchBotCakePages(endpoint.access_token);
@@ -65,12 +66,16 @@ async function handler(apiKey: string | null) {
     inactive_pages: [],
   });
 
-  return NextResponse.json({
+  return cors(NextResponse.json({
     ok: true,
     run_id: runId,
     pages: pages.length,
     inserted: result.inserted,
-  });
+  }));
+}
+
+export async function OPTIONS() {
+  return corsOptions();
 }
 
 export async function POST(req: Request) {

@@ -6,27 +6,28 @@ import { NextResponse } from 'next/server';
 import { getEndpointByApiKey, insertSnapshot, touchEndpoint } from '@/lib/db';
 import { checkAlertsForRun } from '@/lib/notify';
 import { broadcastSSE } from '@/lib/sse';
+import { cors, corsOptions } from '@/lib/cors';
 
 export async function POST(req: Request) {
   const apiKey = req.headers.get('x-api-key') || req.headers.get('X-Api-Key');
   if (!apiKey) {
-    return NextResponse.json({ ok: false, error: 'Missing X-Api-Key header' }, { status: 401 });
+    return cors(NextResponse.json({ ok: false, error: 'Missing X-Api-Key header' }, { status: 401 }));
   }
 
   const endpoint = getEndpointByApiKey(apiKey);
   if (!endpoint) {
-    return NextResponse.json({ ok: false, error: 'Invalid or inactive API key' }, { status: 401 });
+    return cors(NextResponse.json({ ok: false, error: 'Invalid or inactive API key' }, { status: 401 }));
   }
 
   if (endpoint.token_expires_at && new Date(endpoint.token_expires_at) < new Date()) {
-    return NextResponse.json({ ok: false, error: 'API key has expired' }, { status: 401 });
+    return cors(NextResponse.json({ ok: false, error: 'API key has expired' }, { status: 401 }));
   }
 
   let body: any;
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ ok: false, error: 'Invalid JSON body' }, { status: 400 });
+    return cors(NextResponse.json({ ok: false, error: 'Invalid JSON body' }, { status: 400 }));
   }
 
   const run_id = body.run_id || body.generated_at || `ingest_${Date.now()}`;
@@ -88,16 +89,20 @@ export async function POST(req: Request) {
       checkAlertsForRun(run_id).catch(e => console.error('[ingest] alert check error:', e));
     }
 
-    return NextResponse.json({
+    return cors(NextResponse.json({
       ok: true,
       inserted: result.inserted,
       endpoint: endpoint.name,
       run_id,
-    });
+    }));
   } catch (e) {
-    return NextResponse.json(
+    return cors(NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : String(e) },
       { status: 500 },
-    );
+    ));
   }
+}
+
+export async function OPTIONS() {
+  return corsOptions();
 }
