@@ -1,5 +1,5 @@
 import { fetchBotCakePages } from './botcake';
-import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop } from './pancake';
+import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, fetchPancakeActivePageIdsFromCustomers, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop } from './pancake';
 import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, type SlimPage } from './db';
 import { broadcastSSE } from './sse';
 
@@ -119,12 +119,20 @@ async function refreshPancake() {
 
   const activePageIdsByShop = new Map<number, Set<string>>();
   await Promise.all(TARGET_SHOP_IDS.map(async (sid) => {
+    const combined = new Set<string>();
     try {
-      const ids = await fetchPancakeActivePageIds(token, sid);
-      activePageIdsByShop.set(sid, ids);
+      const orderIds = await fetchPancakeActivePageIds(token, sid);
+      for (const id of orderIds) combined.add(id);
     } catch (err) {
       console.error(`[poller] pancake: orders failed for shop ${sid}:`, err);
     }
+    try {
+      const customerIds = await fetchPancakeActivePageIdsFromCustomers(token, sid);
+      for (const id of customerIds) combined.add(id);
+    } catch (err) {
+      console.error(`[poller] pancake: customers failed for shop ${sid}:`, err);
+    }
+    activePageIdsByShop.set(sid, combined);
   }));
 
   for (const ep of endpoints) {

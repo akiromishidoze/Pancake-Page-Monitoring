@@ -115,6 +115,47 @@ export async function fetchPancakeActivePageIds(
   return allIds;
 }
 
+export async function fetchPancakeActivePageIdsFromCustomers(
+  token: string,
+  shopId: number,
+  pageSize: number = 1000,
+): Promise<Set<string>> {
+  const cutoffMs = Date.now() - 14 * 24 * 60 * 60 * 1000;
+  const allIds = new Set<string>();
+  const BATCH = 5;
+  const MAX_BATCHES = 4;
+
+  for (let batch = 0; batch < MAX_BATCHES; batch++) {
+    const pageOffset = batch * BATCH;
+    const pageNumbers = Array.from({ length: BATCH }, (_, i) => pageOffset + i + 1);
+
+    const results = await Promise.all(pageNumbers.map(page =>
+      fetchWithRetry(
+        `${PANCAKE_API}/shops/${shopId}/customers?access_token=${encodeURIComponent(token)}&page_size=${pageSize}&page_number=${page}`,
+      ).then(r => r.json()).catch(() => null as { data?: Array<{ page_id?: string | number; shop_customer?: { updated_at?: string } }> } | null)
+    ));
+
+    let allOld = true;
+    for (const data of results) {
+      if (!data?.data) continue;
+      for (const c of data.data) {
+        const updatedAt = c.shop_customer?.updated_at;
+        if (!updatedAt || !c.page_id) continue;
+        if (new Date(updatedAt).getTime() >= cutoffMs) {
+          allOld = false;
+          allIds.add(String(c.page_id));
+        }
+      }
+    }
+
+    const last = results[results.length - 1];
+    if (!last?.data?.length) break;
+    if (last.data.length < pageSize) break;
+    if (allOld) break;
+  }
+  return allIds;
+}
+
 export function filterTargetShops(shops: PancakeShop[], targetIds: number[]): PancakeShop[] {
   return shops.filter(s => targetIds.includes(s.id));
 }
