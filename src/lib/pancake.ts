@@ -18,9 +18,46 @@ export async function fetchPancakeShops(token: string): Promise<PancakeShop[]> {
   const res = await fetch(`${PANCAKE_API}/shops?access_token=${encodeURIComponent(token)}`, {
     headers: { 'Content-Type': 'application/json' },
   });
-  if (!res.ok) throw new Error(`Pancake API HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`Pancake shops API HTTP ${res.status}`);
   const data = await res.json() as { shops?: PancakeShop[]; success?: boolean };
   return data.shops ?? [];
+}
+
+export async function fetchPancakePages(token: string): Promise<PancakePage[]> {
+  const res = await fetch(`${PANCAKE_API}/pages?access_token=${encodeURIComponent(token)}`, {
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) throw new Error(`Pancake pages API HTTP ${res.status}`);
+  const data = await res.json() as { pages?: PancakePage[]; categorized?: Record<string, unknown>; success?: boolean };
+  const pages = data.pages ?? [];
+  return pages.map((p: Record<string, unknown>) => ({
+    id: String(p.id ?? ''),
+    name: String(p.name ?? ''),
+    is_activated: p.is_activated === true,
+    shop_id: p.shop_id as number | undefined,
+    platform: p.platform as string | undefined,
+  }));
+}
+
+export function mergePagesActivation(
+  shops: PancakeShop[],
+  pagesApi: PancakePage[],
+): PancakeShop[] {
+  const activationByPageId = new Map<string, boolean>();
+  const platformByPageId = new Map<string, string>();
+  for (const p of pagesApi) {
+    activationByPageId.set(p.id, p.is_activated === true);
+    if (p.platform) platformByPageId.set(p.id, p.platform);
+  }
+
+  return shops.map(shop => ({
+    ...shop,
+    pages: shop.pages.map(p => ({
+      ...p,
+      is_activated: activationByPageId.has(p.id) ? activationByPageId.get(p.id)! : null,
+      platform: platformByPageId.get(p.id) ?? p.platform,
+    })),
+  }));
 }
 
 export function filterTargetShops(shops: PancakeShop[], targetIds: number[]): PancakeShop[] {

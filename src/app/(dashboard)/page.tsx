@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getLatestRun, getRunCount, getSetting, listEndpoints, getEndpoint, getLatestPageStates, getRecentRuns } from '@/lib/db';
+import { getLatestRun, getRunCount, getSetting, listEndpoints, getEndpoint, getLatestPageStates, getRecentRuns, type PageStateRow } from '@/lib/db';
 import { StatusCard } from '@/components/StatusCard';
 import { RunNowButton } from '@/components/RunNowButton';
 import { RunStatusIndicator } from '@/components/RunStatusIndicator';
@@ -13,22 +13,75 @@ type SearchParams = {
   endpoint_id?: string;
 };
 
-async function PancakeSection({ endpointId }: { endpointId?: string }) {
-  const pages = getLatestPageStates(endpointId);
-  const activePages = pages.filter((p) => p.is_activated).map((p) => ({ page_id: p.page_id, name: p.page_name ?? p.page_id, kind: p.activity_kind ?? null, is_activated: true }));
-  const inactivePages = pages.filter((p) => !p.is_activated).map((p) => ({ page_id: p.page_id, name: p.page_name ?? p.page_id, kind: p.activity_kind ?? null, is_activated: false }));
+const PANCAKE_ENDPOINT_IDS = ['430202960', '1635192689', '1942241731'];
 
-  if (pages.length === 0) return null;
+async function PancakeSection({ endpointId }: { endpointId?: string }) {
+  let allPages: PageStateRow[] = [];
+  if (endpointId) {
+    allPages = getLatestPageStates(endpointId);
+  } else {
+    for (const eid of PANCAKE_ENDPOINT_IDS) {
+      allPages.push(...getLatestPageStates(eid));
+    }
+  }
+
+  if (allPages.length === 0) return null;
+
+  const activePages = allPages.filter((p) => p.is_activated);
+  const inactivePages = allPages.filter((p) => !p.is_activated);
+  const activeCount = activePages.length;
+  const inactiveCount = inactivePages.length;
+
+  const shopBreakdown = PANCAKE_ENDPOINT_IDS.map((eid) => {
+    const ep = getEndpoint(eid);
+    if (!ep) return null;
+    const shopPages = allPages.filter((p) => p.shop_label === ep.shop_label);
+    const shopActive = shopPages.filter((p) => p.is_activated).length;
+    const shopInactive = shopPages.length - shopActive;
+    return { label: ep.shop_label ?? ep.name, total: shopPages.length, active: shopActive, inactive: shopInactive };
+  }).filter(Boolean);
 
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
       <h3 className="text-lg font-semibold text-slate-200 mb-4">Pancake Platform</h3>
+      <p className="text-xs text-slate-400 mb-4">
+        {allPages.length} pages across {shopBreakdown.length} shops. Activity kind data requires n8n monitoring.
+      </p>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-1">
-          <ActiveDonutChart activeCount={activePages.length} inactiveCount={inactivePages.length} />
+          <ActiveDonutChart activeCount={activeCount} inactiveCount={inactiveCount} />
         </div>
         <div className="lg:col-span-2">
-          <PageWaterfallChart activePages={activePages} inactivePages={inactivePages} />
+          <div className="rounded-lg border border-slate-800 bg-slate-900 h-[400px] flex flex-col">
+            <div className="shrink-0 px-6 pt-6 pb-3">
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-bold text-slate-200">{allPages.length}</span>
+                <span className="text-sm text-slate-400">pages total</span>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto px-6 pb-6">
+              <table className="min-w-full text-sm">
+                <thead className="sticky top-0 bg-slate-900 z-10">
+                  <tr className="text-left text-xs uppercase text-slate-400">
+                    <th className="pb-2 pr-4 font-medium">Shop</th>
+                    <th className="pb-2 pr-4 font-medium">Pages</th>
+                    <th className="pb-2 pr-4 font-medium">Active</th>
+                    <th className="pb-2 font-medium">Inactive</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {shopBreakdown.map((s) => (
+                    <tr key={s!.label} className="text-slate-300">
+                      <td className="py-2 pr-4">{s!.label}</td>
+                      <td className="py-2 pr-4 font-mono text-xs">{s!.total}</td>
+                      <td className="py-2 pr-4 text-green-400 font-mono text-xs">{s!.active}</td>
+                      <td className="py-2 text-red-400 font-mono text-xs">{s!.inactive}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
     </div>

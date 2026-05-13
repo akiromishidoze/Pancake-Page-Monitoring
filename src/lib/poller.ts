@@ -1,5 +1,5 @@
 import { fetchBotCakePages } from './botcake';
-import { fetchPancakeShops, TARGET_SHOP_IDS, type PancakeShop } from './pancake';
+import { fetchPancakeShops, fetchPancakePages, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop } from './pancake';
 import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, type SlimPage } from './db';
 import { broadcastSSE } from './sse';
 
@@ -102,15 +102,20 @@ async function refreshPancake() {
 
   const token = endpoints[0].access_token!;
   let shops: PancakeShop[];
+  let pagesApi: PancakePage[] = [];
   try {
-    shops = await fetchPancakeShops(token);
+    [shops, pagesApi] = await Promise.all([
+      fetchPancakeShops(token),
+      fetchPancakePages(token).catch(() => [] as PancakePage[]),
+    ]);
   } catch (err) {
     console.error('[poller] pancake: failed to fetch shops:', err);
     return;
   }
 
-  const targetIds = TARGET_SHOP_IDS;
-  const shopById = new Map(shops.filter(s => targetIds.includes(s.id)).map(s => [s.id, s]));
+  shops = mergePagesActivation(shops, pagesApi);
+
+  const shopById = new Map(shops.filter(s => TARGET_SHOP_IDS.includes(s.id)).map(s => [s.id, s]));
 
   for (const ep of endpoints) {
     const shopId = parseInt(ep.id, 10);
@@ -123,6 +128,7 @@ async function refreshPancake() {
     const activePages: SlimPage[] = [];
     const inactivePages: SlimPage[] = [];
     for (const p of shop.pages) {
+      const isAct = p.is_activated !== false;
       const slim: SlimPage = {
         shop_label: ep.shop_label ?? null, shop: ep.shop_label ?? null,
         name: p.name,
@@ -135,7 +141,7 @@ async function refreshPancake() {
         response_ms: null,
         fetch_errors: 0,
       };
-      activePages.push(slim);
+      (isAct ? activePages : inactivePages).push(slim);
     }
 
     const result = insertSnapshot({
@@ -144,7 +150,7 @@ async function refreshPancake() {
       canary_status: 'ok', canary_alert: false, outage_suspected: false, alert_count: 0,
       rule_version: null, in_maintenance_window: false,
       total_pages: shop.pages.length,
-      active_pages_count: activePages.length, inactive_pages_count: 0,
+      active_pages_count: activePages.length, inactive_pages_count: inactivePages.length,
       receiver_sd_size_bytes: null,
       raw_summary: { source: 'pancake-shops-poller', endpoint: ep.name, page_count: shop.pages.length },
       active_pages: activePages, inactive_pages: inactivePages,

@@ -61,6 +61,8 @@ export default async function PlatformPage({
   const hasShops = shops.length > 0;
   const selectedShop = sp.shop || shops[0] || '';
   const shopRows = hasShops ? allRows.filter((r) => r.shop === selectedShop) : allRows;
+  const shopCounts = Object.fromEntries(shops.map(s => [s, allRows.filter(r => r.shop === s).length]));
+  const allKindsNull = allRows.every(r => !r.kind);
   const activeCount = shopRows.filter((r) => r.is_activated).length;
   const inactiveCount = shopRows.length - activeCount;
 
@@ -89,7 +91,7 @@ export default async function PlatformPage({
               {shops.map((shop) => (
                 <Link key={shop} href={`/pages/platform/${slug}?shop=${encodeURIComponent(shop)}`}
                   className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${shop === selectedShop ? 'border-blue-500 text-blue-300' : 'border-transparent text-slate-500 hover:text-slate-300 hover:border-slate-600'}`}
-                >{shop}</Link>
+                >{shop} ({shopCounts[shop]} pages)</Link>
               ))}
             </nav>
           </div>
@@ -112,7 +114,7 @@ export default async function PlatformPage({
               <tr className="text-left text-xs uppercase text-slate-400">
                 {!hasShops && <th className="px-4 py-3 font-medium">Shop ID</th>}
                 <th className="px-4 py-3 font-medium">Page</th>
-                <th className="px-4 py-3 font-medium">Activity</th>
+                {!allKindsNull && <th className="px-4 py-3 font-medium">Activity</th>}
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Reason</th>
               </tr>
@@ -127,7 +129,7 @@ export default async function PlatformPage({
                       <Link href={`/pages/${r.page_id}`} className="text-slate-100 hover:underline">{r.name ?? '—'}</Link>
                     </div>
                   </td>
-                  <td className="px-4 py-3"><span className={`inline-block px-2 py-1 rounded text-xs font-mono border ${KIND_TONE[r.kind ?? 'none'] ?? KIND_TONE.none}`}>{r.kind ?? 'unknown'}</span></td>
+                  {!allKindsNull && <td className="px-4 py-3"><span className={`inline-block px-2 py-1 rounded text-xs font-mono border ${KIND_TONE[r.kind ?? 'none'] ?? KIND_TONE.none}`}>{r.kind ?? 'unknown'}</span></td>}
                   <td className="px-4 py-3"><span className={`inline-block px-2 py-1 rounded text-xs font-mono ${r.is_activated ? 'bg-green-900/40 text-green-300 border border-green-800' : 'bg-red-900/30 text-red-400 border border-red-900'}`}>{r.is_activated ? 'active' : 'inactive'}</span></td>
                   <td className="px-4 py-3 text-slate-400 text-xs max-w-md truncate" title={r.reason ?? ''}>{r.reason ?? '—'}</td>
                 </tr>
