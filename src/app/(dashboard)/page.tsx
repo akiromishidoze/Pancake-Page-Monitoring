@@ -55,7 +55,7 @@ async function BotCakeSection() {
           <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 flex items-center justify-center h-[400px]">
             <div className="text-slate-400 text-sm text-center">
               <div className="text-4xl font-bold text-slate-200 mb-2">{uniquePages}</div>
-              <div>pages active</div>
+              <div>page{uniquePages !== 1 ? 's' : ''} active</div>
               {uniquePages > 0 && (
                 <div className="mt-3 text-xs text-slate-500 max-h-32 overflow-y-auto">
                   {pages.slice(0, 20).map(p => (
@@ -251,7 +251,35 @@ export default async function OverviewPage({
         )}
 
         {isBotCake && (
-          <BotCakeSection />
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatusCard
+                title="Heartbeat"
+                value={heartbeatFresh === null ? '—' : heartbeatFresh ? 'FRESH' : 'STALE'}
+                tone={heartbeatFresh === true ? 'green' : heartbeatFresh === false ? 'red' : 'gray'}
+                subtitle={<LiveTimeAgo timestampMs={lastScheduledRunMs} />}
+              />
+              <StatusCard
+                title="Run Quality"
+                value={(runQuality ?? 'unknown').toUpperCase()}
+                tone={runQuality === 'full' ? 'green' : runQuality === 'partial' ? 'yellow' : runQuality === 'degraded' ? 'red' : 'gray'}
+                subtitle={`Severity: ${severity ?? '—'}`}
+              />
+              <StatusCard
+                title="Canary"
+                value={(canaryStatus ?? 'unknown').toUpperCase()}
+                tone={canaryStatus === 'ok' ? 'green' : canaryStatus === 'down' ? 'red' : 'gray'}
+                subtitle={canaryAlert ? 'ALERT' : '—'}
+              />
+              <StatusCard
+                title="Alerts"
+                value={String(alertCount)}
+                tone={alertCount > 0 ? 'red' : 'green'}
+                subtitle={outageSuspected ? 'Outage suspected' : 'No outage flagged'}
+              />
+            </div>
+            <BotCakeSection />
+          </>
         )}
       </div>
     </div>
