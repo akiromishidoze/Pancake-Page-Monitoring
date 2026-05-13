@@ -58,12 +58,25 @@ async function BotCakeSection() {
               <span className="text-2xl font-bold text-slate-200">{uniquePages}</span>
               <span className="text-sm text-slate-400">page{uniquePages !== 1 ? 's' : ''} active</span>
             </div>
-            <div className="flex-1 overflow-y-auto text-sm space-y-0.5">
-              {pages.map(p => (
-                <Link key={p.page_id} href={`/pages/${p.page_id}`} className="block truncate hover:text-blue-300 transition-colors text-slate-400">
-                  {p.page_name ?? p.page_id}
-                </Link>
-              ))}
+            <div className="flex-1 overflow-auto rounded-lg border border-slate-800">
+              <table className="min-w-full text-sm">
+                <thead className="sticky top-0 bg-slate-800 z-10">
+                  <tr className="text-left text-xs uppercase text-slate-400">
+                    <th className="px-4 py-3 font-medium">Page</th>
+                    <th className="px-4 py-3 font-medium">ID</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {pages.map(p => (
+                    <tr key={p.page_id} className="hover:bg-slate-800/30">
+                      <td className="px-4 py-3 text-slate-100">
+                        <Link href={`/pages/${p.page_id}`} className="hover:underline">{p.page_name ?? p.page_id}</Link>
+                      </td>
+                      <td className="px-4 py-3 text-slate-400 text-xs font-mono">{p.page_id}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
