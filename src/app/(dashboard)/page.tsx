@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { getLatestRun, getRunCount, getSetting, listEndpoints, getEndpoint, getLatestPageStates, getRecentRuns } from '@/lib/db';
 import { StatusCard } from '@/components/StatusCard';
 import { RunNowButton } from '@/components/RunNowButton';
@@ -57,9 +58,9 @@ async function BotCakeSection() {
               <div className="text-4xl font-bold text-slate-200 mb-2">{uniquePages}</div>
               <div>page{uniquePages !== 1 ? 's' : ''} active</div>
               {uniquePages > 0 && (
-                <div className="mt-3 text-xs text-slate-500 max-h-32 overflow-y-auto">
+                <div className="mt-3 text-xs text-slate-500 max-h-32 overflow-y-auto text-left">
                   {pages.slice(0, 20).map(p => (
-                    <div key={p.page_id} className="truncate">{p.page_name ?? p.page_id}</div>
+                    <Link key={p.page_id} href={`/pages/${p.page_id}`} className="block truncate hover:text-blue-300 transition-colors">{p.page_name ?? p.page_id}</Link>
                   ))}
                   {uniquePages > 20 && <div className="text-slate-600 mt-1">…and {uniquePages - 20} more</div>}
                 </div>
