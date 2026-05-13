@@ -17,7 +17,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const auth = await requireApiAuth(); if (auth) return auth;
-  let body: any;
+  let body: Record<string, unknown>;
   try {
     body = await req.json();
   } catch {
@@ -29,13 +29,13 @@ export async function POST(req: Request) {
   }
 
   const endpoint = upsertEndpoint({
-    id: body.id || undefined,
-    name: body.name,
-    url: body.url || null,
-    api_key: body.api_key,
-    access_token: body.access_token || null,
-    token_expires_at: body.token_expires_at || null,
-    is_active: body.is_active ?? 1,
+    id: (body.id as string) || undefined,
+    name: body.name as string,
+    api_key: body.api_key as string,
+    url: (body.url as string) || null,
+    access_token: (body.access_token as string) || null,
+    token_expires_at: (body.token_expires_at as string) || null,
+    is_active: (body.is_active as number) ?? 1,
   });
 
   return NextResponse.json({

@@ -8,7 +8,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json({ ok: false, error: 'Platform page not found' }, { status: 404 });
   }
 
-  let body: any;
+  let body: Record<string, unknown>;
   try {
     body = await req.json();
   } catch {
@@ -17,10 +17,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   const page = upsertPlatformPage({
     id,
-    endpoint_id: body.endpoint_id ?? existing.endpoint_id,
-    page_name: body.page_name ?? existing.page_name,
-    page_url: body.page_url !== undefined ? body.page_url : existing.page_url,
-    is_active: body.is_active !== undefined ? body.is_active : existing.is_active,
+    endpoint_id: (body.endpoint_id as string) ?? existing.endpoint_id,
+    page_name: (body.page_name as string) ?? existing.page_name,
+    page_url: body.page_url !== undefined ? (body.page_url as string) : existing.page_url,
+    is_active: body.is_active !== undefined ? (body.is_active as number) : existing.is_active,
   });
 
   return NextResponse.json({ ok: true, page });

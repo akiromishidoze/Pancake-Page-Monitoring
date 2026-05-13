@@ -54,20 +54,19 @@ export function PageWaterfallChart({ activePages, inactivePages }: PageWaterfall
   // Always include a total bar for context
   data.push({ name: 'Total', base: 0, val: totalCount, fill: '#3b82f6' });
 
-  const CustomTooltip = ({ active, payload }: any) => {
+  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<Record<string, unknown>> }) => {
     if (active && payload && payload.length) {
-      // payload[0] is the base (transparent)
-      // payload[1] is the val
-      const valPayload = payload.find((p: any) => p.dataKey === 'val');
+      const valPayload = payload.find((p) => (p as Record<string, unknown>).dataKey === 'val');
       if (!valPayload) return null;
-      
+      const p = valPayload.payload as Record<string, unknown>;
+
       return (
         <div className="bg-slate-900 border border-slate-700 p-3 rounded shadow-lg text-sm">
-          <p className="font-semibold text-white mb-1">{valPayload.payload.name}</p>
+          <p className="font-semibold text-white mb-1">{p.name as string}</p>
           <p className="text-slate-300">
             Count:{' '}
-            <span style={{ color: valPayload.payload.fill, fontWeight: 'bold' }}>
-              {valPayload.value}
+            <span style={{ color: p.fill as string, fontWeight: 'bold' }}>
+              {valPayload.value as number}
             </span>
           </p>
         </div>

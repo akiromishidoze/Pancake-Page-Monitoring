@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { getDb, type RunRow } from '@/lib/db';
 import { requireApiAuth } from '@/lib/auth';
 
 export async function GET(req: Request) {
@@ -12,17 +12,17 @@ export async function GET(req: Request) {
   const db = getDb();
 
   if (format === 'json') {
-    let runs: any[];
+    let runs: RunRow[];
     if (endpointId) {
-      runs = db.prepare('SELECT * FROM runs WHERE endpoint_id = ? ORDER BY generated_at DESC LIMIT ?').all(endpointId, limit);
+      runs = db.prepare('SELECT * FROM runs WHERE endpoint_id = ? ORDER BY generated_at DESC LIMIT ?').all(endpointId, limit) as RunRow[];
     } else {
-      runs = db.prepare('SELECT * FROM runs ORDER BY generated_at DESC LIMIT ?').all(limit);
+      runs = db.prepare('SELECT * FROM runs ORDER BY generated_at DESC LIMIT ?').all(limit) as RunRow[];
     }
     return NextResponse.json({ ok: true, runs });
   }
 
   // CSV format
-  let rows: any[];
+  let rows: Array<Record<string, unknown>>;
   if (endpointId) {
     rows = db.prepare(`
       SELECT r.run_id, r.endpoint_id, r.generated_at, r.received_at, r.heartbeat_ok,
@@ -31,7 +31,7 @@ export async function GET(req: Request) {
       FROM runs r
       WHERE r.endpoint_id = ?
       ORDER BY r.generated_at DESC LIMIT ?
-    `).all(endpointId, limit) as any[];
+    `).all(endpointId, limit) as Array<Record<string, unknown>>;
   } else {
     rows = db.prepare(`
       SELECT r.run_id, r.endpoint_id, r.generated_at, r.received_at, r.heartbeat_ok,
@@ -39,12 +39,12 @@ export async function GET(req: Request) {
              r.outage_suspected, r.alert_count, r.total_pages, r.active_pages, r.inactive_pages
       FROM runs r
       ORDER BY r.generated_at DESC LIMIT ?
-    `).all(limit) as any[];
+    `).all(limit) as Array<Record<string, unknown>>;
   }
 
   const headers = ['run_id', 'endpoint_id', 'generated_at', 'received_at', 'heartbeat_ok', 'run_quality', 'severity', 'canary_status', 'canary_alert', 'outage_suspected', 'alert_count', 'total_pages', 'active_pages', 'inactive_pages'];
 
-  const csvRows = rows.map((r: any) =>
+  const csvRows = rows.map((r) =>
     headers.map((h) => {
       const val = r[h];
       if (val === null || val === undefined) return '';

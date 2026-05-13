@@ -12,7 +12,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const auth = await requireApiAuth(); if (auth) return auth;
-  let body: any;
+  let body: Record<string, unknown>;
   try {
     body = await req.json();
   } catch {
@@ -24,10 +24,10 @@ export async function POST(req: Request) {
   }
 
   const page = upsertPlatformPage({
-    endpoint_id: body.endpoint_id,
-    page_name: body.page_name,
-    page_url: body.page_url || null,
-    is_active: body.is_active ?? 1,
+    endpoint_id: body.endpoint_id as string,
+    page_name: body.page_name as string,
+    page_url: (body.page_url as string) || null,
+    is_active: (body.is_active as number) ?? 1,
   });
 
   return NextResponse.json({ ok: true, page });

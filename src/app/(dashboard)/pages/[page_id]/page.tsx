@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { ActiveDonutChart } from '@/components/ActiveDonutChart';
 import { PageWaterfallChart } from '@/components/PageWaterfallChart';
+import type { SlimPage } from '@/lib/receiver';
 
 function formatDurationSeconds(sec: number) {
   if (sec <= 0) return '0s';
@@ -20,7 +21,13 @@ function formatDurationSeconds(sec: number) {
   return parts.join(' ');
 }
 
-export default async function Page({ params, searchParams }: { params: any; searchParams?: any }) {
+export default async function Page({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ page_id: string }>;
+  searchParams?: Promise<{ shop?: string }>;
+}) {
   const resolvedParams = await params;
   const pageId = resolvedParams.page_id;
   const resolvedSearch = searchParams ? await searchParams : undefined;
@@ -204,7 +211,7 @@ export default async function Page({ params, searchParams }: { params: any; sear
   }));
 
   // Response-time metrics: use only persisted response_ms values from page_states (real data only)
-  const samplesMs: number[] = rows.map((r) => (typeof (r as any).response_ms === 'number' ? (r as any).response_ms : null)).filter((v): v is number => v !== null);
+  const samplesMs: number[] = rows.map((r) => (typeof r.response_ms === 'number' ? r.response_ms : null)).filter((v): v is number => v !== null);
 
   function percentile(arr: number[], p: number) {
     if (!arr.length) return null;
@@ -218,18 +225,18 @@ export default async function Page({ params, searchParams }: { params: any; sear
   const sampleCount = samplesMs.length;
 
   // Failure / error rates from persisted page_states.fetch_errors
-  const failureCount = rows.filter(r => typeof (r as any).fetch_errors === 'number' && (r as any).fetch_errors > 0).length;
-  const totalFailures = rows.reduce((acc, r) => acc + (typeof (r as any).fetch_errors === 'number' ? (r as any).fetch_errors : 0), 0);
+  const failureCount = rows.filter(r => typeof r.fetch_errors === 'number' && r.fetch_errors > 0).length;
+  const totalFailures = rows.reduce((acc, r) => acc + (typeof r.fetch_errors === 'number' ? r.fetch_errors : 0), 0);
   const failureRatePct = rows.length ? Math.round((failureCount / rows.length) * 100) : 0;
-  const lastFailureRow = rows.slice().reverse().find(r => typeof (r as any).fetch_errors === 'number' && (r as any).fetch_errors > 0);
+  const lastFailureRow = rows.slice().reverse().find(r => typeof r.fetch_errors === 'number' && r.fetch_errors > 0);
   const lastFailureAt = lastFailureRow ? Date.parse(lastFailureRow.generated_at) : null;
 
   // Sparkline over last 24h using persisted response_ms in rows
   const last24Start = Date.now() - 24 * 3600 * 1000;
   const rtSamples24 = rows.filter(r => {
     const ts = Date.parse(r.generated_at);
-    return !isNaN(ts) && ts >= last24Start && typeof (r as any).response_ms === 'number';
-  }).map(r => (r as any).response_ms as number);
+    return !isNaN(ts) && ts >= last24Start && typeof r.response_ms === 'number';
+  }).map(r => r.response_ms as number);
 
   let sparklinePath: string | null = null;
   const sparklineWidth = 140;
@@ -284,7 +291,7 @@ export default async function Page({ params, searchParams }: { params: any; sear
             <ActiveDonutChart activeCount={activePages.length} inactiveCount={inactivePages.length} />
           </div>
           <div>
-            <PageWaterfallChart activePages={activePages as any} inactivePages={inactivePages as any} />
+            <PageWaterfallChart activePages={activePages as SlimPage[]} inactivePages={inactivePages as SlimPage[]} />
           </div>
         </div>
       </div>

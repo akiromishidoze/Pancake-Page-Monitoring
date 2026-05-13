@@ -156,6 +156,13 @@ export type SlimPage = {
   state_change?: string | null;
   activity_kind_change?: string | null;
   is_canary?: boolean;
+  response_ms?: number | null;
+  response_time_ms?: number | null;
+  latency_ms?: number | null;
+  fetch_latency_ms?: number | null;
+  fetch_errors?: number;
+  fetch_error_count?: number;
+  fetch_failed?: boolean;
 };
 
 export type RunRow = {
@@ -281,14 +288,14 @@ export function insertSnapshot(input: InsertSnapshotInput): { inserted: boolean 
       ...input.active_pages.map((p) => ({
         ...p,
         _is_active: 1,
-        response_ms: (p as any).response_ms ?? (p as any).response_time_ms ?? (p as any).latency_ms ?? (p as any).fetch_latency_ms ?? null,
-        fetch_errors: typeof (p as any).fetch_errors === 'number' ? (p as any).fetch_errors : (typeof (p as any).fetch_error_count === 'number' ? (p as any).fetch_error_count : (p as any).fetch_failed ? 1 : 0),
+        response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
+        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
       })),
       ...input.inactive_pages.map((p) => ({
         ...p,
         _is_active: 0,
-        response_ms: (p as any).response_ms ?? (p as any).response_time_ms ?? (p as any).latency_ms ?? (p as any).fetch_latency_ms ?? null,
-        fetch_errors: typeof (p as any).fetch_errors === 'number' ? (p as any).fetch_errors : (typeof (p as any).fetch_error_count === 'number' ? (p as any).fetch_error_count : (p as any).fetch_failed ? 1 : 0),
+        response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
+        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
       })),
     ];
 
@@ -306,8 +313,8 @@ export function insertSnapshot(input: InsertSnapshotInput): { inserted: boolean 
         activity_kind_change: p.activity_kind_change ?? null,
         hours_since_last_order: null,
         hours_since_last_customer_activity: null,
-        response_ms: (p as any).response_ms ?? null,
-        fetch_errors: typeof (p as any).fetch_errors === 'number' ? (p as any).fetch_errors : (typeof (p as any).fetch_error_count === 'number' ? (p as any).fetch_error_count : null),
+        response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
+        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : null),
         generated_at: input.generated_at,
       });
     }

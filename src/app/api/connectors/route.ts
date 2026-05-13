@@ -10,7 +10,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const auth = await requireApiAuth(); if (auth) return auth;
-  let body: any;
+  let body: Record<string, unknown>;
   try {
     body = await req.json();
   } catch {
@@ -22,15 +22,15 @@ export async function POST(req: Request) {
   }
 
   const connector = upsertPlatformConnector({
-    id: body.id || undefined,
-    name: body.name,
-    platform_type: body.platform_type,
-    api_url: body.api_url,
-    auth_header: body.auth_header || null,
-    auth_token: body.auth_token || null,
-    json_path: body.json_path || null,
-    interval_ms: body.interval_ms || 60000,
-    is_active: body.is_active ?? 1,
+    id: (body.id as string) || undefined,
+    name: body.name as string,
+    platform_type: body.platform_type as string,
+    api_url: body.api_url as string,
+    auth_header: (body.auth_header as string) || null,
+    auth_token: (body.auth_token as string) || null,
+    json_path: (body.json_path as string) || null,
+    interval_ms: (body.interval_ms as number) || 60000,
+    is_active: (body.is_active as number) ?? 1,
   });
 
   return NextResponse.json({ ok: true, connector });

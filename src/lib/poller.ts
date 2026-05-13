@@ -1,5 +1,5 @@
 import { fetchBotCakePages } from './botcake';
-import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints } from './db';
+import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, type SlimPage } from './db';
 import { broadcastSSE } from './sse';
 
 const POLL_INTERVAL_MS = 60_000;
@@ -101,6 +101,7 @@ async function refreshPancake() {
   const endpoints = listEndpoints().filter(ep => ep.id !== 'botcake-platform' && ep.url && ep.access_token && ep.is_active);
 
   for (const ep of endpoints) {
+    if (!ep.url) continue;
     try {
       const baseUrl = ep.url.replace(/\/+$/, '');
       const res = await fetch(`${baseUrl}${apiPath}`, {
@@ -113,27 +114,27 @@ async function refreshPancake() {
       const runId = `pancake_refresh_${now}_${ep.id}`;
       const ts = new Date().toISOString();
 
-      let rows: any[] = [];
+      let rows: Array<Record<string, unknown>> = [];
       if (Array.isArray(data)) rows = data;
-      else if (data.rows && Array.isArray(data.rows)) rows = data.rows;
-      else if (data.pages && Array.isArray(data.pages)) rows = data.pages;
-      else if (data.data && Array.isArray(data.data)) rows = data.data;
+      else if (data.rows && Array.isArray(data.rows)) rows = data.rows as Array<Record<string, unknown>>;
+      else if (data.pages && Array.isArray(data.pages)) rows = data.pages as Array<Record<string, unknown>>;
+      else if (data.data && Array.isArray(data.data)) rows = data.data as Array<Record<string, unknown>>;
       else { console.warn(`[poller] pancake ${ep.name}: unexpected response format`); continue; }
 
-      const activePages: any[] = [];
-      const inactivePages: any[] = [];
+      const activePages: SlimPage[] = [];
+      const inactivePages: SlimPage[] = [];
       for (const r of rows) {
         const isAct = r.is_activated !== false;
-        const slim = {
+        const slim: SlimPage = {
           shop_label: ep.shop_label ?? null, shop: ep.shop_label ?? null,
-          name: r.page_name ?? r.name ?? r.page_id ?? 'Unknown',
-          page_id: r.page_id ?? r.id ?? '', id: r.page_id ?? r.id ?? '',
-          activity_kind: r.activity_kind ?? r.kind ?? null, kind: r.activity_kind ?? r.kind ?? null,
-          activation_reason: r.activation_reason ?? r.reason ?? null, reason: r.activation_reason ?? r.reason ?? null,
-          last_order_at: r.last_order_at ?? null, last_customer_activity_at: r.last_customer_activity_at ?? null,
-          state_change: r.state_change ?? null, activity_kind_change: r.activity_kind_change ?? null,
+          name: (r.page_name as string) ?? (r.name as string) ?? (r.page_id as string) ?? 'Unknown',
+          page_id: (r.page_id as string) ?? (r.id as string) ?? '', id: (r.page_id as string) ?? (r.id as string) ?? '',
+          activity_kind: (r.activity_kind as string | null) ?? (r.kind as string | null) ?? null, kind: (r.activity_kind as string | null) ?? (r.kind as string | null) ?? null,
+          activation_reason: (r.activation_reason as string | null) ?? (r.reason as string | null) ?? null, reason: (r.activation_reason as string | null) ?? (r.reason as string | null) ?? null,
+          last_order_at: (r.last_order_at as string | null) ?? null, last_customer_activity_at: (r.last_customer_activity_at as string | null) ?? null,
+          state_change: (r.state_change as string | null) ?? null, activity_kind_change: (r.activity_kind_change as string | null) ?? null,
           is_canary: r.is_canary === true,
-          response_ms: r.response_ms ?? r.response_time_ms ?? null,
+          response_ms: (r.response_ms as number | null) ?? (r.response_time_ms as number | null) ?? null,
           fetch_errors: typeof r.fetch_errors === 'number' ? r.fetch_errors : 0,
         };
         (isAct ? activePages : inactivePages).push(slim);

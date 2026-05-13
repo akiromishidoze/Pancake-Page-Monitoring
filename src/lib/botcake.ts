@@ -32,7 +32,7 @@ export async function fetchBotCakePages(token: string): Promise<BotCakePage[]> {
             const r = await fetch(`${FB_GRAPH}/${pageId}?fields=id,name`, {
               headers: { Authorization: `Bearer ${fbToken}` },
             });
-            const d = await r.json() as { id?: string; name?: string; error?: any };
+            const d = await r.json() as { id?: string; name?: string; error?: Record<string, unknown> };
             if (d.name) nameMap.set(d.id!, d.name);
           } catch {}
         }

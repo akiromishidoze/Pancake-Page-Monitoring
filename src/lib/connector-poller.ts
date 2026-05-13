@@ -4,8 +4,11 @@ import { broadcastSSE } from './sse';
 const timers = new Map<string, ReturnType<typeof setInterval>>();
 const lastRuns = new Map<string, number>();
 
-function getValueByPath(obj: any, path: string): any {
-  return path.split('.').reduce((acc, part) => acc?.[part], obj);
+function getValueByPath(obj: unknown, path: string): unknown {
+  return path.split('.').reduce((acc: unknown, part: string) => {
+    if (acc && typeof acc === 'object') return (acc as Record<string, unknown>)[part];
+    return undefined;
+  }, obj);
 }
 
 async function pollConnector(connectorId: string) {
@@ -30,7 +33,7 @@ async function pollConnector(connectorId: string) {
     }
 
     const data = await res.json();
-    let items: any[] = data;
+    let items: unknown[] = Array.isArray(data) ? data : [];
 
     if (connector.json_path) {
       const resolved = getValueByPath(data, connector.json_path);
@@ -45,25 +48,28 @@ async function pollConnector(connectorId: string) {
     const runId = `connector_${connector.id}_${now}`;
     const ts = new Date().toISOString();
 
-    const activePages = items.map((item: any) => ({
-      page_id: item.id || item.page_id || String(item.name ?? ''),
-      id: item.id || item.page_id || String(item.name ?? ''),
-      name: item.name || item.page_name || 'Unknown',
-      shop_label: item.shop_label ?? null,
-      shop: item.shop ?? null,
-      activity_kind: item.activity_kind ?? item.kind ?? null,
-      kind: item.activity_kind ?? item.kind ?? null,
-      is_activated: item.is_activated !== false,
-      is_canary: item.is_canary === true,
-      activation_reason: item.activation_reason ?? item.reason ?? null,
-      reason: item.activation_reason ?? item.reason ?? null,
-      state_change: item.state_change ?? null,
-      activity_kind_change: item.activity_kind_change ?? null,
-      last_order_at: null,
-      last_customer_activity_at: null,
-      response_ms: item.response_ms ?? item.response_time_ms ?? null,
-      fetch_errors: typeof item.fetch_errors === 'number' ? item.fetch_errors : 0,
-    }));
+    const activePages = items.map((item) => {
+      const r = item as Record<string, unknown>;
+      return {
+        page_id: (r.id as string) || (r.page_id as string) || String(r.name ?? ''),
+        id: (r.id as string) || (r.page_id as string) || String(r.name ?? ''),
+        name: (r.name as string) || (r.page_name as string) || 'Unknown',
+        shop_label: (r.shop_label as string | null) ?? null,
+        shop: (r.shop as string | null) ?? null,
+        activity_kind: (r.activity_kind as string | null) ?? (r.kind as string | null) ?? null,
+        kind: (r.activity_kind as string | null) ?? (r.kind as string | null) ?? null,
+        is_activated: r.is_activated !== false,
+        is_canary: r.is_canary === true,
+        activation_reason: (r.activation_reason as string | null) ?? (r.reason as string | null) ?? null,
+        reason: (r.activation_reason as string | null) ?? (r.reason as string | null) ?? null,
+        state_change: (r.state_change as string | null) ?? null,
+        activity_kind_change: (r.activity_kind_change as string | null) ?? null,
+        last_order_at: null,
+        last_customer_activity_at: null,
+        response_ms: (r.response_ms as number | null) ?? (r.response_time_ms as number | null) ?? null,
+        fetch_errors: typeof r.fetch_errors === 'number' ? r.fetch_errors : 0,
+      };
+    });
 
     const result = insertSnapshot({
       run_id: runId,

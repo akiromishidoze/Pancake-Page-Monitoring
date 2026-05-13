@@ -1,4 +1,4 @@
-import { getDb, listEndpoints } from '@/lib/db';
+import { getDb, listEndpoints, type RunRow } from '@/lib/db';
 import { PlatformFilter } from '@/components/PlatformFilter';
 import { Pagination } from '@/components/Pagination';
 
@@ -37,14 +37,14 @@ export default async function RunsPage({
   const db = getDb();
   const endpoints = listEndpoints();
 
-  let rows: any[];
+  let rows: RunRow[];
   let total: number;
 
   if (endpointId) {
-    rows = db.prepare('SELECT * FROM runs WHERE endpoint_id = ? ORDER BY generated_at DESC LIMIT ? OFFSET ?').all(endpointId, PAGE_SIZE, offset);
+    rows = db.prepare('SELECT * FROM runs WHERE endpoint_id = ? ORDER BY generated_at DESC LIMIT ? OFFSET ?').all(endpointId, PAGE_SIZE, offset) as RunRow[];
     total = (db.prepare('SELECT COUNT(*) as c FROM runs WHERE endpoint_id = ?').get(endpointId) as { c: number }).c;
   } else {
-    rows = db.prepare('SELECT * FROM runs ORDER BY generated_at DESC LIMIT ? OFFSET ?').all(PAGE_SIZE, offset);
+    rows = db.prepare('SELECT * FROM runs ORDER BY generated_at DESC LIMIT ? OFFSET ?').all(PAGE_SIZE, offset) as RunRow[];
     total = (db.prepare('SELECT COUNT(*) as c FROM runs').get() as { c: number }).c;
   }
 
@@ -94,7 +94,7 @@ export default async function RunsPage({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {rows.map((r: any) => (
+              {rows.map((r: RunRow) => (
                 <tr key={r.run_id} className="hover:bg-slate-800/30">
                   <td className="px-4 py-3 font-mono text-xs text-slate-300" title={r.run_id}>
                     {r.run_id.length > 24 ? r.run_id.slice(0, 24) + '…' : r.run_id}

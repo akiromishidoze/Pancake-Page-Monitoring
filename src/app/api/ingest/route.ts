@@ -3,7 +3,7 @@
 // Authenticated via X-Api-Key header matched against the endpoints table.
 
 import { NextResponse } from 'next/server';
-import { getEndpointByApiKey, insertSnapshot, touchEndpoint } from '@/lib/db';
+import { getEndpointByApiKey, insertSnapshot, touchEndpoint, type SlimPage } from '@/lib/db';
 import { checkAlertsForRun } from '@/lib/notify';
 import { broadcastSSE } from '@/lib/sse';
 import { cors, corsOptions } from '@/lib/cors';
@@ -23,37 +23,37 @@ export async function POST(req: Request) {
     return cors(NextResponse.json({ ok: false, error: 'API key has expired' }, { status: 401 }));
   }
 
-  let body: any;
+  let body: Record<string, unknown>;
   try {
     body = await req.json();
   } catch {
     return cors(NextResponse.json({ ok: false, error: 'Invalid JSON body' }, { status: 400 }));
   }
 
-  const run_id = body.run_id || body.generated_at || `ingest_${Date.now()}`;
-  const rows = body.rows ?? [];
-  const summary = body.summary ?? {};
-  const activePages: any[] = [];
-  const inactivePages: any[] = [];
+  const run_id = (body.run_id as string) || (body.generated_at as string) || `ingest_${Date.now()}`;
+  const rows = (body.rows as Array<Record<string, unknown>>) ?? [];
+  const summary = (body.summary as Record<string, unknown>) ?? {};
+  const activePages: SlimPage[] = [];
+  const inactivePages: SlimPage[] = [];
 
   for (const r of rows) {
     const isAct = r.is_activated === true;
-    const slim = {
-      shop_label: r.shop_label,
-      shop: r.shop_label,
-      name: r.page_name ?? r.name ?? 'Unknown',
-      page_id: r.page_id ?? r.id ?? '',
-      id: r.page_id ?? r.id ?? '',
-      activity_kind: r.activity_kind ?? r.kind ?? null,
-      kind: r.activity_kind ?? r.kind ?? null,
-      activation_reason: r.activation_reason ?? r.reason ?? null,
-      reason: r.activation_reason ?? r.reason ?? null,
-      last_order_at: r.last_order_at ?? null,
-      last_customer_activity_at: r.last_customer_activity_at ?? null,
-      state_change: r.state_change ?? null,
-      activity_kind_change: r.activity_kind_change ?? null,
+    const slim: SlimPage = {
+      shop_label: r.shop_label as string | null | undefined,
+      shop: r.shop_label as string | null | undefined,
+      name: (r.page_name as string) ?? (r.name as string) ?? 'Unknown',
+      page_id: (r.page_id as string) ?? (r.id as string) ?? '',
+      id: (r.page_id as string) ?? (r.id as string) ?? '',
+      activity_kind: (r.activity_kind as string | null) ?? (r.kind as string | null) ?? null,
+      kind: (r.activity_kind as string | null) ?? (r.kind as string | null) ?? null,
+      activation_reason: (r.activation_reason as string | null) ?? (r.reason as string | null) ?? null,
+      reason: (r.activation_reason as string | null) ?? (r.reason as string | null) ?? null,
+      last_order_at: (r.last_order_at as string | null) ?? null,
+      last_customer_activity_at: (r.last_customer_activity_at as string | null) ?? null,
+      state_change: (r.state_change as string | null) ?? null,
+      activity_kind_change: (r.activity_kind_change as string | null) ?? null,
       is_canary: r.is_canary === true,
-      response_ms: r.response_ms ?? null,
+      response_ms: (r.response_ms as number | null) ?? null,
       fetch_errors: typeof r.fetch_errors === 'number' ? r.fetch_errors : 0,
     };
     (isAct ? activePages : inactivePages).push(slim);
@@ -63,16 +63,16 @@ export async function POST(req: Request) {
     const result = insertSnapshot({
       run_id,
       endpoint_id: endpoint.id,
-      generated_at: body.generated_at ?? new Date().toISOString(),
+      generated_at: (body.generated_at as string) ?? new Date().toISOString(),
       heartbeat_ok: body.status === 'fresh',
-      run_quality: summary.run_quality ?? null,
-      severity: summary.severity ?? null,
-      canary_status: summary.canary_status ?? null,
-      canary_alert: summary.canary_alert ?? false,
-      outage_suspected: summary.outage_suspected ?? false,
-      alert_count: summary.alert_count ?? 0,
-      rule_version: summary.rule_version ?? null,
-      in_maintenance_window: summary.in_maintenance_window ?? false,
+      run_quality: (summary.run_quality as string) ?? null,
+      severity: (summary.severity as string) ?? null,
+      canary_status: (summary.canary_status as string) ?? null,
+      canary_alert: (summary.canary_alert as boolean) ?? false,
+      outage_suspected: (summary.outage_suspected as boolean) ?? false,
+      alert_count: (summary.alert_count as number) ?? 0,
+      rule_version: (summary.rule_version as number) ?? null,
+      in_maintenance_window: (summary.in_maintenance_window as boolean) ?? false,
       total_pages: rows.length,
       active_pages_count: activePages.length,
       inactive_pages_count: inactivePages.length,

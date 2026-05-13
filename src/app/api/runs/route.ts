@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { getDb, type RunRow } from '@/lib/db';
 import { requireApiAuth } from '@/lib/auth';
 
 export async function GET(req: Request) {
@@ -10,14 +10,14 @@ export async function GET(req: Request) {
   const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10));
 
   const db = getDb();
-  let rows: any[];
+  let rows: RunRow[];
   let total: number;
 
   if (endpointId) {
-    rows = db.prepare('SELECT * FROM runs WHERE endpoint_id = ? ORDER BY generated_at DESC LIMIT ? OFFSET ?').all(endpointId, limit, offset);
+    rows = db.prepare('SELECT * FROM runs WHERE endpoint_id = ? ORDER BY generated_at DESC LIMIT ? OFFSET ?').all(endpointId, limit, offset) as RunRow[];
     total = (db.prepare('SELECT COUNT(*) as c FROM runs WHERE endpoint_id = ?').get(endpointId) as { c: number }).c;
   } else {
-    rows = db.prepare('SELECT * FROM runs ORDER BY generated_at DESC LIMIT ? OFFSET ?').all(limit, offset);
+    rows = db.prepare('SELECT * FROM runs ORDER BY generated_at DESC LIMIT ? OFFSET ?').all(limit, offset) as RunRow[];
     total = (db.prepare('SELECT COUNT(*) as c FROM runs').get() as { c: number }).c;
   }
 
