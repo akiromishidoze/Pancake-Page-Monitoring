@@ -1,13 +1,15 @@
 import { fetchBotCakePages } from './botcake';
-import { getEndpoint, insertSnapshot, getSetting, setSetting } from './db';
+import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints } from './db';
 import { broadcastSSE } from './sse';
 
 const POLL_INTERVAL_MS = 60_000;
+const PANCAKE_API_PATH_DEFAULT = '/api/monitoring/pages';
 
 let _started = false;
 let _lastPolledAt: string | null = null;
 
 let _botcakeLastRefresh = 0;
+let _pancakeLastRefresh = 0;
 
 export function startPoller() {
   if (_started) return;
@@ -20,7 +22,8 @@ export function startPoller() {
 
 export async function refreshAll() {
   _lastPolledAt = new Date().toISOString();
-  await refreshBotCake();
+  await Promise.all([refreshBotCake(), refreshPancake()]);
+  setSetting('last_scheduled_run', Date.now().toString());
 }
 
 async function refreshBotCake() {
@@ -82,11 +85,78 @@ async function refreshBotCake() {
 
     if (result.inserted) {
       console.log('[poller] botcake: inserted', pages.length, 'pages, run', runId);
-      setSetting('last_scheduled_run', Date.now().toString());
       broadcastSSE('refresh', JSON.stringify({ source: 'botcake-poller', run_id: runId }));
     }
   } catch (err) {
     console.error('[poller] botcake: refresh failed:', err);
+  }
+}
+
+async function refreshPancake() {
+  const now = Date.now();
+  if (now - _pancakeLastRefresh < POLL_INTERVAL_MS) return;
+  _pancakeLastRefresh = now;
+
+  const apiPath = getSetting('pancake_api_path') || PANCAKE_API_PATH_DEFAULT;
+  const endpoints = listEndpoints().filter(ep => ep.id !== 'botcake-platform' && ep.url && ep.access_token && ep.is_active);
+
+  for (const ep of endpoints) {
+    try {
+      const baseUrl = ep.url.replace(/\/+$/, '');
+      const res = await fetch(`${baseUrl}${apiPath}`, {
+        headers: { Authorization: `Bearer ${ep.access_token}`, 'Content-Type': 'application/json' },
+      });
+
+      if (!res.ok) { console.warn(`[poller] pancake ${ep.name}: HTTP ${res.status}`); continue; }
+
+      const data = await res.json();
+      const runId = `pancake_refresh_${now}_${ep.id}`;
+      const ts = new Date().toISOString();
+
+      let rows: any[] = [];
+      if (Array.isArray(data)) rows = data;
+      else if (data.rows && Array.isArray(data.rows)) rows = data.rows;
+      else if (data.pages && Array.isArray(data.pages)) rows = data.pages;
+      else if (data.data && Array.isArray(data.data)) rows = data.data;
+      else { console.warn(`[poller] pancake ${ep.name}: unexpected response format`); continue; }
+
+      const activePages: any[] = [];
+      const inactivePages: any[] = [];
+      for (const r of rows) {
+        const isAct = r.is_activated !== false;
+        const slim = {
+          shop_label: ep.shop_label ?? null, shop: ep.shop_label ?? null,
+          name: r.page_name ?? r.name ?? r.page_id ?? 'Unknown',
+          page_id: r.page_id ?? r.id ?? '', id: r.page_id ?? r.id ?? '',
+          activity_kind: r.activity_kind ?? r.kind ?? null, kind: r.activity_kind ?? r.kind ?? null,
+          activation_reason: r.activation_reason ?? r.reason ?? null, reason: r.activation_reason ?? r.reason ?? null,
+          last_order_at: r.last_order_at ?? null, last_customer_activity_at: r.last_customer_activity_at ?? null,
+          state_change: r.state_change ?? null, activity_kind_change: r.activity_kind_change ?? null,
+          is_canary: r.is_canary === true,
+          response_ms: r.response_ms ?? r.response_time_ms ?? null,
+          fetch_errors: typeof r.fetch_errors === 'number' ? r.fetch_errors : 0,
+        };
+        (isAct ? activePages : inactivePages).push(slim);
+      }
+
+      const result = insertSnapshot({
+        run_id: runId, endpoint_id: ep.id, generated_at: ts,
+        heartbeat_ok: true, run_quality: 'full', severity: null,
+        canary_status: 'ok', canary_alert: false, outage_suspected: false, alert_count: 0,
+        rule_version: null, in_maintenance_window: false,
+        total_pages: rows.length, active_pages_count: activePages.length, inactive_pages_count: inactivePages.length,
+        receiver_sd_size_bytes: null,
+        raw_summary: { source: 'pancake-poller', endpoint: ep.name, page_count: rows.length },
+        active_pages: activePages, inactive_pages: inactivePages,
+      });
+
+      if (result.inserted) {
+        console.log(`[poller] pancake ${ep.name}: inserted ${rows.length} pages, run ${runId}`);
+        broadcastSSE('refresh', JSON.stringify({ source: 'pancake-poller', run_id: runId, endpoint_id: ep.id }));
+      }
+    } catch (err) {
+      console.error(`[poller] pancake ${ep.name}: error:`, err);
+    }
   }
 }
 
