@@ -119,6 +119,12 @@ async function refreshPancake() {
         rows = (data.pages as Array<Record<string, unknown>>).filter(
           r => String(r.shop_id ?? '') === ep.id
         );
+      } else if (data.categorized && Array.isArray(data.categorized.activated)) {
+        const allPages = [
+          ...(data.categorized as { activated: unknown[]; inactivated?: unknown[] }).activated,
+          ...((data.categorized as { activated: unknown[]; inactivated?: unknown[] }).inactivated ?? []),
+        ] as Array<Record<string, unknown>>;
+        rows = allPages.filter(r => String(r.shop_id ?? '') === ep.id);
       } else if (Array.isArray(data)) rows = data;
       else if (data.rows && Array.isArray(data.rows)) rows = data.rows as Array<Record<string, unknown>>;
       else if (data.data && Array.isArray(data.data)) rows = data.data as Array<Record<string, unknown>>;
