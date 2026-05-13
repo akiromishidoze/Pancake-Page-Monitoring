@@ -64,18 +64,26 @@ export async function fetchPancakeActivePageIds(
   token: string,
   shopId: number,
   pageSize: number = 1000,
+  maxPages: number = 3,
 ): Promise<Set<string>> {
-  const res = await fetch(
-    `${PANCAKE_API}/shops/${shopId}/orders?access_token=${encodeURIComponent(token)}&page_size=${pageSize}&page_number=1`,
-    { headers: { 'Content-Type': 'application/json' } },
-  );
-  if (!res.ok) throw new Error(`Pancake orders API HTTP ${res.status}`);
-  const data = await res.json() as { data?: Array<{ page_id?: string | number }> };
-  const ids = new Set<string>();
-  for (const order of data.data ?? []) {
-    if (order.page_id) ids.add(String(order.page_id));
+  const allIds = new Set<string>();
+  for (let page = 1; page <= maxPages; page++) {
+    const res = await fetch(
+      `${PANCAKE_API}/shops/${shopId}/orders?access_token=${encodeURIComponent(token)}&page_size=${pageSize}&page_number=${page}`,
+      { headers: { 'Content-Type': 'application/json' } },
+    );
+    if (!res.ok) throw new Error(`Pancake orders API HTTP ${res.status}`);
+    const data = await res.json() as { data?: Array<{ page_id?: string | number }> };
+    let count = 0;
+    for (const order of data.data ?? []) {
+      if (order.page_id) {
+        allIds.add(String(order.page_id));
+        count++;
+      }
+    }
+    if (count === 0) break;
   }
-  return ids;
+  return allIds;
 }
 
 export function filterTargetShops(shops: PancakeShop[], targetIds: number[]): PancakeShop[] {
