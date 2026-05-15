@@ -1,6 +1,6 @@
 import { fetchBotCakePages } from './botcake';
 import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, fetchPancakeActivePageIdsFromCustomers, fetchCachedPancakeShops, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop, type PancakePage } from './pancake';
-import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, getPancakeActivePageIds, getPancakeInactivePageIds, getPancakeSeenEver, getPreviousRunActiveCount, type SlimPage } from './db';
+import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, getPancakeActivePageIds, getPancakeInactivePageIds, getPancakeSeenEver, getPreviousRunActiveCount, getDb, type SlimPage } from './db';
 import { broadcastSSE } from './sse';
 
 const POLL_INTERVAL_MS = 60_000;
@@ -40,6 +40,10 @@ async function refreshBotCake() {
 
   try {
     const pages = await fetchBotCakePages(endpoint.access_token);
+    if (pages.length === 0) {
+      console.warn('[poller] botcake: API returned 0 pages — skipping insert to preserve previous data');
+      return;
+    }
     const runId = `botcake_refresh_${now}`;
     const ts = new Date().toISOString();
 
@@ -150,6 +154,7 @@ async function refreshPancake() {
   const shopById = new Map(shops.filter(s => TARGET_SHOP_IDS.includes(s.id)).map(s => [s.id, s]));
 
   const activePageIdsByShop = new Map<number, Set<string>>();
+  let anyShopHadData = false;
   await Promise.all(TARGET_SHOP_IDS.map(async (sid) => {
     const combined = new Set<string>();
     try {
@@ -164,8 +169,28 @@ async function refreshPancake() {
     } catch (err) {
       console.error(`[poller] pancake: customers failed for shop ${sid}:`, err);
     }
+    if (combined.size > 0) anyShopHadData = true;
     activePageIdsByShop.set(sid, combined);
   }));
+
+  if (!anyShopHadData) {
+    console.warn('[poller] pancake: all shops returned 0 active pages — likely network/DNS issue, falling back to previous good run data');
+    const db = getDb();
+    for (const sid of TARGET_SHOP_IDS) {
+      const prevRun = db.prepare(`
+        SELECT run_id FROM runs
+        WHERE endpoint_id = ? AND (active_pages > 0 OR active_pages IS NULL)
+        ORDER BY generated_at DESC LIMIT 1
+      `).get(String(sid)) as { run_id: string } | undefined;
+      if (!prevRun) continue;
+      const prevActive = db.prepare('SELECT page_id FROM page_states WHERE run_id = ? AND is_activated = 1').all(prevRun.run_id) as { page_id: string }[];
+      const ids = new Set(prevActive.map(p => p.page_id));
+      if (ids.size > 0) {
+        activePageIdsByShop.set(sid, ids);
+        console.log(`[poller] pancake: restored ${ids.size} active pages from previous run for shop ${sid}`);
+      }
+    }
+  }
 
   for (const ep of endpoints) {
     const shopId = parseInt(ep.id, 10);

@@ -364,29 +364,32 @@ export function getRecentRuns(limit = 50, endpointId?: string): RunRow[] {
     .all(limit) as RunRow[];
 }
 
-export function getPancakeActivePageIds(): Set<string> {
+function latestGoodRunIds(): string[] {
   const db = getDb();
-  const rows = db.prepare(`
-    SELECT DISTINCT ps.page_id, ps.is_activated
-    FROM page_states ps
-    JOIN runs r ON r.run_id = ps.run_id
-    WHERE r.endpoint_id != 'botcake-platform' AND r.endpoint_id IS NOT NULL
-    AND r.run_id IN (
-      SELECT run_id FROM runs
-      WHERE endpoint_id != 'botcake-platform' AND endpoint_id IS NOT NULL
-      GROUP BY endpoint_id HAVING MAX(generated_at)
+  return (db.prepare(`
+    SELECT run_id FROM runs r1
+    WHERE endpoint_id != 'botcake-platform' AND endpoint_id IS NOT NULL
+    AND (active_pages > 0 OR active_pages IS NULL)
+    AND generated_at = (
+      SELECT MAX(generated_at) FROM runs r2
+      WHERE r2.endpoint_id = r1.endpoint_id
+      AND (active_pages > 0 OR active_pages IS NULL)
     )
-  `).all() as { page_id: string; is_activated: number | null }[];
+    GROUP BY endpoint_id
+  `).all() as { run_id: string }[]).map(r => r.run_id);
+}
 
-  const active = new Set<string>();
-  const inactive = new Set<string>();
-  for (const r of rows) {
-    if (r.is_activated === 1) active.add(r.page_id);
-    else inactive.add(r.page_id);
-  }
-  const result = new Set<string>();
-  for (const id of active) result.add(id);
-  return result;
+export function getPancakeActivePageIds(): Set<string> {
+  const latestRunIds = latestGoodRunIds();
+  if (latestRunIds.length === 0) return new Set<string>();
+
+  const db = getDb();
+  const placeholders = latestRunIds.map(() => '?').join(',');
+  const rows = db.prepare(`
+    SELECT page_id FROM page_states
+    WHERE run_id IN (${placeholders}) AND is_activated = 1
+  `).all(...latestRunIds) as { page_id: string }[];
+  return new Set(rows.map(r => r.page_id));
 }
 
 export function getPancakeSeenEver(): Set<string> {
@@ -401,28 +404,19 @@ export function getPancakeSeenEver(): Set<string> {
 }
 
 export function getPancakeInactivePageIds(): Set<string> {
-  const db = getDb();
-  const rows = db.prepare(`
-    SELECT DISTINCT ps.page_id, ps.is_activated
-    FROM page_states ps
-    JOIN runs r ON r.run_id = ps.run_id
-    WHERE r.endpoint_id != 'botcake-platform' AND r.endpoint_id IS NOT NULL
-    AND r.run_id IN (
-      SELECT run_id FROM runs
-      WHERE endpoint_id != 'botcake-platform' AND endpoint_id IS NOT NULL
-      GROUP BY endpoint_id HAVING MAX(generated_at)
-    )
-  `).all() as { page_id: string; is_activated: number | null }[];
+  const active = getPancakeActivePageIds();
+  const latestRunIds = latestGoodRunIds();
+  if (latestRunIds.length === 0) return new Set<string>();
 
-  const active = new Set<string>();
-  const inactive = new Set<string>();
-  for (const r of rows) {
-    if (r.is_activated === 1) active.add(r.page_id);
-    else inactive.add(r.page_id);
-  }
+  const db = getDb();
+  const placeholders = latestRunIds.map(() => '?').join(',');
+  const rows = db.prepare(`
+    SELECT DISTINCT page_id FROM page_states
+    WHERE run_id IN (${placeholders}) AND (is_activated = 0 OR is_activated IS NULL)
+  `).all(...latestRunIds) as { page_id: string }[];
   const result = new Set<string>();
-  for (const id of inactive) {
-    if (!active.has(id)) result.add(id);
+  for (const r of rows) {
+    if (!active.has(r.page_id)) result.add(r.page_id);
   }
   return result;
 }

@@ -99,7 +99,7 @@ async function fetchWithRetry(url: string, retries = 2, timeoutMs = 30_000): Pro
 }
 
 async function fetchWithRetryLight(url: string): Promise<Response> {
-  return fetchWithRetry(url, 0, 15_000);
+  return fetchWithRetry(url, 1, 20_000);
 }
 
 export async function fetchPancakeActivePageIds(
