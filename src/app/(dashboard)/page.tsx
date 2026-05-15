@@ -121,17 +121,16 @@ async function BotCakeSection() {
   const inactiveCount = pages.filter(p => p.is_activated !== 1).length;
 
   const breakdown = [
-    { label: 'Active (Pancake activity)', count: activeCount, color: 'text-green-400' },
-    { label: 'Inactive (Pancake no activity)', count: pages.filter(p => p.is_activated !== 1 && p.activation_reason === 'pancake-inactive').length, color: 'text-red-400' },
-    { label: 'Inactive (stale - had activity in past)', count: pages.filter(p => p.is_activated !== 1 && p.activation_reason === 'stale').length, color: 'text-yellow-400' },
-    { label: 'Never seen in Pancake', count: pages.filter(p => p.is_activated !== 1 && p.activation_reason === 'never-seen').length, color: 'text-slate-500' },
+    { label: 'Active (has orders)', count: pages.filter(p => p.is_activated === 1 && p.activation_reason === 'pancake-activity').length, color: 'text-green-400' },
+    { label: 'Active (has conversations)', count: pages.filter(p => p.is_activated === 1 && p.activation_reason === 'has-conversations').length, color: 'text-emerald-400' },
+    { label: 'Inactive (no activity)', count: pages.filter(p => p.is_activated !== 1 && p.activation_reason === 'no-activity').length, color: 'text-slate-500' },
   ].filter(b => b.count > 0);
 
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
       <h3 className="text-lg font-semibold text-slate-200 mb-4">BotCake Platform</h3>
       <p className="text-xs text-slate-400 mb-4">
-        {pages.length} pages monitored via BotCake API. Active/inactive inferred by cross-referencing Pancake orders &amp; customer activity.
+        {pages.length} pages monitored via BotCake API. Active = has Pancake orders OR has BotCake conversations. Inactive = neither.
       </p>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-1">

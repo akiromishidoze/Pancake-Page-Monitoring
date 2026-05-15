@@ -1,4 +1,4 @@
-import { fetchBotCakePages } from './botcake';
+import { fetchBotCakePages, checkBotCakeConversations } from './botcake';
 import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, fetchPancakeActivePageIdsFromCustomers, fetchCachedPancakeShops, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop, type PancakePage } from './pancake';
 import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, getPancakeActivePageIds, getPancakeInactivePageIds, getPancakeSeenEver, getPreviousRunActiveCount, getDb, type SlimPage } from './db';
 import { broadcastSSE } from './sse';
@@ -34,9 +34,7 @@ async function refreshBotCake() {
   _botcakeLastRefresh = now;
 
   const endpoint = getEndpoint('botcake-platform');
-  if (!endpoint?.access_token) {
-    return;
-  }
+  if (!endpoint?.access_token) return;
 
   try {
     const pages = await fetchBotCakePages(endpoint.access_token);
@@ -48,18 +46,15 @@ async function refreshBotCake() {
     const ts = new Date().toISOString();
 
     const pancakeActive = getPancakeActivePageIds();
-    const pancakeInactive = getPancakeInactivePageIds();
-    const pancakeSeenEver = getPancakeSeenEver();
+
+    const noOrders = pages.filter(p => !pancakeActive.has(p.page_id)).map(p => p.page_id);
+    const convActive = await checkBotCakeConversations(noOrders, endpoint.access_token);
 
     const activePages: SlimPage[] = [];
     const inactivePages: SlimPage[] = [];
 
     for (const p of pages) {
-      const hasPancakeActivity = pancakeActive.has(p.page_id);
-      const inPancakeInactive = pancakeInactive.has(p.page_id);
-      const seenEver = pancakeSeenEver.has(p.page_id);
-
-      if (hasPancakeActivity) {
+      if (pancakeActive.has(p.page_id)) {
         activePages.push({
           page_id: p.page_id, id: p.page_id,
           name: p.name,
@@ -70,13 +65,24 @@ async function refreshBotCake() {
           is_canary: false,
           response_ms: null, fetch_errors: 0,
         });
+      } else if (convActive.has(p.page_id)) {
+        activePages.push({
+          page_id: p.page_id, id: p.page_id,
+          name: p.name,
+          shop_label: null, shop: null,
+          activity_kind: null, kind: null,
+          activation_reason: 'has-conversations', reason: null,
+          state_change: null, activity_kind_change: null,
+          is_canary: false,
+          response_ms: null, fetch_errors: 0,
+        });
       } else {
         inactivePages.push({
           page_id: p.page_id, id: p.page_id,
           name: p.name,
           shop_label: null, shop: null,
           activity_kind: null, kind: null,
-          activation_reason: inPancakeInactive ? 'pancake-inactive' : (seenEver ? 'stale' : 'never-seen'), reason: null,
+          activation_reason: 'no-activity', reason: null,
           state_change: null, activity_kind_change: null,
           is_canary: false,
           response_ms: null, fetch_errors: 0,
@@ -104,17 +110,19 @@ async function refreshBotCake() {
       raw_summary: {
         source: 'botcake-refresh',
         page_count: pages.length,
-        pancake_active: activePages.length,
-        pancake_inactive: inactivePages.filter(p => p.activation_reason === 'pancake-inactive').length,
-        stale: inactivePages.filter(p => p.activation_reason === 'stale').length,
-        never_seen: inactivePages.filter(p => p.activation_reason === 'never-seen').length,
+        pancake_activity: activePages.filter(p => p.activation_reason === 'pancake-activity').length,
+        has_conversations: activePages.filter(p => p.activation_reason === 'has-conversations').length,
+        no_activity: inactivePages.length,
       },
       active_pages: activePages,
       inactive_pages: inactivePages,
     });
 
     if (result.inserted) {
-      console.log(`[poller] botcake: ${activePages.length} active / ${inactivePages.length} inactive (${pages.length} total), run ${runId}`);
+      const pa = activePages.filter(p => p.activation_reason === 'pancake-activity').length;
+      const hc = activePages.filter(p => p.activation_reason === 'has-conversations').length;
+      const na = inactivePages.length;
+      console.log(`[poller] botcake: ${activePages.length}A (${pa}orders+${hc}conv) / ${na}I — ${pages.length} total, run ${runId}`);
       broadcastSSE('refresh', JSON.stringify({ source: 'botcake-poller', run_id: runId }));
     }
   } catch (err) {
