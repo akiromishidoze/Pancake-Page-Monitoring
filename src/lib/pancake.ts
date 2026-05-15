@@ -15,18 +15,14 @@ export type PancakeShop = {
 };
 
 export async function fetchPancakeShops(token: string): Promise<PancakeShop[]> {
-  const res = await fetch(`${PANCAKE_API}/shops?access_token=${encodeURIComponent(token)}`, {
-    headers: { 'Content-Type': 'application/json' },
-  });
+  const res = await fetchWithRetry(`${PANCAKE_API}/shops?access_token=${encodeURIComponent(token)}`);
   if (!res.ok) throw new Error(`Pancake shops API HTTP ${res.status}`);
   const data = await res.json() as { shops?: PancakeShop[]; success?: boolean };
   return data.shops ?? [];
 }
 
 export async function fetchPancakePages(token: string): Promise<PancakePage[]> {
-  const res = await fetch(`${PANCAKE_API}/pages?access_token=${encodeURIComponent(token)}`, {
-    headers: { 'Content-Type': 'application/json' },
-  });
+  const res = await fetchWithRetry(`${PANCAKE_API}/pages?access_token=${encodeURIComponent(token)}`);
   if (!res.ok) throw new Error(`Pancake pages API HTTP ${res.status}`);
   const data = await res.json() as { pages?: PancakePage[]; categorized?: Record<string, unknown>; success?: boolean };
   const pages = data.pages ?? [];
@@ -123,7 +119,7 @@ export async function fetchPancakeActivePageIdsFromCustomers(
   const cutoffMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const allIds = new Set<string>();
   const BATCH = 5;
-  const MAX_BATCHES = 4;
+  const MAX_BATCHES = 200;
 
   for (let batch = 0; batch < MAX_BATCHES; batch++) {
     const pageOffset = batch * BATCH;
