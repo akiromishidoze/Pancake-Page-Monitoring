@@ -1,4 +1,7 @@
+import { getSetting, setSetting } from './db';
+
 const PANCAKE_API = 'https://pos.pages.fm/api/v1';
+const PANCAKE_SHOPS_CACHE_KEY = 'pancake_shops_cache_v2';
 
 export type PancakePage = {
   id: string;
@@ -14,15 +17,37 @@ export type PancakeShop = {
   pages: PancakePage[];
 };
 
+function loadCachedShops(): PancakeShop[] | null {
+  try {
+    const raw = getSetting(PANCAKE_SHOPS_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed as PancakeShop[];
+    return null;
+  } catch { return null; }
+}
+
+function saveCachedShops(shops: PancakeShop[]): void {
+  try {
+    setSetting(PANCAKE_SHOPS_CACHE_KEY, JSON.stringify(shops));
+  } catch { /* best effort */ }
+}
+
 export async function fetchPancakeShops(token: string): Promise<PancakeShop[]> {
-  const res = await fetchWithRetry(`${PANCAKE_API}/shops?access_token=${encodeURIComponent(token)}`);
+  const res = await fetchWithRetry(`${PANCAKE_API}/shops?access_token=${encodeURIComponent(token)}`, 3, 60_000);
   if (!res.ok) throw new Error(`Pancake shops API HTTP ${res.status}`);
   const data = await res.json() as { shops?: PancakeShop[]; success?: boolean };
-  return data.shops ?? [];
+  const shops = data.shops ?? [];
+  if (shops.length > 0) saveCachedShops(shops);
+  return shops;
+}
+
+export function fetchCachedPancakeShops(): PancakeShop[] {
+  return loadCachedShops() ?? [];
 }
 
 export async function fetchPancakePages(token: string): Promise<PancakePage[]> {
-  const res = await fetchWithRetry(`${PANCAKE_API}/pages?access_token=${encodeURIComponent(token)}`);
+  const res = await fetchWithRetry(`${PANCAKE_API}/pages?access_token=${encodeURIComponent(token)}`, 3, 60_000);
   if (!res.ok) throw new Error(`Pancake pages API HTTP ${res.status}`);
   const data = await res.json() as { pages?: PancakePage[]; categorized?: Record<string, unknown>; success?: boolean };
   const pages = data.pages ?? [];
@@ -56,20 +81,25 @@ export function mergePagesActivation(
   }));
 }
 
-async function fetchWithRetry(url: string, retries = 2): Promise<Response> {
+async function fetchWithRetry(url: string, retries = 2, timeoutMs = 30_000): Promise<Response> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 30_000);
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timer);
       return res;
     } catch (err) {
       if (attempt === retries) throw err;
-      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+      const delay = Math.min(1000 * (attempt + 1) + Math.random() * 500, 5000);
+      await new Promise(r => setTimeout(r, delay));
     }
   }
   throw new Error('unreachable');
+}
+
+async function fetchWithRetryLight(url: string): Promise<Response> {
+  return fetchWithRetry(url, 0, 15_000);
 }
 
 export async function fetchPancakeActivePageIds(
@@ -77,19 +107,22 @@ export async function fetchPancakeActivePageIds(
   shopId: number,
   pageSize: number = 1000,
 ): Promise<Set<string>> {
-  const cutoffMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const cutoffMs = Date.now() - 24 * 60 * 60 * 1000;
   const allIds = new Set<string>();
   const BATCH = 5;
-  const MAX_BATCHES = 4;
+  const MAX_BATCHES = 2;
 
   for (let batch = 0; batch < MAX_BATCHES; batch++) {
     const pageOffset = batch * BATCH;
     const pageNumbers = Array.from({ length: BATCH }, (_, i) => pageOffset + i + 1);
 
     const results = await Promise.all(pageNumbers.map(page =>
-      fetchWithRetry(
+      fetchWithRetryLight(
         `${PANCAKE_API}/shops/${shopId}/orders?access_token=${encodeURIComponent(token)}&page_size=${pageSize}&page_number=${page}`,
-      ).then(r => r.json()).catch(() => null as { data?: Array<{ page_id?: string | number; inserted_at?: string }> } | null)
+      ).then(r => {
+        if (!r.ok) return null;
+        return r.json() as Promise<{ data?: Array<{ page_id?: string | number; inserted_at?: string }> } | null>;
+      }).catch(() => null)
     ));
 
     for (const data of results) {
@@ -119,14 +152,14 @@ export async function fetchPancakeActivePageIdsFromCustomers(
   const cutoffMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const allIds = new Set<string>();
   const BATCH = 5;
-  const MAX_BATCHES = 200;
+  const MAX_BATCHES = 12;
 
   for (let batch = 0; batch < MAX_BATCHES; batch++) {
     const pageOffset = batch * BATCH;
     const pageNumbers = Array.from({ length: BATCH }, (_, i) => pageOffset + i + 1);
 
     const results = await Promise.all(pageNumbers.map(page =>
-      fetchWithRetry(
+      fetchWithRetryLight(
         `${PANCAKE_API}/shops/${shopId}/customers?access_token=${encodeURIComponent(token)}&page_size=${pageSize}&page_number=${page}`,
       ).then(r => r.json()).catch(() => null as { data?: Array<{ page_id?: string | number; shop_customer?: { updated_at?: string } }> } | null)
     ));

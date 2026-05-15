@@ -1,19 +1,19 @@
 import { fetchBotCakePages } from './botcake';
-import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, fetchPancakeActivePageIdsFromCustomers, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop } from './pancake';
+import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, fetchPancakeActivePageIdsFromCustomers, fetchCachedPancakeShops, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop } from './pancake';
 import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, type SlimPage } from './db';
 import { broadcastSSE } from './sse';
 
 const POLL_INTERVAL_MS = 60_000;
 
-let _started = false;
 let _lastPolledAt: string | null = null;
 
 let _botcakeLastRefresh = 0;
 let _pancakeLastRefresh = 0;
 
 export function startPoller() {
-  if (_started) return;
-  _started = true;
+  const alreadyStarted = getSetting('poller_started');
+  if (alreadyStarted === '1') return;
+  setSetting('poller_started', '1');
   console.log('[poller] starting; interval =', POLL_INTERVAL_MS, 'ms');
 
   void refreshAll();
@@ -93,6 +93,7 @@ async function refreshBotCake() {
 }
 
 async function refreshPancake() {
+  try {
   const now = Date.now();
   if (now - _pancakeLastRefresh < POLL_INTERVAL_MS) return;
   _pancakeLastRefresh = now;
@@ -109,8 +110,13 @@ async function refreshPancake() {
       fetchPancakePages(token).catch(() => [] as PancakePage[]),
     ]);
   } catch (err) {
-    console.error('[poller] pancake: failed to fetch shops:', err);
-    return;
+    console.warn('[poller] pancake: live shops fetch failed, trying cache:', err);
+    shops = fetchCachedPancakeShops();
+    if (shops.length === 0) {
+      console.error('[poller] pancake: no cached shops data available either, skipping');
+      return;
+    }
+    console.log('[poller] pancake: using cached shops data (' + shops.length + ' shops)');
   }
 
   shops = mergePagesActivation(shops, pagesApi);
@@ -182,11 +188,14 @@ async function refreshPancake() {
       broadcastSSE('refresh', JSON.stringify({ source: 'pancake-poller', run_id: runId, endpoint_id: ep.id }));
     }
   }
+  } catch (err) {
+    console.error('[poller] pancake: refresh failed:', err);
+  }
 }
 
 export function getPollerStatus() {
   return {
-    started: _started,
+    started: getSetting('poller_started') === '1',
     last_polled_at: _lastPolledAt,
     interval_ms: POLL_INTERVAL_MS,
   };
