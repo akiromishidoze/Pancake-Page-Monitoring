@@ -8,6 +8,35 @@ export type BotCakePage = {
   name: string;
 };
 
+async function fetchWithTimeout(url: string, options: RequestInit & { timeout?: number } = {}): Promise<Response> {
+  const { timeout = 20_000, ...fetchOpts } = options;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const res = await fetch(url, { ...fetchOpts, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchWithRetry(url: string, token: string, retries = 2): Promise<Response | null> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetchWithTimeout(url, {
+        headers: { 'user-access-token': token },
+        timeout: 20_000,
+      });
+      if (res.ok) return res;
+      if (attempt === retries) return null;
+    } catch {
+      if (attempt === retries) return null;
+    }
+    await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+  }
+  return null;
+}
+
 export async function fetchBotCakePages(token: string): Promise<BotCakePage[]> {
   const ids = await fetchBotCakePageIds(token);
 
@@ -17,24 +46,30 @@ export async function fetchBotCakePages(token: string): Promise<BotCakePage[]> {
   const fbToken = process.env.FB_ACCESS_TOKEN;
   if (fbToken) {
     try {
-      const res = await fetch(`${FB_GRAPH}/me/accounts?fields=id,name&limit=200`, {
+      const res = await fetchWithTimeout(`${FB_GRAPH}/me/accounts?fields=id,name&limit=200`, {
         headers: { Authorization: `Bearer ${fbToken}` },
+        timeout: 15_000,
       });
-      const data = await res.json() as { data?: { id: string; name: string }[] };
-      if (data.data) {
-        for (const p of data.data) {
-          nameMap.set(p.id, p.name);
-        }
-        // Fetch individual names for any remaining pages
-        const missing = ids.filter((id) => !nameMap.has(id));
-        for (const pageId of missing) {
-          try {
-            const r = await fetch(`${FB_GRAPH}/${pageId}?fields=id,name`, {
-              headers: { Authorization: `Bearer ${fbToken}` },
-            });
-            const d = await r.json() as { id?: string; name?: string; error?: Record<string, unknown> };
-            if (d.name) nameMap.set(d.id!, d.name);
-          } catch {}
+      if (res.ok) {
+        const data = await res.json() as { data?: { id: string; name: string }[] };
+        if (data.data) {
+          for (const p of data.data) {
+            nameMap.set(p.id, p.name);
+          }
+          // Fetch individual names for any remaining pages
+          const missing = ids.filter((id) => !nameMap.has(id));
+          for (const pageId of missing) {
+            try {
+              const r = await fetchWithTimeout(`${FB_GRAPH}/${pageId}?fields=id,name`, {
+                headers: { Authorization: `Bearer ${fbToken}` },
+                timeout: 10_000,
+              });
+              if (r.ok) {
+                const d = await r.json() as { id?: string; name?: string; error?: Record<string, unknown> };
+                if (d.name) nameMap.set(d.id!, d.name);
+              }
+            } catch {}
+          }
         }
       }
     } catch {}
@@ -60,10 +95,8 @@ async function fetchBotCakePageIds(token: string): Promise<string[]> {
   const all: string[] = [];
   let page = 1;
   while (true) {
-    const res = await fetch(`${API_BASE}/list_page_id?page=${page}`, {
-      headers: { 'user-access-token': token },
-    });
-    if (!res.ok) break;
+    const res = await fetchWithRetry(`${API_BASE}/list_page_id?page=${page}`, token);
+    if (!res) break;
     const data: string[] = await res.json();
     if (!Array.isArray(data) || data.length === 0) break;
     all.push(...data);
