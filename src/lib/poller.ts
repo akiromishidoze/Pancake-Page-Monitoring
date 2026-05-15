@@ -1,6 +1,6 @@
 import { fetchBotCakePages } from './botcake';
-import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, fetchPancakeActivePageIdsFromCustomers, fetchCachedPancakeShops, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop } from './pancake';
-import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, type SlimPage } from './db';
+import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, fetchPancakeActivePageIdsFromCustomers, fetchCachedPancakeShops, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop, type PancakePage } from './pancake';
+import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, getPancakeActivePageIds, getPancakeInactivePageIds, getPancakeSeenEver, getPreviousRunActiveCount, type SlimPage } from './db';
 import { broadcastSSE } from './sse';
 
 const POLL_INTERVAL_MS = 60_000;
@@ -26,6 +26,8 @@ export async function refreshAll() {
   setSetting('last_scheduled_run', Date.now().toString());
 }
 
+const ALERT_DROP_THRESHOLD_PCT = 0.50;
+
 async function refreshBotCake() {
   const now = Date.now();
   if (now - _botcakeLastRefresh < POLL_INTERVAL_MS) return;
@@ -41,25 +43,42 @@ async function refreshBotCake() {
     const runId = `botcake_refresh_${now}`;
     const ts = new Date().toISOString();
 
-    const activePages = pages.map((p) => ({
-      page_id: p.page_id,
-      id: p.page_id,
-      name: p.name,
-      shop_label: null as string | null,
-      shop: null as string | null,
-      activity_kind: null as string | null,
-      kind: null as string | null,
-      is_activated: true,
-      is_canary: false,
-      activation_reason: null as string | null,
-      reason: null as string | null,
-      state_change: null as string | null,
-      activity_kind_change: null as string | null,
-      last_order_at: null as string | null,
-      last_customer_activity_at: null as string | null,
-      response_ms: null as number | null,
-      fetch_errors: 0,
-    }));
+    const pancakeActive = getPancakeActivePageIds();
+    const pancakeInactive = getPancakeInactivePageIds();
+    const pancakeSeenEver = getPancakeSeenEver();
+
+    const activePages: SlimPage[] = [];
+    const inactivePages: SlimPage[] = [];
+
+    for (const p of pages) {
+      const hasPancakeActivity = pancakeActive.has(p.page_id);
+      const inPancakeInactive = pancakeInactive.has(p.page_id);
+      const seenEver = pancakeSeenEver.has(p.page_id);
+
+      if (hasPancakeActivity) {
+        activePages.push({
+          page_id: p.page_id, id: p.page_id,
+          name: p.name,
+          shop_label: null, shop: null,
+          activity_kind: null, kind: null,
+          activation_reason: 'pancake-activity', reason: null,
+          state_change: null, activity_kind_change: null,
+          is_canary: false,
+          response_ms: null, fetch_errors: 0,
+        });
+      } else {
+        inactivePages.push({
+          page_id: p.page_id, id: p.page_id,
+          name: p.name,
+          shop_label: null, shop: null,
+          activity_kind: null, kind: null,
+          activation_reason: inPancakeInactive ? 'pancake-inactive' : (seenEver ? 'stale' : 'never-seen'), reason: null,
+          state_change: null, activity_kind_change: null,
+          is_canary: false,
+          response_ms: null, fetch_errors: 0,
+        });
+      }
+    }
 
     const result = insertSnapshot({
       run_id: runId,
@@ -75,16 +94,23 @@ async function refreshBotCake() {
       rule_version: null,
       in_maintenance_window: false,
       total_pages: pages.length,
-      active_pages_count: pages.length,
-      inactive_pages_count: 0,
+      active_pages_count: activePages.length,
+      inactive_pages_count: inactivePages.length,
       receiver_sd_size_bytes: null,
-      raw_summary: { source: 'botcake-refresh', page_count: pages.length },
+      raw_summary: {
+        source: 'botcake-refresh',
+        page_count: pages.length,
+        pancake_active: activePages.length,
+        pancake_inactive: inactivePages.filter(p => p.activation_reason === 'pancake-inactive').length,
+        stale: inactivePages.filter(p => p.activation_reason === 'stale').length,
+        never_seen: inactivePages.filter(p => p.activation_reason === 'never-seen').length,
+      },
       active_pages: activePages,
-      inactive_pages: [],
+      inactive_pages: inactivePages,
     });
 
     if (result.inserted) {
-      console.log('[poller] botcake: inserted', pages.length, 'pages, run', runId);
+      console.log(`[poller] botcake: ${activePages.length} active / ${inactivePages.length} inactive (${pages.length} total), run ${runId}`);
       broadcastSSE('refresh', JSON.stringify({ source: 'botcake-poller', run_id: runId }));
     }
   } catch (err) {
@@ -171,10 +197,28 @@ async function refreshPancake() {
       (hasOrders || apiActive ? activePages : inactivePages).push(base);
     }
 
+    const prevActive = getPreviousRunActiveCount(ep.id);
+    let alertCount = 0;
+    let outageSuspected = false;
+    if (prevActive !== null && prevActive > 0) {
+      const dropRatio = (prevActive - activePages.length) / prevActive;
+      if (dropRatio >= ALERT_DROP_THRESHOLD_PCT) {
+        alertCount = activePages.length === 0 ? 2 : 1;
+        outageSuspected = true;
+        console.warn(`[poller] ALERT ${ep.name}: active pages dropped ${Math.round(dropRatio * 100)}% (${prevActive} → ${activePages.length})`);
+        broadcastSSE('alert', JSON.stringify({
+          endpoint_id: ep.id, shop: ep.name,
+          previous: prevActive, current: activePages.length,
+          drop_pct: Math.round(dropRatio * 100),
+        }));
+      }
+    }
+
     const result = insertSnapshot({
       run_id: runId, endpoint_id: ep.id, generated_at: ts,
       heartbeat_ok: true, run_quality: 'full', severity: null,
-      canary_status: 'ok', canary_alert: false, outage_suspected: false, alert_count: 0,
+      canary_status: 'ok', canary_alert: false,
+      outage_suspected: outageSuspected, alert_count: alertCount,
       rule_version: null, in_maintenance_window: false,
       total_pages: shop.pages.length,
       active_pages_count: activePages.length, inactive_pages_count: inactivePages.length,

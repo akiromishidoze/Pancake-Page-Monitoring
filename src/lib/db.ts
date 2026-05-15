@@ -345,6 +345,13 @@ export function getLatestRun(endpointId?: string): RunRow | undefined {
     | undefined;
 }
 
+export function getRunHistory(endpointId: string, limit = 100): RunRow[] {
+  const db = getDb();
+  return db
+    .prepare('SELECT * FROM runs WHERE endpoint_id = ? ORDER BY generated_at ASC LIMIT ?')
+    .all(endpointId, limit) as RunRow[];
+}
+
 export function getRecentRuns(limit = 50, endpointId?: string): RunRow[] {
   const db = getDb();
   if (endpointId) {
@@ -355,6 +362,69 @@ export function getRecentRuns(limit = 50, endpointId?: string): RunRow[] {
   return db
     .prepare('SELECT * FROM runs ORDER BY generated_at DESC LIMIT ?')
     .all(limit) as RunRow[];
+}
+
+export function getPancakeActivePageIds(): Set<string> {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT DISTINCT ps.page_id, ps.is_activated
+    FROM page_states ps
+    JOIN runs r ON r.run_id = ps.run_id
+    WHERE r.endpoint_id != 'botcake-platform' AND r.endpoint_id IS NOT NULL
+    AND r.run_id IN (
+      SELECT run_id FROM runs
+      WHERE endpoint_id != 'botcake-platform' AND endpoint_id IS NOT NULL
+      GROUP BY endpoint_id HAVING MAX(generated_at)
+    )
+  `).all() as { page_id: string; is_activated: number | null }[];
+
+  const active = new Set<string>();
+  const inactive = new Set<string>();
+  for (const r of rows) {
+    if (r.is_activated === 1) active.add(r.page_id);
+    else inactive.add(r.page_id);
+  }
+  const result = new Set<string>();
+  for (const id of active) result.add(id);
+  return result;
+}
+
+export function getPancakeSeenEver(): Set<string> {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT DISTINCT ps.page_id
+    FROM page_states ps
+    JOIN runs r ON r.run_id = ps.run_id
+    WHERE r.endpoint_id != 'botcake-platform' AND r.endpoint_id IS NOT NULL
+  `).all() as { page_id: string }[];
+  return new Set(rows.map(r => r.page_id));
+}
+
+export function getPancakeInactivePageIds(): Set<string> {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT DISTINCT ps.page_id, ps.is_activated
+    FROM page_states ps
+    JOIN runs r ON r.run_id = ps.run_id
+    WHERE r.endpoint_id != 'botcake-platform' AND r.endpoint_id IS NOT NULL
+    AND r.run_id IN (
+      SELECT run_id FROM runs
+      WHERE endpoint_id != 'botcake-platform' AND endpoint_id IS NOT NULL
+      GROUP BY endpoint_id HAVING MAX(generated_at)
+    )
+  `).all() as { page_id: string; is_activated: number | null }[];
+
+  const active = new Set<string>();
+  const inactive = new Set<string>();
+  for (const r of rows) {
+    if (r.is_activated === 1) active.add(r.page_id);
+    else inactive.add(r.page_id);
+  }
+  const result = new Set<string>();
+  for (const id of inactive) {
+    if (!active.has(id)) result.add(id);
+  }
+  return result;
 }
 
 export function getLatestPageStates(endpointId?: string): PageStateRow[] {
@@ -517,6 +587,16 @@ export function deleteEndpoint(id: string): void {
 export function touchEndpoint(id: string): void {
   const db = getDb();
   db.prepare('UPDATE endpoints SET last_used_at = ? WHERE id = ?').run(new Date().toISOString(), id);
+}
+
+export function getPreviousRunActiveCount(endpointId: string): number | null {
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT active_pages FROM runs
+    WHERE endpoint_id = ?
+    ORDER BY generated_at DESC LIMIT 1 OFFSET 1
+  `).get(endpointId) as { active_pages: number } | undefined;
+  return row?.active_pages ?? null;
 }
 
 export function getRunCount(endpointId?: string): number {
