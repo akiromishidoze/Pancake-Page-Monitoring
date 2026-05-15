@@ -107,10 +107,10 @@ export async function fetchPancakeActivePageIds(
   shopId: number,
   pageSize: number = 1000,
 ): Promise<Set<string>> {
-  const cutoffMs = Date.now() - 24 * 60 * 60 * 1000;
+  const cutoffMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const allIds = new Set<string>();
   const BATCH = 5;
-  const MAX_BATCHES = 2;
+  const MAX_BATCHES = 4;
 
   for (let batch = 0; batch < MAX_BATCHES; batch++) {
     const pageOffset = batch * BATCH;
