@@ -127,6 +127,19 @@ async function BotCakeSection() {
     { label: 'Inactive (no activity)', count: pages.filter(p => p.is_activated !== 1 && p.activation_reason === 'no-activity').length, color: 'text-slate-500' },
   ].filter(b => b.count > 0);
 
+  const botCakeHistory = getRunHistory('botcake-platform', 200);
+  const botCakeTrend = botCakeHistory.length >= 2
+    ? [{
+        label: 'BotCake Active',
+        data: botCakeHistory.map(r => ({
+          time: r.generated_at,
+          active: r.active_pages ?? 0,
+          inactive: r.inactive_pages ?? 0,
+          total: r.total_pages ?? 0,
+        })),
+      }]
+    : [];
+
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
       <h3 className="text-lg font-semibold text-slate-200 mb-4">BotCake Platform</h3>
@@ -176,6 +189,11 @@ async function BotCakeSection() {
           </div>
         </div>
       </div>
+      {botCakeTrend.length > 0 && (
+        <div className="mt-6">
+          <ActiveTrendChart series={botCakeTrend} />
+        </div>
+      )}
     </div>
   );
 }
