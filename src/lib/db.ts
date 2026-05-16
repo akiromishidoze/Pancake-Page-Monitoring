@@ -790,6 +790,38 @@ export function pruneOldRuns(retentionDays: number): number {
   return result.changes;
 }
 
+// ──── BotCake Manual Overrides ───────────────────────────────────────
+
+export type BotCakeOverride = {
+  page_id: string;
+  is_active: boolean;
+  reason: string;
+  created_at: string;
+};
+
+export function getBotCakeOverrides(): Map<string, BotCakeOverride> {
+  const raw = getSetting('botcake_overrides');
+  if (!raw) return new Map();
+  try {
+    const arr = JSON.parse(raw) as BotCakeOverride[];
+    return new Map(arr.map(o => [o.page_id, o]));
+  } catch {
+    return new Map();
+  }
+}
+
+export function setBotCakeOverride(pageId: string, isActive: boolean, reason: string): void {
+  const overrides = getBotCakeOverrides();
+  overrides.set(pageId, { page_id: pageId, is_active: isActive, reason, created_at: new Date().toISOString() });
+  setSetting('botcake_overrides', JSON.stringify([...overrides.values()]));
+}
+
+export function removeBotCakeOverride(pageId: string): void {
+  const overrides = getBotCakeOverrides();
+  overrides.delete(pageId);
+  setSetting('botcake_overrides', JSON.stringify([...overrides.values()]));
+}
+
 // ──── Settings ─────────────────────────────────────────────────────────
 
 export function getSetting(key: string): string | null {

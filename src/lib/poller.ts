@@ -1,6 +1,6 @@
 import { fetchBotCakePages, checkBotCakeConversations, checkBotCakeToolsFlows } from './botcake';
 import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, fetchPancakeActivePageIdsFromCustomers, fetchCachedPancakeShops, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop, type PancakePage } from './pancake';
-import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, getPancakeActivePageIds, getPreviousRunActiveCount, getDb, type SlimPage } from './db';
+import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, getPancakeActivePageIds, getPreviousRunActiveCount, getDb, getBotCakeOverrides, type SlimPage } from './db';
 import { broadcastSSE } from './sse';
 
 const POLL_INTERVAL_MS = 60_000;
@@ -98,6 +98,31 @@ async function refreshBotCake() {
           is_canary: false,
           response_ms: null, fetch_errors: 0,
         });
+      }
+    }
+
+    // Apply manual overrides (overrides signal-based decisions)
+    const overrides = getBotCakeOverrides();
+    if (overrides.size > 0) {
+      const toActive: SlimPage[] = [];
+      const toInactive: SlimPage[] = [];
+      for (const p of activePages) {
+        const ov = overrides.get(p.page_id ?? p.id ?? '');
+        if (ov && !ov.is_active) toInactive.push(p);
+      }
+      for (const p of inactivePages) {
+        const ov = overrides.get(p.page_id ?? p.id ?? '');
+        if (ov && ov.is_active) toActive.push(p);
+      }
+      for (const p of toInactive) {
+        p.activation_reason = 'manual-override';
+        activePages.splice(activePages.indexOf(p), 1);
+        inactivePages.push(p);
+      }
+      for (const p of toActive) {
+        p.activation_reason = 'manual-override';
+        inactivePages.splice(inactivePages.indexOf(p), 1);
+        activePages.push(p);
       }
     }
 
