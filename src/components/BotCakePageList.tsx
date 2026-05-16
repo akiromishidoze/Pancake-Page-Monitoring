@@ -31,14 +31,20 @@ export function BotCakePageList({ pages }: { pages: BotCakePage[] }) {
     }
   }, []);
 
+  const sorted = useMemo(() => {
+    const active = pages.filter(p => p.is_activated === 1).sort((a, b) => (a.page_name ?? a.page_id).localeCompare(b.page_name ?? b.page_id));
+    const inactive = pages.filter(p => p.is_activated !== 1).sort((a, b) => (a.page_name ?? a.page_id).localeCompare(b.page_name ?? b.page_id));
+    return [...active, ...inactive];
+  }, [pages]);
+
   const filtered = useMemo(() => {
-    if (!query.trim()) return pages;
+    if (!query.trim()) return sorted;
     const q = query.toLowerCase();
-    return pages.filter(p =>
+    return sorted.filter(p =>
       p.page_name?.toLowerCase().includes(q) ||
       p.page_id.toLowerCase().includes(q)
     );
-  }, [pages, query]);
+  }, [sorted, query]);
 
   return (
     <div className="mt-4">
