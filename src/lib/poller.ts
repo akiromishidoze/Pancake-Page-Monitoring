@@ -1,4 +1,4 @@
-import { fetchBotCakePages, checkBotCakeConversations } from './botcake';
+import { fetchBotCakePages, checkBotCakeConversations, checkBotCakeToolsFlows } from './botcake';
 import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, fetchPancakeActivePageIdsFromCustomers, fetchCachedPancakeShops, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop, type PancakePage } from './pancake';
 import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, getPancakeActivePageIds, getPreviousRunActiveCount, getDb, type SlimPage } from './db';
 import { broadcastSSE } from './sse';
@@ -47,6 +47,9 @@ async function refreshBotCake() {
     const noOrders = pages.filter(p => !pancakeActive.has(p.page_id)).map(p => p.page_id);
     const convActive = await checkBotCakeConversations(noOrders, endpoint.access_token);
 
+    const noOrdersNoConv = pages.filter(p => !pancakeActive.has(p.page_id) && !convActive.has(p.page_id)).map(p => p.page_id);
+    const toolsActive = await checkBotCakeToolsFlows(noOrdersNoConv, endpoint.access_token);
+
     const activePages: SlimPage[] = [];
     const inactivePages: SlimPage[] = [];
 
@@ -73,6 +76,17 @@ async function refreshBotCake() {
           is_canary: false,
           response_ms: null, fetch_errors: 0,
         });
+      } else if (toolsActive.has(p.page_id)) {
+        activePages.push({
+          page_id: p.page_id, id: p.page_id,
+          name: p.name,
+          shop_label: null, shop: null,
+          activity_kind: null, kind: null,
+          activation_reason: 'has-tools', reason: null,
+          state_change: null, activity_kind_change: null,
+          is_canary: false,
+          response_ms: null, fetch_errors: 0,
+        });
       } else {
         inactivePages.push({
           page_id: p.page_id, id: p.page_id,
@@ -87,6 +101,23 @@ async function refreshBotCake() {
       }
     }
 
+    const prevActive = getPreviousRunActiveCount('botcake-platform');
+    let alertCount = 0;
+    let outageSuspected = false;
+    if (prevActive !== null && prevActive > 0) {
+      const dropRatio = (prevActive - activePages.length) / prevActive;
+      if (dropRatio >= ALERT_DROP_THRESHOLD_PCT) {
+        alertCount = activePages.length === 0 ? 2 : 1;
+        outageSuspected = true;
+        console.warn(`[poller] ALERT BotCake: active pages dropped ${Math.round(dropRatio * 100)}% (${prevActive} → ${activePages.length})`);
+        broadcastSSE('alert', JSON.stringify({
+          endpoint_id: 'botcake-platform', shop: 'BotCake',
+          previous: prevActive, current: activePages.length,
+          drop_pct: Math.round(dropRatio * 100),
+        }));
+      }
+    }
+
     const result = insertSnapshot({
       run_id: runId,
       endpoint_id: 'botcake-platform',
@@ -96,8 +127,8 @@ async function refreshBotCake() {
       severity: null,
       canary_status: 'ok',
       canary_alert: false,
-      outage_suspected: false,
-      alert_count: 0,
+      outage_suspected: outageSuspected,
+      alert_count: alertCount,
       rule_version: null,
       in_maintenance_window: false,
       total_pages: pages.length,
@@ -109,6 +140,7 @@ async function refreshBotCake() {
         page_count: pages.length,
         pancake_activity: activePages.filter(p => p.activation_reason === 'pancake-activity').length,
         has_conversations: activePages.filter(p => p.activation_reason === 'has-conversations').length,
+        has_tools: activePages.filter(p => p.activation_reason === 'has-tools').length,
         no_activity: inactivePages.length,
       },
       active_pages: activePages,
@@ -118,8 +150,9 @@ async function refreshBotCake() {
     if (result.inserted) {
       const pa = activePages.filter(p => p.activation_reason === 'pancake-activity').length;
       const hc = activePages.filter(p => p.activation_reason === 'has-conversations').length;
+      const ht = activePages.filter(p => p.activation_reason === 'has-tools').length;
       const na = inactivePages.length;
-      console.log(`[poller] botcake: ${activePages.length}A (${pa}orders+${hc}conv) / ${na}I — ${pages.length} total, run ${runId}`);
+      console.log(`[poller] botcake: ${activePages.length}A (${pa}orders+${hc}conv+${ht}tools) / ${na}I — ${pages.length} total, run ${runId}`);
       broadcastSSE('refresh', JSON.stringify({ source: 'botcake-poller', run_id: runId }));
     }
   } catch (err) {

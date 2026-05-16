@@ -123,6 +123,7 @@ async function BotCakeSection() {
   const breakdown = [
     { label: 'Active (has orders)', count: pages.filter(p => p.is_activated === 1 && p.activation_reason === 'pancake-activity').length, color: 'text-green-400' },
     { label: 'Active (has conversations)', count: pages.filter(p => p.is_activated === 1 && p.activation_reason === 'has-conversations').length, color: 'text-emerald-400' },
+    { label: 'Active (has tools/flows)', count: pages.filter(p => p.is_activated === 1 && p.activation_reason === 'has-tools').length, color: 'text-teal-400' },
     { label: 'Inactive (no activity)', count: pages.filter(p => p.is_activated !== 1 && p.activation_reason === 'no-activity').length, color: 'text-slate-500' },
   ].filter(b => b.count > 0);
 
@@ -130,7 +131,7 @@ async function BotCakeSection() {
     <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
       <h3 className="text-lg font-semibold text-slate-200 mb-4">BotCake Platform</h3>
       <p className="text-xs text-slate-400 mb-4">
-        {pages.length} pages monitored via BotCake API. Active = has Pancake orders OR has BotCake conversations. Inactive = neither.
+        {pages.length} pages monitored via BotCake API. Active = has Pancake orders OR has BotCake conversations OR has tools/flows configured. Inactive = none.
       </p>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-1">

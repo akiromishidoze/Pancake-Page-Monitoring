@@ -123,8 +123,74 @@ export async function checkBotCakeConversations(pageIds: string[], userToken: st
   return result;
 }
 
+// ──── Deeper probe: tools + flows for pages without conversations ────
+
+let _toolsFlowsCache = new Map<string, { hasToolsOrFlows: boolean; checkedAt: number }>();
+
+export async function checkBotCakeToolsFlows(pageIds: string[], userToken: string): Promise<Set<string>> {
+  const result = new Set<string>();
+  const tokens = await getBotCakePageTokens(userToken);
+  if (tokens.size === 0) return result;
+
+  const needsCheck = pageIds.filter(id => {
+    const cached = _toolsFlowsCache.get(id);
+    return !cached || Date.now() - cached.checkedAt > CONVERSATION_CACHE_TTL;
+  });
+  const cached = pageIds.filter(id => {
+    const c = _toolsFlowsCache.get(id);
+    return c && Date.now() - c.checkedAt <= CONVERSATION_CACHE_TTL && c.hasToolsOrFlows;
+  });
+  for (const id of cached) result.add(id);
+
+  if (needsCheck.length === 0) return result;
+
+  const CONCURRENCY = 3;
+  for (let i = 0; i < needsCheck.length; i += CONCURRENCY) {
+    const batch = needsCheck.slice(i, i + CONCURRENCY);
+    await Promise.all(batch.map(async (pageId) => {
+      const token = tokens.get(pageId);
+      if (!token) {
+        _toolsFlowsCache.set(pageId, { hasToolsOrFlows: false, checkedAt: Date.now() });
+        return;
+      }
+      try {
+        const [toolsRes, flowsRes] = await Promise.all([
+          fetchWithTimeout(`${API_BASE}/pages/${pageId}/tools`, {
+            headers: { 'access-token': token }, timeout: 8_000,
+          }),
+          fetchWithTimeout(`${API_BASE}/pages/${pageId}/flows`, {
+            headers: { 'access-token': token }, timeout: 8_000,
+          }),
+        ]);
+        let hasToolsOrFlows = false;
+
+        if (toolsRes.ok) {
+          const tData = await toolsRes.json() as { success?: boolean; data?: { is_published?: boolean }[] };
+          if (tData.success && Array.isArray(tData.data)) {
+            hasToolsOrFlows = tData.data.some(t => t.is_published === true);
+          }
+        }
+        if (!hasToolsOrFlows && flowsRes.ok) {
+          const fData = await flowsRes.json() as { success?: boolean; data?: { flows?: { is_removed?: boolean }[] } };
+          if (fData.success && fData.data?.flows) {
+            hasToolsOrFlows = fData.data.flows.some(f => f.is_removed === false);
+          }
+        }
+
+        _toolsFlowsCache.set(pageId, { hasToolsOrFlows, checkedAt: Date.now() });
+        if (hasToolsOrFlows) result.add(pageId);
+      } catch {
+        _toolsFlowsCache.set(pageId, { hasToolsOrFlows: false, checkedAt: Date.now() });
+      }
+    }));
+  }
+
+  return result;
+}
+
 export function clearConversationCache() {
   _conversationCache.clear();
+  _toolsFlowsCache.clear();
   _pageTokenCache = null;
 }
 
