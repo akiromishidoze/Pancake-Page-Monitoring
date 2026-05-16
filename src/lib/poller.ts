@@ -1,6 +1,6 @@
 import { fetchBotCakePages, checkBotCakeConversations } from './botcake';
 import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, fetchPancakeActivePageIdsFromCustomers, fetchCachedPancakeShops, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop, type PancakePage } from './pancake';
-import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, getPancakeActivePageIds, getPancakeInactivePageIds, getPancakeSeenEver, getPreviousRunActiveCount, getDb, type SlimPage } from './db';
+import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, getPancakeActivePageIds, getPreviousRunActiveCount, getDb, type SlimPage } from './db';
 import { broadcastSSE } from './sse';
 
 const POLL_INTERVAL_MS = 60_000;
@@ -11,9 +11,6 @@ let _botcakeLastRefresh = 0;
 let _pancakeLastRefresh = 0;
 
 export function startPoller() {
-  const alreadyStarted = getSetting('poller_started');
-  if (alreadyStarted === '1') return;
-  setSetting('poller_started', '1');
   console.log('[poller] starting; interval =', POLL_INTERVAL_MS, 'ms');
 
   void refreshAll();
