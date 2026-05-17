@@ -23,22 +23,21 @@ Open http://localhost:3001 (default credentials: Email `admin`, Password `admin`
 - **Data retention** — auto-prune runs older than N days (configurable, checked every 6h)
 - **Data export** — CSV/JSON download via `/api/export`
 - **Authentication** — session-based login, changeable credentials
-- **Automated backups** — daily SQLite VACUUM INTO backup, keeps last 30, manual trigger via `/api/backup`
-- **Docker** — multi-stage build, docker-compose with SQLite volume
+- **Automated backups** — daily PostgreSQL `pg_dump` backup, keeps last 30, manual trigger via `/api/backup`
 
 ## Architecture
 
 ```
 Next.js 16 (app router, src dir, TypeScript, Tailwind)
 ├─ src/lib/
-│   ├─ db.ts           — SQLite via better-sqlite3 (runs, page_states, endpoints, settings, connectors)
+│   ├─ db.ts           — PostgreSQL via node-postgres (runs, page_states, endpoints, settings, connectors)
 │   ├─ auth.ts         — session-based auth
 │   ├─ poller.ts       — BotCake API polling (60s interval)
 │   ├─ connector-poller.ts — generic REST connector polling
 │   ├─ scheduler.ts    — scheduled refresh + backup + data retention
 │   ├─ sse.ts          — Server-Sent Events broadcast
 │   ├─ botcake.ts      — BotCake API client
-│   ├─ backup.ts       — VACUUM INTO backup with rotation
+│   ├─ backup.ts       — pg_dump backup with rotation
 │   └─ notify.ts       — Slack webhook alerts with dedup
 ├─ src/app/
 │   ├─ (dashboard)/    — protected routes (Overview, Pages, Runs, Settings)
@@ -46,13 +45,11 @@ Next.js 16 (app router, src dir, TypeScript, Tailwind)
 │   └─ api/            — REST API endpoints
 ├─ src/components/     — Client components
 ├─ Dockerfile          — multi-stage standalone build
-├─ docker-compose.yml  — app + SQLite volume
 ├─ ecosystem.config.js — pm2 config
 ├─ Caddyfile           — Caddy reverse proxy template
 └─ scripts/
     ├─ install-service.sh  — systemd service installer
-    ├─ setup-proxy.sh      — Caddy installer + config
-    └─ backup.sh           — cron-ready SQLite backup
+    └─ setup-proxy.sh      — Caddy installer + config
 ```
 
 ## API endpoints
@@ -82,8 +79,9 @@ Next.js 16 (app router, src dir, TypeScript, Tailwind)
 
 | Variable | Purpose |
 |----------|---------|
+| `DATABASE_URL` | PostgreSQL connection string (required, e.g. `postgresql://user@/db`) |
 | `PORT` | Server port, default 3001 |
-| `FB_ACCESS_TOKEN` | Facebook Graph API token (for BotCake page name resolution) |
+| `FB_ACCESS_TOKEN` | Facebook Graph API token (optional, for BotCake page name resolution) |
 
 ## Deployment
 

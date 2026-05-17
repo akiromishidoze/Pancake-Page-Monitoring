@@ -2,9 +2,9 @@
 
 ## High Priority
 
-- [x] **Deploy properly** — Dockerfile + docker-compose (Next.js + SQLite volume)
+- [x] **Deploy properly** — Dockerfile for standalone deployment
 - [x] **Process management** — pm2 ecosystem.config.js, systemd service script (`scripts/install-service.sh`), Caddy reverse proxy with auto SSL (`Caddyfile`, `scripts/setup-proxy.sh`)
-- [x] **Backup the SQLite database** — daily cron or built-in scheduler (`/api/backup`, auto every 24h, keeps last 30)
+- [x] **Backup the database** — daily pg_dump via built-in scheduler (`/api/backup`, auto every 24h, keeps last 30)
 - [x] **Changeable credentials** — "Login Credentials" form in Settings, stores in settings table
 
 ## Medium Priority
@@ -18,4 +18,4 @@
 
 - [x] **Data retention / cleanup** — retention_days setting, auto-prune every 6h in scheduler, manual prune via Settings UI (`DataRetentionSettings` component), `/api/prune` endpoint
 - [x] **Export / CSV download** — `/api/export` (format=csv|json, endpoint_id filter, limit). CSV download link already on per-page detail view
-- [x] **Readme / docs update** — updated to reflect standalone SaaS status with architecture, API docs, deployment guides
+- [x] **Readme / docs update** — updated to reflect standalone SaaS status, PostgreSQL backend, with architecture, API docs, deployment guides

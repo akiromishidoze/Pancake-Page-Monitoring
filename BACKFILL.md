@@ -2,7 +2,7 @@
 
 The built-in platform poller (`src/lib/poller.ts`) automatically refreshes
 monitored platforms (e.g. BotCake) every 60 seconds and persists snapshots
-to the SQLite database.
+to the PostgreSQL database.
 
 If you need to import historical data, POST snapshots to `/api/ingest`
 (authenticated with `X-Api-Key` matching a configured endpoint).
