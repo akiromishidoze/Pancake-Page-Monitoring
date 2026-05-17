@@ -366,15 +366,14 @@ export async function getRecentRuns(limit = 50, endpointId?: string): Promise<Ru
 async function latestGoodRunIds(): Promise<string[]> {
   await ensureMigrated();
   const r = await pool.query(`
-    SELECT run_id FROM runs r1
-    WHERE endpoint_id != 'botcake-platform' AND endpoint_id IS NOT NULL
-    AND (active_pages > 0 OR active_pages IS NULL)
-    AND generated_at = (
-      SELECT MAX(generated_at) FROM runs r2
-      WHERE r2.endpoint_id = r1.endpoint_id
+    SELECT r1.run_id FROM runs r1
+    INNER JOIN (
+      SELECT endpoint_id, MAX(generated_at) AS max_gen
+      FROM runs
+      WHERE endpoint_id != 'botcake-platform' AND endpoint_id IS NOT NULL
       AND (active_pages > 0 OR active_pages IS NULL)
-    )
-    GROUP BY endpoint_id
+      GROUP BY endpoint_id
+    ) r2 ON r1.endpoint_id = r2.endpoint_id AND r1.generated_at = r2.max_gen
   `);
   return (r.rows as { run_id: string }[]).map(r => r.run_id);
 }
