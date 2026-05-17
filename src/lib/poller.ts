@@ -64,6 +64,8 @@ export async function refreshBotCake() {
           state_change: null, activity_kind_change: null,
           is_canary: false,
           response_ms: null, fetch_errors: 0,
+          last_customer_activity_at: null,
+          last_order_at: null,
         });
       } else if (convActive.has(p.page_id)) {
         activePages.push({
@@ -75,6 +77,8 @@ export async function refreshBotCake() {
           state_change: null, activity_kind_change: null,
           is_canary: false,
           response_ms: null, fetch_errors: 0,
+          last_customer_activity_at: convActive.get(p.page_id) ?? null,
+          last_order_at: null,
         });
       } else if (toolsActive.has(p.page_id)) {
         activePages.push({
@@ -86,6 +90,8 @@ export async function refreshBotCake() {
           state_change: null, activity_kind_change: null,
           is_canary: false,
           response_ms: null, fetch_errors: 0,
+          last_customer_activity_at: toolsActive.get(p.page_id) ?? null,
+          last_order_at: null,
         });
       } else {
         inactivePages.push({
@@ -97,6 +103,8 @@ export async function refreshBotCake() {
           state_change: null, activity_kind_change: null,
           is_canary: false,
           response_ms: null, fetch_errors: 0,
+          last_customer_activity_at: null,
+          last_order_at: null,
         });
       }
     }

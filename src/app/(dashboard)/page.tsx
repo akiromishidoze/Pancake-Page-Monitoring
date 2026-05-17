@@ -182,6 +182,7 @@ async function BotCakeSection() {
                     page_name: p.page_name,
                     is_activated: p.is_activated,
                     activation_reason: p.activation_reason,
+                    hours_since_last_customer_activity: p.hours_since_last_customer_activity,
                   }))} />
                 </div>
               </div>

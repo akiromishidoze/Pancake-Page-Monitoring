@@ -318,8 +318,12 @@ export function insertSnapshot(input: InsertSnapshotInput): { inserted: boolean 
         activation_reason: p.activation_reason ?? p.reason ?? null,
         state_change: p.state_change ?? null,
         activity_kind_change: p.activity_kind_change ?? null,
-        hours_since_last_order: null,
-        hours_since_last_customer_activity: null,
+        hours_since_last_order: p.last_order_at
+          ? (new Date(input.generated_at).getTime() - new Date(p.last_order_at).getTime()) / (1000 * 60 * 60)
+          : null,
+        hours_since_last_customer_activity: p.last_customer_activity_at
+          ? (new Date(input.generated_at).getTime() - new Date(p.last_customer_activity_at).getTime()) / (1000 * 60 * 60)
+          : null,
         response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
         fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : null),
         generated_at: input.generated_at,

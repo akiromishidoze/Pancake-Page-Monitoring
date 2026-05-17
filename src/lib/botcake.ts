@@ -73,10 +73,10 @@ async function getBotCakePageTokens(userToken: string): Promise<Map<string, stri
   return tokens;
 }
 
-let _conversationCache: Map<string, { hasConversations: boolean; checkedAt: number }> = new Map();
+let _conversationCache: Map<string, { hasConversations: boolean; lastActivityAt: string | null; checkedAt: number }> = new Map();
 
-export async function checkBotCakeConversations(pageIds: string[], userToken: string): Promise<Set<string>> {
-  const result = new Set<string>();
+export async function checkBotCakeConversations(pageIds: string[], userToken: string): Promise<Map<string, string | null>> {
+  const result = new Map<string, string | null>();
   const tokens = await getBotCakePageTokens(userToken);
   if (tokens.size === 0) return result;
 
@@ -88,7 +88,10 @@ export async function checkBotCakeConversations(pageIds: string[], userToken: st
     const c = _conversationCache.get(id);
     return c && Date.now() - c.checkedAt <= CONVERSATION_CACHE_TTL && c.hasConversations;
   });
-  for (const id of cached) result.add(id);
+  for (const id of cached) {
+    const c = _conversationCache.get(id)!;
+    result.set(id, c.lastActivityAt);
+  }
 
   if (needsCheck.length === 0) return result;
 
@@ -98,7 +101,7 @@ export async function checkBotCakeConversations(pageIds: string[], userToken: st
     await Promise.all(batch.map(async (pageId) => {
       const token = tokens.get(pageId);
       if (!token) {
-        _conversationCache.set(pageId, { hasConversations: false, checkedAt: Date.now() });
+        _conversationCache.set(pageId, { hasConversations: false, lastActivityAt: null, checkedAt: Date.now() });
         return;
       }
       try {
@@ -107,15 +110,22 @@ export async function checkBotCakeConversations(pageIds: string[], userToken: st
           timeout: 10_000,
         });
         if (r.ok) {
-          const data = await r.json() as unknown[];
+          const data = await r.json() as Record<string, unknown>[];
           const hasConversations = Array.isArray(data) && data.length > 0;
-          _conversationCache.set(pageId, { hasConversations, checkedAt: Date.now() });
-          if (hasConversations) result.add(pageId);
+          let lastActivityAt: string | null = null;
+          if (hasConversations) {
+            for (const item of data) {
+              const ts = (item as Record<string, unknown>).created_at ?? (item as Record<string, unknown>).updated_at ?? null;
+              if (typeof ts === 'string' && (!lastActivityAt || ts > lastActivityAt)) lastActivityAt = ts;
+            }
+          }
+          _conversationCache.set(pageId, { hasConversations, lastActivityAt, checkedAt: Date.now() });
+          if (hasConversations) result.set(pageId, lastActivityAt);
         } else {
-          _conversationCache.set(pageId, { hasConversations: false, checkedAt: Date.now() });
+          _conversationCache.set(pageId, { hasConversations: false, lastActivityAt: null, checkedAt: Date.now() });
         }
       } catch {
-        _conversationCache.set(pageId, { hasConversations: false, checkedAt: Date.now() });
+        _conversationCache.set(pageId, { hasConversations: false, lastActivityAt: null, checkedAt: Date.now() });
       }
     }));
   }
@@ -125,10 +135,10 @@ export async function checkBotCakeConversations(pageIds: string[], userToken: st
 
 // ──── Deeper probe: tools + flows for pages without conversations ────
 
-let _toolsFlowsCache = new Map<string, { hasToolsOrFlows: boolean; checkedAt: number }>();
+let _toolsFlowsCache = new Map<string, { hasToolsOrFlows: boolean; lastActivityAt: string | null; checkedAt: number }>();
 
-export async function checkBotCakeToolsFlows(pageIds: string[], userToken: string): Promise<Set<string>> {
-  const result = new Set<string>();
+export async function checkBotCakeToolsFlows(pageIds: string[], userToken: string): Promise<Map<string, string | null>> {
+  const result = new Map<string, string | null>();
   const tokens = await getBotCakePageTokens(userToken);
   if (tokens.size === 0) return result;
 
@@ -140,7 +150,10 @@ export async function checkBotCakeToolsFlows(pageIds: string[], userToken: strin
     const c = _toolsFlowsCache.get(id);
     return c && Date.now() - c.checkedAt <= CONVERSATION_CACHE_TTL && c.hasToolsOrFlows;
   });
-  for (const id of cached) result.add(id);
+  for (const id of cached) {
+    const c = _toolsFlowsCache.get(id)!;
+    result.set(id, c.lastActivityAt);
+  }
 
   if (needsCheck.length === 0) return result;
 
@@ -150,7 +163,7 @@ export async function checkBotCakeToolsFlows(pageIds: string[], userToken: strin
     await Promise.all(batch.map(async (pageId) => {
       const token = tokens.get(pageId);
       if (!token) {
-        _toolsFlowsCache.set(pageId, { hasToolsOrFlows: false, checkedAt: Date.now() });
+        _toolsFlowsCache.set(pageId, { hasToolsOrFlows: false, lastActivityAt: null, checkedAt: Date.now() });
         return;
       }
       try {
@@ -163,24 +176,37 @@ export async function checkBotCakeToolsFlows(pageIds: string[], userToken: strin
           }),
         ]);
         let hasToolsOrFlows = false;
+        let lastActivityAt: string | null = null;
 
         if (toolsRes.ok) {
-          const tData = await toolsRes.json() as { success?: boolean; data?: { is_published?: boolean }[] };
+          const tData = await toolsRes.json() as { success?: boolean; data?: Record<string, unknown>[] };
           if (tData.success && Array.isArray(tData.data)) {
-            hasToolsOrFlows = tData.data.some(t => t.is_published === true);
+            for (const tool of tData.data) {
+              if (tool.is_published === true) {
+                hasToolsOrFlows = true;
+                const ts = (tool as Record<string, unknown>).updated_at ?? null;
+                if (typeof ts === 'string' && (!lastActivityAt || ts > lastActivityAt)) lastActivityAt = ts;
+              }
+            }
           }
         }
         if (!hasToolsOrFlows && flowsRes.ok) {
-          const fData = await flowsRes.json() as { success?: boolean; data?: { flows?: { is_removed?: boolean }[] } };
+          const fData = await flowsRes.json() as { success?: boolean; data?: { flows?: Record<string, unknown>[] } };
           if (fData.success && fData.data?.flows) {
-            hasToolsOrFlows = fData.data.flows.some(f => f.is_removed === false);
+            for (const flow of fData.data.flows) {
+              if (flow.is_removed === false) {
+                hasToolsOrFlows = true;
+                const ts = (flow as Record<string, unknown>).updated_at ?? null;
+                if (typeof ts === 'string' && (!lastActivityAt || ts > lastActivityAt)) lastActivityAt = ts;
+              }
+            }
           }
         }
 
-        _toolsFlowsCache.set(pageId, { hasToolsOrFlows, checkedAt: Date.now() });
-        if (hasToolsOrFlows) result.add(pageId);
+        _toolsFlowsCache.set(pageId, { hasToolsOrFlows, lastActivityAt, checkedAt: Date.now() });
+        if (hasToolsOrFlows) result.set(pageId, lastActivityAt);
       } catch {
-        _toolsFlowsCache.set(pageId, { hasToolsOrFlows: false, checkedAt: Date.now() });
+        _toolsFlowsCache.set(pageId, { hasToolsOrFlows: false, lastActivityAt: null, checkedAt: Date.now() });
       }
     }));
   }

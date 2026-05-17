@@ -8,7 +8,20 @@ type BotCakePage = {
   page_name: string | null;
   is_activated: number | null;
   activation_reason: string | null;
+  hours_since_last_customer_activity: number | null;
 };
+
+function formatRelativeTime(hours: number): string {
+  if (hours < 1) {
+    const mins = Math.round(hours * 60);
+    return `${mins}m ago`;
+  }
+  if (hours < 24) {
+    return `${Math.round(hours)}h ago`;
+  }
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
+}
 
 export function BotCakePageList({ pages }: { pages: BotCakePage[] }) {
   const [query, setQuery] = useState('');
@@ -64,37 +77,45 @@ export function BotCakePageList({ pages }: { pages: BotCakePage[] }) {
               <th className="px-2 py-1">ID</th>
               <th className="px-2 py-1">Status</th>
               <th className="px-2 py-1">Override</th>
+              <th className="px-2 py-1">Last Activity</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800">
-            {filtered.map(p => (
-              <tr key={p.page_id} className="hover:bg-slate-800/30">
-                <td className="px-2 py-1 text-slate-100">
-                  <Link href={`/pages/${p.page_id}`} className="hover:underline">{p.page_name ?? p.page_id}</Link>
-                </td>
-                <td className="px-2 py-1 text-slate-500 font-mono">{p.page_id}</td>
-                <td className={`px-2 py-1 font-mono ${p.is_activated === 1 ? 'text-green-400' : 'text-red-400'}`}>
-                  {p.is_activated === 1 ? 'active' : p.activation_reason ?? 'inactive'}
-                  {overrides.has(p.page_id) && <span className="ml-1 text-yellow-400">*</span>}
-                </td>
-                <td className="px-2 py-1">
-                  <button
-                    onClick={() => handleOverride(p.page_id, p.is_activated === 1)}
-                    disabled={overriding === p.page_id}
-                    className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${
-                      p.is_activated === 1
-                        ? 'bg-red-900/50 text-red-300 hover:bg-red-800/50'
-                        : 'bg-green-900/50 text-green-300 hover:bg-green-800/50'
-                    } disabled:opacity-50`}
-                  >
-                    {overriding === p.page_id ? '...' : p.is_activated === 1 ? 'Deactivate' : 'Activate'}
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {filtered.map(p => {
+              const hours = p.hours_since_last_customer_activity;
+              const lastActivity = hours !== null && hours !== undefined
+                ? formatRelativeTime(hours)
+                : '—';
+              return (
+                <tr key={p.page_id} className="hover:bg-slate-800/30">
+                  <td className="px-2 py-1 text-slate-100">
+                    <Link href={`/pages/${p.page_id}`} className="hover:underline">{p.page_name ?? p.page_id}</Link>
+                  </td>
+                  <td className="px-2 py-1 text-slate-500 font-mono">{p.page_id}</td>
+                  <td className={`px-2 py-1 font-mono ${p.is_activated === 1 ? 'text-green-400' : 'text-red-400'}`}>
+                    {p.is_activated === 1 ? 'active' : p.activation_reason ?? 'inactive'}
+                    {overrides.has(p.page_id) && <span className="ml-1 text-yellow-400">*</span>}
+                  </td>
+                  <td className="px-2 py-1">
+                    <button
+                      onClick={() => handleOverride(p.page_id, p.is_activated === 1)}
+                      disabled={overriding === p.page_id}
+                      className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${
+                        p.is_activated === 1
+                          ? 'bg-red-900/50 text-red-300 hover:bg-red-800/50'
+                          : 'bg-green-900/50 text-green-300 hover:bg-green-800/50'
+                      } disabled:opacity-50`}
+                    >
+                      {overriding === p.page_id ? '...' : p.is_activated === 1 ? 'Deactivate' : 'Activate'}
+                    </button>
+                  </td>
+                  <td className="px-2 py-1 text-slate-400 font-mono">{lastActivity}</td>
+                </tr>
+              );
+            })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-2 py-4 text-center text-slate-500">No pages match &quot;{query}&quot;</td>
+                <td colSpan={5} className="px-2 py-4 text-center text-slate-500">No pages match &quot;{query}&quot;</td>
               </tr>
             )}
           </tbody>
