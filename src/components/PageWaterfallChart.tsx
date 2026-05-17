@@ -10,7 +10,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { SlimPage } from '@/lib/receiver';
+import { SlimPage } from '@/lib/db';
 
 interface PageWaterfallChartProps {
   activePages: SlimPage[];

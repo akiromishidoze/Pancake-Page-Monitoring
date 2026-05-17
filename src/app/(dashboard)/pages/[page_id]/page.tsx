@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { ActiveDonutChart } from '@/components/ActiveDonutChart';
 import { PageWaterfallChart } from '@/components/PageWaterfallChart';
-import type { SlimPage } from '@/lib/receiver';
+import type { SlimPage } from '@/lib/db';
 
 function formatDurationSeconds(sec: number) {
   if (sec <= 0) return '0s';
