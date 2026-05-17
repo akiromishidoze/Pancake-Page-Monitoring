@@ -61,9 +61,18 @@ async function PancakeSection({ endpointId }: { endpointId?: string }) {
     };
   }))).filter(Boolean) as { label: string; data: { time: string; active: number; inactive: number; total: number }[] }[];
 
+  const exportHref = endpointId
+    ? `/api/export?format=csv&endpoint_id=${encodeURIComponent(endpointId)}`
+    : '/api/export?format=csv';
+
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
-      <h3 className="text-lg font-semibold text-slate-200 mb-4">Pancake Platform</h3>
+      <div className="flex items-center gap-2 mb-4">
+        <h3 className="text-lg font-semibold text-slate-200">Pancake Platform</h3>
+        <a href={exportHref} className="ml-auto rounded px-2 py-0.5 text-xs font-medium bg-slate-800 text-slate-400 hover:bg-slate-700 transition-colors">
+          Export CSV
+        </a>
+      </div>
       <p className="text-xs text-slate-400 mb-4">
         {allPages.length} pages across {shopBreakdown.length} shops. Activity kind data requires n8n monitoring.
       </p>
