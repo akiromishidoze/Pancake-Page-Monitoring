@@ -12,6 +12,12 @@ export function startScheduler() {
   _started = true;
   console.log('[scheduler] starting; polling interval =', SCHEDULER_POLL_MS, 'ms');
 
+  // Ensure a retention policy is set by default
+  if (!getSetting('retention_days')) {
+    setSetting('retention_days', '90');
+    console.log('[scheduler] default retention_days set to 90');
+  }
+
   setInterval(() => {
     checkAndRun().catch(err => console.error('[scheduler] Error in checkAndRun:', err));
   }, SCHEDULER_POLL_MS);
@@ -47,9 +53,7 @@ async function checkPrune() {
   const now = Date.now();
   if (now - lastMs < PRUNE_INTERVAL_MS) return;
 
-  const retentionStr = getSetting('retention_days');
-  if (!retentionStr) return;
-
+  const retentionStr = getSetting('retention_days') || '90';
   const retentionDays = parseInt(retentionStr, 10);
   if (isNaN(retentionDays) || retentionDays <= 0) return;
 
