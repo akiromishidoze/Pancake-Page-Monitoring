@@ -23,10 +23,10 @@ function formatRelativeTime(hours: number): string {
   return `${days}d ago`;
 }
 
-export function BotCakePageList({ pages }: { pages: BotCakePage[] }) {
+export function BotCakePageList({ pages, overrideIds = [] }: { pages: BotCakePage[]; overrideIds?: string[] }) {
   const [query, setQuery] = useState('');
   const [overriding, setOverriding] = useState<string | null>(null);
-  const [overrides, setOverrides] = useState<Set<string>>(new Set());
+  const [overrides, setOverrides] = useState<Set<string>>(new Set(overrideIds));
 
   const handleOverride = useCallback(async (pageId: string, isActive: boolean) => {
     setOverriding(pageId);
@@ -38,6 +38,22 @@ export function BotCakePageList({ pages }: { pages: BotCakePage[] }) {
       });
       if (res.ok) {
         setOverrides(prev => new Set(prev).add(pageId));
+      }
+    } finally {
+      setOverriding(null);
+    }
+  }, []);
+
+  const handleClear = useCallback(async (pageId: string) => {
+    setOverriding(pageId);
+    try {
+      const res = await fetch('/api/botcake-override', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ page_id: pageId, remove: true }),
+      });
+      if (res.ok) {
+        setOverrides(prev => { const next = new Set(prev); next.delete(pageId); return next; });
       }
     } finally {
       setOverriding(null);
@@ -97,17 +113,27 @@ export function BotCakePageList({ pages }: { pages: BotCakePage[] }) {
                     {overrides.has(p.page_id) && <span className="ml-1 text-yellow-400">*</span>}
                   </td>
                   <td className="px-2 py-1">
-                    <button
-                      onClick={() => handleOverride(p.page_id, p.is_activated === 1)}
-                      disabled={overriding === p.page_id}
-                      className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${
-                        p.is_activated === 1
-                          ? 'bg-red-900/50 text-red-300 hover:bg-red-800/50'
-                          : 'bg-green-900/50 text-green-300 hover:bg-green-800/50'
-                      } disabled:opacity-50`}
-                    >
-                      {overriding === p.page_id ? '...' : p.is_activated === 1 ? 'Deactivate' : 'Activate'}
-                    </button>
+                    {overrides.has(p.page_id) ? (
+                      <button
+                        onClick={() => handleClear(p.page_id)}
+                        disabled={overriding === p.page_id}
+                        className="rounded px-2 py-0.5 text-xs font-medium transition-colors bg-yellow-900/50 text-yellow-300 hover:bg-yellow-800/50 disabled:opacity-50"
+                      >
+                        {overriding === p.page_id ? '...' : 'Clear'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleOverride(p.page_id, p.is_activated === 1)}
+                        disabled={overriding === p.page_id}
+                        className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${
+                          p.is_activated === 1
+                            ? 'bg-red-900/50 text-red-300 hover:bg-red-800/50'
+                            : 'bg-green-900/50 text-green-300 hover:bg-green-800/50'
+                        } disabled:opacity-50`}
+                      >
+                        {overriding === p.page_id ? '...' : p.is_activated === 1 ? 'Deactivate' : 'Activate'}
+                      </button>
+                    )}
                   </td>
                   <td className="px-2 py-1 text-slate-400 font-mono">{lastActivity}</td>
                 </tr>

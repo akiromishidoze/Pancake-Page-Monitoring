@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getLatestRun, getRunCount, getSetting, listEndpoints, getEndpoint, getLatestPageStates, getRecentRuns, getRunHistory, type PageStateRow } from '@/lib/db';
+import { getLatestRun, getRunCount, getSetting, listEndpoints, getEndpoint, getLatestPageStates, getRecentRuns, getRunHistory, getBotCakeOverrides, type PageStateRow } from '@/lib/db';
 import { StatusCard } from '@/components/StatusCard';
 import { RunNowButton } from '@/components/RunNowButton';
 import { RunStatusIndicator } from '@/components/RunStatusIndicator';
@@ -116,6 +116,7 @@ async function PancakeSection({ endpointId }: { endpointId?: string }) {
 async function BotCakeSection() {
   const pages = getLatestPageStates('botcake-platform');
   if (pages.length === 0) return null;
+  const overrideIds = [...getBotCakeOverrides().keys()];
 
   const activeCount = pages.filter(p => p.is_activated === 1).length;
   const inactiveCount = pages.filter(p => p.is_activated !== 1).length;
@@ -183,7 +184,7 @@ async function BotCakeSection() {
                     is_activated: p.is_activated,
                     activation_reason: p.activation_reason,
                     hours_since_last_customer_activity: p.hours_since_last_customer_activity,
-                  }))} />
+                  }))} overrideIds={overrideIds} />
                 </div>
               </div>
             </div>
