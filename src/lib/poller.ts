@@ -183,6 +183,7 @@ export async function refreshBotCake() {
     });
 
     if (result.inserted) {
+      setSetting('poller_ok_botcake-platform', Date.now().toString());
       const pa = activePages.filter(p => p.activation_reason === 'pancake-activity').length;
       const hc = activePages.filter(p => p.activation_reason === 'has-conversations').length;
       const ht = activePages.filter(p => p.activation_reason === 'has-tools').length;
@@ -326,6 +327,7 @@ async function refreshPancake() {
     });
 
     if (result.inserted) {
+      setSetting(`poller_ok_${ep.id}`, Date.now().toString());
       console.log(`[poller] pancake ${ep.name}: ${activePages.length} active / ${inactivePages.length} inactive (${shop.pages.length} total), run ${runId}`);
       broadcastSSE('refresh', JSON.stringify({ source: 'pancake-poller', run_id: runId, endpoint_id: ep.id }));
     }
