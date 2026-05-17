@@ -12,13 +12,12 @@ export async function ensureCredentials(): Promise<void> {
   const existing = await getSetting('auth_password');
   if (existing) return;
 
-  const password = crypto.randomUUID().slice(0, 16);
   await setSetting('auth_email', DEFAULT_EMAIL);
-  await setSetting('auth_password', password);
+  await setSetting('auth_password', DEFAULT_PASSWORD);
   console.log('═══════════════════════════════════════');
   console.log('  First-time setup: default credentials');
   console.log(`  Email:    ${DEFAULT_EMAIL}`);
-  console.log(`  Password: ${password}`);
+  console.log(`  Password: ${DEFAULT_PASSWORD}`);
   console.log('  Change them in Settings > Change Password');
   console.log('═══════════════════════════════════════');
 }

@@ -4,12 +4,17 @@ import { parse } from 'pg-connection-string';
 const connectionString = process.env.DATABASE_URL || '';
 const parsed = parse(connectionString);
 const pool = new Pool({
-  host: parsed.host || undefined,
+  host: parsed.host || '/var/run/postgresql',
   port: parsed.port ? parseInt(String(parsed.port), 10) : undefined,
   database: parsed.database || undefined,
-  user: parsed.user || undefined,
+  user: parsed.user || process.env.USER || undefined,
   password: parsed.password || undefined,
   ssl: parsed.ssl === true || parsed.ssl === 'true' ? { rejectUnauthorized: false } : (parsed.ssl ? { rejectUnauthorized: false } : undefined),
+});
+
+// Log connection errors without crashing
+pool.on('error', (err) => {
+  console.error('[db] unexpected pool error:', err.message);
 });
 export { pool };
 
