@@ -89,6 +89,9 @@ export function RunNowButton() {
       setTimeout(() => {
         startTransition(() => router.refresh());
       }, 10_000);
+      setTimeout(() => {
+        setStatus({ phase: 'idle' });
+      }, 30_000);
     } catch (e) {
       setStatus({
         phase: 'error',
