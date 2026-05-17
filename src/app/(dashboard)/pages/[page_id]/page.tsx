@@ -414,6 +414,7 @@ export default async function Page({
                 <th className="px-3 py-2">Timestamp</th>
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2">Activity</th>
+                <th className="px-3 py-2">Customers</th>
                 <th className="px-3 py-2">Shop</th>
                 <th className="px-3 py-2">Reason</th>
               </tr>
@@ -430,6 +431,7 @@ export default async function Page({
                     )}
                   </td>
                   <td className="px-3 py-2 text-slate-200">{r.activity_kind ?? '—'}</td>
+                  <td className="px-3 py-2 text-slate-400 font-mono">{r.customer_count ?? '—'}</td>
                   <td className="px-3 py-2 text-slate-200">{r.shop_label ?? '—'}</td>
                   <td className="px-3 py-2 text-slate-400">{r.activation_reason ?? r.state_change ?? '—'}</td>
                 </tr>

@@ -117,6 +117,8 @@ async function BotCakeSection() {
   const pages = getLatestPageStates('botcake-platform');
   if (pages.length === 0) return null;
   const overrideIds = [...getBotCakeOverrides().keys()];
+  const latestRun = getLatestRun('botcake-platform');
+  const apiHealthy = latestRun && latestRun.heartbeat_ok === 1 && !latestRun.outage_suspected;
 
   const activeCount = pages.filter(p => p.is_activated === 1).length;
   const inactiveCount = pages.filter(p => p.is_activated !== 1).length;
@@ -143,7 +145,15 @@ async function BotCakeSection() {
 
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
-      <h3 className="text-lg font-semibold text-slate-200 mb-4">BotCake Platform</h3>
+      <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center gap-2">
+          <span className={`inline-block w-2 h-2 rounded-full ${apiHealthy ? 'bg-green-500' : 'bg-red-500'}`} title={apiHealthy ? 'API healthy' : 'API degraded'} />
+          <h3 className="text-lg font-semibold text-slate-200">BotCake Platform</h3>
+        </div>
+        <a href="/api/botcake-export" className="ml-auto rounded px-2 py-0.5 text-xs font-medium bg-slate-800 text-slate-400 hover:bg-slate-700 transition-colors">
+          Export CSV
+        </a>
+      </div>
       <p className="text-xs text-slate-400 mb-4">
         {pages.length} pages monitored via BotCake API. Active = has Pancake orders OR has BotCake conversations OR has tools/flows configured. Inactive = none.
       </p>
