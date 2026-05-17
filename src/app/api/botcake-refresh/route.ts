@@ -1,9 +1,6 @@
-// POST /api/botcake-refresh — triggered by scheduler/webhook to fetch BotCake data and store in DB
-// GET  /api/botcake-refresh?key=<api_key> — convenience for cron/curl
-
 import { NextResponse } from 'next/server';
-import { getEndpointByApiKey, insertSnapshot } from '@/lib/db';
-import { fetchBotCakePages } from '@/lib/botcake';
+import { getEndpointByApiKey, getLatestRun } from '@/lib/db';
+import { refreshBotCake } from '@/lib/poller';
 import { cors, corsOptions } from '@/lib/cors';
 
 async function handler(apiKey: string | null) {
@@ -16,61 +13,16 @@ async function handler(apiKey: string | null) {
     return cors(NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 }));
   }
 
-  if (!endpoint.access_token) {
-    return cors(NextResponse.json({ ok: false, error: 'BotCake endpoint has no access_token configured' }, { status: 400 }));
-  }
+  await refreshBotCake();
 
-  const pages = await fetchBotCakePages(endpoint.access_token);
-  const runId = `botcake_refresh_${Date.now()}`;
-  const now = new Date().toISOString();
-
-  const activePages = pages.map((p) => ({
-    page_id: p.page_id,
-    id: p.page_id,
-    name: p.name,
-    shop_label: null as string | null,
-    shop: null as string | null,
-    activity_kind: null as string | null,
-    kind: null as string | null,
-    is_activated: true,
-    is_canary: false,
-    activation_reason: null as string | null,
-    reason: null as string | null,
-    state_change: null as string | null,
-    activity_kind_change: null as string | null,
-    last_order_at: null as string | null,
-    last_customer_activity_at: null as string | null,
-    response_ms: null as number | null,
-    fetch_errors: 0,
-  }));
-
-  const result = insertSnapshot({
-    run_id: runId,
-    endpoint_id: 'botcake-platform',
-    generated_at: now,
-    heartbeat_ok: true,
-    run_quality: 'full',
-    severity: null,
-    canary_status: 'ok',
-    canary_alert: false,
-    outage_suspected: false,
-    alert_count: 0,
-    rule_version: null,
-    in_maintenance_window: false,
-    total_pages: pages.length,
-    active_pages_count: pages.length,
-    inactive_pages_count: 0,
-    receiver_sd_size_bytes: null,
-    raw_summary: { source: 'botcake-refresh', page_count: pages.length },
-    active_pages: activePages,
-    inactive_pages: [],
-  });
-
+  const latest = getLatestRun('botcake-platform');
   return cors(NextResponse.json({
     ok: true,
-    run_id: runId,
-    pages: pages.length,
-    inserted: result.inserted,
+    run_id: latest?.run_id ?? null,
+    pages: latest?.total_pages ?? 0,
+    active: latest?.active_pages ?? 0,
+    inactive: latest?.inactive_pages ?? 0,
+    summary: latest?.raw_summary ? JSON.parse(latest.raw_summary) : null,
   }));
 }
 

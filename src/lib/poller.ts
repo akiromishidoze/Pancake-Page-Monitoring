@@ -25,7 +25,7 @@ export async function refreshAll() {
 
 const ALERT_DROP_THRESHOLD_PCT = 0.50;
 
-async function refreshBotCake() {
+export async function refreshBotCake() {
   const now = Date.now();
   if (now - _botcakeLastRefresh < POLL_INTERVAL_MS) return;
   _botcakeLastRefresh = now;
