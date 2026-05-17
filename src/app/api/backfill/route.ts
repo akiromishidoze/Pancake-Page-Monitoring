@@ -4,8 +4,10 @@ import { requireApiAuth } from '@/lib/auth';
 
 export async function GET() {
   const auth = await requireApiAuth(); if (auth) return auth;
-  const runCount = getRunCount();
-  const lastBackfill = getSetting('last_backfill_at');
+  const [runCount, lastBackfill] = await Promise.all([
+    getRunCount(),
+    getSetting('last_backfill_at'),
+  ]);
 
   return NextResponse.json({
     ok: true,

@@ -4,7 +4,7 @@ import { requireApiAuth } from '@/lib/auth';
 
 export async function GET() {
   const auth = await requireApiAuth(); if (auth) return auth;
-  const connectors = listPlatformConnectors();
+  const connectors = await listPlatformConnectors();
   return NextResponse.json({ ok: true, connectors });
 }
 
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: 'name, platform_type, and api_url are required' }, { status: 400 });
   }
 
-  const connector = upsertPlatformConnector({
+  const connector = await upsertPlatformConnector({
     id: (body.id as string) || undefined,
     name: body.name as string,
     platform_type: body.platform_type as string,

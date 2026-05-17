@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/db';
+import { pool } from '@/lib/db';
 
 const API_BASE = 'https://botcake.io/api/public_api/v1';
 const FB_ID = '104533988952572';
@@ -294,9 +294,8 @@ export async function fetchBotCakePages(token: string): Promise<BotCakePage[]> {
     }
   }
 
-  const db = getDb();
-  const placeholders = ids.map(() => '?').join(',');
-  const known = db.prepare(`SELECT DISTINCT page_id, page_name FROM page_states WHERE page_id IN (${placeholders})`).all(...ids) as { page_id: string; page_name: string }[];
+  const placeholders = ids.map((_, i) => `$${i + 1}`).join(',');
+  const known = (await pool.query(`SELECT DISTINCT page_id, page_name FROM page_states WHERE page_id IN (${placeholders})`, ids)).rows as { page_id: string; page_name: string }[];
   for (const r of known) {
     if (!nameMap.has(r.page_id) && r.page_name) {
       nameMap.set(r.page_id, r.page_name);

@@ -8,7 +8,7 @@ import { requireApiAuth } from '@/lib/auth';
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireApiAuth(); if (auth) return auth;
   const { id } = await params;
-  const existing = getEndpoint(id);
+  const existing = await getEndpoint(id);
   if (!existing) {
     return NextResponse.json({ ok: false, error: 'Endpoint not found' }, { status: 404 });
   }
@@ -20,7 +20,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const endpoint = upsertEndpoint({
+  const endpoint = await upsertEndpoint({
     id,
     name: (body.name as string) ?? existing.name,
     url: body.url !== undefined ? (body.url as string) : existing.url,
@@ -36,11 +36,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireApiAuth(); if (auth) return auth;
   const { id } = await params;
-  const existing = getEndpoint(id);
+  const existing = await getEndpoint(id);
   if (!existing) {
     return NextResponse.json({ ok: false, error: 'Endpoint not found' }, { status: 404 });
   }
 
-  deleteEndpoint(id);
+  await deleteEndpoint(id);
   return NextResponse.json({ ok: true });
 }

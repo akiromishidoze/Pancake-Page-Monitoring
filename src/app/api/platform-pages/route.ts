@@ -6,7 +6,7 @@ export async function GET(req: Request) {
   const auth = await requireApiAuth(); if (auth) return auth;
   const url = new URL(req.url);
   const endpointId = url.searchParams.get('endpoint_id') || undefined;
-  const pages = listPlatformPages(endpointId);
+  const pages = await listPlatformPages(endpointId);
   return NextResponse.json({ ok: true, pages });
 }
 
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: 'endpoint_id and page_name are required' }, { status: 400 });
   }
 
-  const page = upsertPlatformPage({
+  const page = await upsertPlatformPage({
     endpoint_id: body.endpoint_id as string,
     page_name: body.page_name as string,
     page_url: (body.page_url as string) || null,

@@ -6,7 +6,8 @@ import { ConnectorsSettings } from '@/components/ConnectorsSettings';
 import { DataRetentionSettings } from '@/components/DataRetentionSettings';
 
 export default async function SettingsPage() {
-  const endpoints = listEndpoints().map((e) => ({
+  const allEndpoints = await listEndpoints();
+  const endpoints = allEndpoints.map((e) => ({
     id: e.id,
     name: e.name,
     url: e.url,

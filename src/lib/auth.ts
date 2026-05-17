@@ -5,17 +5,16 @@ const DEFAULT_EMAIL = 'admin';
 const DEFAULT_PASSWORD = 'admin'; // fallback only; replaced on first boot
 let _credsInitialized = false;
 
-export function ensureCredentials(): void {
+export async function ensureCredentials(): Promise<void> {
   if (_credsInitialized) return;
   _credsInitialized = true;
 
-  const existing = getSetting('auth_password');
+  const existing = await getSetting('auth_password');
   if (existing) return;
 
   const password = crypto.randomUUID().slice(0, 16);
-  setSetting('auth_email', DEFAULT_EMAIL);
-  setSetting('auth_password', password);
-  // Only log on first boot in development; store permanently
+  await setSetting('auth_email', DEFAULT_EMAIL);
+  await setSetting('auth_password', password);
   console.log('═══════════════════════════════════════');
   console.log('  First-time setup: default credentials');
   console.log(`  Email:    ${DEFAULT_EMAIL}`);
@@ -24,33 +23,33 @@ export function ensureCredentials(): void {
   console.log('═══════════════════════════════════════');
 }
 
-export function validateCredentials(email: string, password: string): boolean {
-  const storedEmail = getSetting('auth_email') || DEFAULT_EMAIL;
-  const storedPassword = getSetting('auth_password') || DEFAULT_PASSWORD;
+export async function validateCredentials(email: string, password: string): Promise<boolean> {
+  const storedEmail = (await getSetting('auth_email')) || DEFAULT_EMAIL;
+  const storedPassword = (await getSetting('auth_password')) || DEFAULT_PASSWORD;
   return email === storedEmail && password === storedPassword;
 }
 
-export function createSession(): string {
+export async function createSession(): Promise<string> {
   const token = crypto.randomUUID();
-  setSetting('session_token', token);
+  await setSetting('session_token', token);
   return token;
 }
 
-export function validateSession(token: string | null | undefined): boolean {
+export async function validateSession(token: string | null | undefined): Promise<boolean> {
   if (!token) return false;
-  const stored = getSetting('session_token');
+  const stored = await getSetting('session_token');
   return stored === token;
 }
 
-export function clearSession(): void {
-  setSetting('session_token', '');
+export async function clearSession(): Promise<void> {
+  await setSetting('session_token', '');
 }
 
 export async function requireApiAuth(): Promise<NextResponse | null> {
   const { cookies } = await import('next/headers');
   const cookieStore = await cookies();
   const session = cookieStore.get('session')?.value;
-  if (!validateSession(session)) {
+  if (!(await validateSession(session))) {
     return NextResponse.json({ ok: false, error: 'Not authenticated' }, { status: 401 });
   }
   return null;

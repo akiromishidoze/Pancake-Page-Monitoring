@@ -1,55 +1,41 @@
-// SQLite client for the dashboard. File lives at ./data/monitor.sqlite.
-// Schema is migrated on first import (idempotent).
-//
-// Tables:
-//   endpoints   — configured data sources (name, API key, expiration, etc.)
-//   runs        — one row per snapshot received from any endpoint
-//   page_states — one row per (run × page) for fast per-page queries
+import { Pool } from 'pg';
 
-import Database from 'better-sqlite3';
-import path from 'path';
-import fs from 'fs';
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+export { pool };
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-const DB_PATH = path.join(DATA_DIR, 'monitor.sqlite');
+// ──── SQL helper: convert @name params to $1, $2 positional ──────────
 
-// Ensure data dir exists
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-
-let _db: Database.Database | null = null;
-
-export function getDb(): Database.Database {
-  if (_db) return _db;
-  _db = new Database(DB_PATH);
-  _db.pragma('journal_mode = WAL');
-  _db.pragma('synchronous = NORMAL');
-  _db.pragma('foreign_keys = ON');
-  migrate(_db);
-  return _db;
+function q(sql: string, params?: Record<string, unknown>): { text: string; values: unknown[] } {
+  if (!params) return { text: sql, values: [] };
+  const values: unknown[] = [];
+  let idx = 0;
+  const text = sql.replace(/@(\w+)/g, (_, key) => {
+    idx++;
+    values.push(params[key] ?? null);
+    return `$${idx}`;
+  });
+  return { text, values };
 }
 
-function migrate(db: Database.Database) {
-  // Migrate existing database: add endpoint_id column if missing
-  try {
-    db.exec(`ALTER TABLE runs ADD COLUMN endpoint_id TEXT REFERENCES endpoints(id) ON DELETE SET NULL`);
-  } catch {
-    // column already exists
-  }
-  try {
-    db.exec(`ALTER TABLE endpoints ADD COLUMN access_token TEXT`);
-  } catch {
-    // column already exists
-  }
-  try {
-    db.exec(`ALTER TABLE endpoints ADD COLUMN shop_label TEXT`);
-  } catch {
-    // column already exists
-  }
+// ──── Schema ──────────────────────────────────────────────────────────
 
-  db.exec(`
+async function migrate() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS endpoints (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      url TEXT,
+      api_key TEXT NOT NULL,
+      access_token TEXT,
+      shop_label TEXT,
+      token_expires_at TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      last_used_at TEXT
+    );
     CREATE TABLE IF NOT EXISTS runs (
       run_id TEXT PRIMARY KEY,
-      endpoint_id TEXT,
+      endpoint_id TEXT REFERENCES endpoints(id) ON DELETE SET NULL,
       generated_at TEXT NOT NULL,
       received_at TEXT NOT NULL,
       heartbeat_ok INTEGER,
@@ -65,15 +51,13 @@ function migrate(db: Database.Database) {
       active_pages INTEGER,
       inactive_pages INTEGER,
       receiver_sd_size_bytes INTEGER,
-      raw_summary TEXT,
-      FOREIGN KEY (endpoint_id) REFERENCES endpoints(id) ON DELETE SET NULL
+      raw_summary TEXT
     );
     CREATE INDEX IF NOT EXISTS runs_endpoint_id_idx ON runs(endpoint_id);
     CREATE INDEX IF NOT EXISTS runs_generated_at_idx ON runs(generated_at DESC);
-
     CREATE TABLE IF NOT EXISTS page_states (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      run_id TEXT NOT NULL,
+      id SERIAL PRIMARY KEY,
+      run_id TEXT NOT NULL REFERENCES runs(run_id) ON DELETE CASCADE,
       page_id TEXT NOT NULL,
       shop_label TEXT,
       page_name TEXT,
@@ -87,41 +71,26 @@ function migrate(db: Database.Database) {
       hours_since_last_customer_activity REAL,
       response_ms REAL,
       fetch_errors INTEGER,
-      generated_at TEXT NOT NULL,
-      FOREIGN KEY (run_id) REFERENCES runs(run_id) ON DELETE CASCADE
+      customer_count INTEGER,
+      generated_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS page_states_page_id_time ON page_states(page_id, generated_at DESC);
     CREATE INDEX IF NOT EXISTS page_states_run_id ON page_states(run_id);
     CREATE INDEX IF NOT EXISTS page_states_kind_time ON page_states(activity_kind, generated_at DESC);
-
-    CREATE TABLE IF NOT EXISTS endpoints (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      url TEXT,
-      api_key TEXT NOT NULL,
-      token_expires_at TEXT,
-      is_active INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL,
-      last_used_at TEXT
-    );
-
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
-
     CREATE TABLE IF NOT EXISTS platform_pages (
       id TEXT PRIMARY KEY,
-      endpoint_id TEXT NOT NULL,
+      endpoint_id TEXT NOT NULL REFERENCES endpoints(id) ON DELETE CASCADE,
       page_name TEXT NOT NULL,
       page_url TEXT,
       is_active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      FOREIGN KEY (endpoint_id) REFERENCES endpoints(id) ON DELETE CASCADE
+      updated_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS platform_pages_endpoint_idx ON platform_pages(endpoint_id);
-
     CREATE TABLE IF NOT EXISTS platform_connectors (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -137,7 +106,14 @@ function migrate(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS platform_connectors_active ON platform_connectors(is_active);
   `);
-  try { db.exec(`ALTER TABLE page_states ADD COLUMN customer_count INTEGER`); } catch {}
+  try { await pool.query(`ALTER TABLE page_states ADD COLUMN IF NOT EXISTS customer_count INTEGER`); } catch {}
+}
+
+let _migrated = false;
+async function ensureMigrated() {
+  if (_migrated) return;
+  await migrate();
+  _migrated = true;
 }
 
 // ──── Types ────────────────────────────────────────────────────────────
@@ -233,41 +209,48 @@ export type InsertSnapshotInput = {
   unknown_pages?: SlimPage[];
 };
 
-export function insertSnapshot(input: InsertSnapshotInput): { inserted: boolean } {
-  const db = getDb();
+export async function insertSnapshot(input: InsertSnapshotInput): Promise<{ inserted: boolean }> {
+  await ensureMigrated();
+  const existing = await pool.query('SELECT 1 FROM runs WHERE run_id = $1', [input.run_id]);
+  if (existing.rows.length > 0) return { inserted: false };
 
-  // Idempotency: skip if run_id already stored
-  const existing = db.prepare('SELECT 1 FROM runs WHERE run_id = ?').get(input.run_id);
-  if (existing) return { inserted: false };
+  const allPages = [
+    ...input.active_pages.map(p => ({
+      ...p,
+      _is_active: 1,
+      response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
+      fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
+    })),
+    ...input.inactive_pages.map(p => ({
+      ...p,
+      _is_active: 0,
+      response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
+      fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
+    })),
+    ...(input.unknown_pages ?? []).map(p => ({
+      ...p,
+      _is_active: null,
+      response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
+      fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
+    })),
+  ];
 
-  const insertRun = db.prepare(`
-    INSERT INTO runs (
-      run_id, endpoint_id, generated_at, received_at, heartbeat_ok, run_quality, severity,
-      canary_status, canary_alert, outage_suspected, alert_count, rule_version,
-      in_maintenance_window, total_pages, active_pages, inactive_pages,
-      receiver_sd_size_bytes, raw_summary
-    ) VALUES (
-      @run_id, @endpoint_id, @generated_at, @received_at, @heartbeat_ok, @run_quality, @severity,
-      @canary_status, @canary_alert, @outage_suspected, @alert_count, @rule_version,
-      @in_maintenance_window, @total_pages, @active_pages, @inactive_pages,
-      @receiver_sd_size_bytes, @raw_summary
-    )
-  `);
-
-  const insertPage = db.prepare(`
-    INSERT INTO page_states (
-      run_id, page_id, shop_label, page_name, activity_kind, is_activated,
-      is_canary, activation_reason, state_change, activity_kind_change,
-      hours_since_last_order, hours_since_last_customer_activity, response_ms, fetch_errors, generated_at, customer_count
-    ) VALUES (
-      @run_id, @page_id, @shop_label, @page_name, @activity_kind, @is_activated,
-      @is_canary, @activation_reason, @state_change, @activity_kind_change,
-      @hours_since_last_order, @hours_since_last_customer_activity, @response_ms, @fetch_errors, @generated_at, @customer_count
-    )
-  `);
-
-  const insertAll = db.transaction(() => {
-    insertRun.run({
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(q(`
+      INSERT INTO runs (
+        run_id, endpoint_id, generated_at, received_at, heartbeat_ok, run_quality, severity,
+        canary_status, canary_alert, outage_suspected, alert_count, rule_version,
+        in_maintenance_window, total_pages, active_pages, inactive_pages,
+        receiver_sd_size_bytes, raw_summary
+      ) VALUES (
+        @run_id, @endpoint_id, @generated_at, @received_at, @heartbeat_ok, @run_quality, @severity,
+        @canary_status, @canary_alert, @outage_suspected, @alert_count, @rule_version,
+        @in_maintenance_window, @total_pages, @active_pages, @inactive_pages,
+        @receiver_sd_size_bytes, @raw_summary
+      )
+    `, {
       run_id: input.run_id,
       endpoint_id: input.endpoint_id ?? null,
       generated_at: input.generated_at,
@@ -286,31 +269,20 @@ export function insertSnapshot(input: InsertSnapshotInput): { inserted: boolean 
       inactive_pages: input.inactive_pages_count,
       receiver_sd_size_bytes: input.receiver_sd_size_bytes,
       raw_summary: JSON.stringify(input.raw_summary),
-    });
-
-    const allPages = [
-      ...input.active_pages.map((p) => ({
-        ...p,
-        _is_active: 1,
-        response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
-        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
-      })),
-      ...input.inactive_pages.map((p) => ({
-        ...p,
-        _is_active: 0,
-        response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
-        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
-      })),
-      ...(input.unknown_pages ?? []).map((p) => ({
-        ...p,
-        _is_active: null,
-        response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
-        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
-      })),
-    ];
+    }));
 
     for (const p of allPages) {
-      insertPage.run({
+      await client.query(q(`
+        INSERT INTO page_states (
+          run_id, page_id, shop_label, page_name, activity_kind, is_activated,
+          is_canary, activation_reason, state_change, activity_kind_change,
+          hours_since_last_order, hours_since_last_customer_activity, response_ms, fetch_errors, generated_at, customer_count
+        ) VALUES (
+          @run_id, @page_id, @shop_label, @page_name, @activity_kind, @is_activated,
+          @is_canary, @activation_reason, @state_change, @activity_kind_change,
+          @hours_since_last_order, @hours_since_last_customer_activity, @response_ms, @fetch_errors, @generated_at, @customer_count
+        )
+      `, {
         run_id: input.run_id,
         page_id: p.page_id ?? p.id ?? '',
         shop_label: p.shop_label ?? p.shop ?? null,
@@ -331,50 +303,49 @@ export function insertSnapshot(input: InsertSnapshotInput): { inserted: boolean 
         fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : null),
         generated_at: input.generated_at,
         customer_count: p.customer_count ?? null,
-      });
+      }));
     }
-  });
-
-  insertAll();
-  return { inserted: true };
+    await client.query('COMMIT');
+    return { inserted: true };
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 // ──── Read helpers ─────────────────────────────────────────────────────
 
-export function getLatestRun(endpointId?: string): RunRow | undefined {
-  const db = getDb();
+export async function getLatestRun(endpointId?: string): Promise<RunRow | undefined> {
+  await ensureMigrated();
   if (endpointId) {
-    return db
-      .prepare('SELECT * FROM runs WHERE endpoint_id = ? ORDER BY generated_at DESC LIMIT 1')
-      .get(endpointId) as RunRow | undefined;
+    const r = await pool.query('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT 1', [endpointId]);
+    return r.rows[0] as RunRow | undefined;
   }
-  return db.prepare('SELECT * FROM runs ORDER BY generated_at DESC LIMIT 1').get() as
-    | RunRow
-    | undefined;
+  const r = await pool.query('SELECT * FROM runs ORDER BY generated_at DESC LIMIT 1');
+  return r.rows[0] as RunRow | undefined;
 }
 
-export function getRunHistory(endpointId: string, limit = 100): RunRow[] {
-  const db = getDb();
-  return db
-    .prepare('SELECT * FROM runs WHERE endpoint_id = ? ORDER BY generated_at ASC LIMIT ?')
-    .all(endpointId, limit) as RunRow[];
+export async function getRunHistory(endpointId: string, limit = 100): Promise<RunRow[]> {
+  await ensureMigrated();
+  const r = await pool.query('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at ASC LIMIT $2', [endpointId, limit]);
+  return r.rows as RunRow[];
 }
 
-export function getRecentRuns(limit = 50, endpointId?: string): RunRow[] {
-  const db = getDb();
+export async function getRecentRuns(limit = 50, endpointId?: string): Promise<RunRow[]> {
+  await ensureMigrated();
   if (endpointId) {
-    return db
-      .prepare('SELECT * FROM runs WHERE endpoint_id = ? ORDER BY generated_at DESC LIMIT ?')
-      .all(endpointId, limit) as RunRow[];
+    const r = await pool.query('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT $2', [endpointId, limit]);
+    return r.rows as RunRow[];
   }
-  return db
-    .prepare('SELECT * FROM runs ORDER BY generated_at DESC LIMIT ?')
-    .all(limit) as RunRow[];
+  const r = await pool.query('SELECT * FROM runs ORDER BY generated_at DESC LIMIT $1', [limit]);
+  return r.rows as RunRow[];
 }
 
-function latestGoodRunIds(): string[] {
-  const db = getDb();
-  return (db.prepare(`
+async function latestGoodRunIds(): Promise<string[]> {
+  await ensureMigrated();
+  const r = await pool.query(`
     SELECT run_id FROM runs r1
     WHERE endpoint_id != 'botcake-platform' AND endpoint_id IS NOT NULL
     AND (active_pages > 0 OR active_pages IS NULL)
@@ -384,108 +355,85 @@ function latestGoodRunIds(): string[] {
       AND (active_pages > 0 OR active_pages IS NULL)
     )
     GROUP BY endpoint_id
-  `).all() as { run_id: string }[]).map(r => r.run_id);
+  `);
+  return (r.rows as { run_id: string }[]).map(r => r.run_id);
 }
 
-export function getPancakeActivePageIds(): Set<string> {
-  const latestRunIds = latestGoodRunIds();
+export async function getPancakeActivePageIds(): Promise<Set<string>> {
+  const latestRunIds = await latestGoodRunIds();
   if (latestRunIds.length === 0) return new Set<string>();
-
-  const db = getDb();
-  const placeholders = latestRunIds.map(() => '?').join(',');
-  const rows = db.prepare(`
-    SELECT page_id FROM page_states
-    WHERE run_id IN (${placeholders}) AND is_activated = 1
-  `).all(...latestRunIds) as { page_id: string }[];
-  return new Set(rows.map(r => r.page_id));
+  const placeholders = latestRunIds.map((_, i) => `$${i + 1}`).join(',');
+  const r = await pool.query(`SELECT page_id FROM page_states WHERE run_id IN (${placeholders}) AND is_activated = 1`, latestRunIds);
+  return new Set((r.rows as { page_id: string }[]).map(r => r.page_id));
 }
 
-export function getPancakeSeenEver(): Set<string> {
-  const db = getDb();
-  const rows = db.prepare(`
+export async function getPancakeSeenEver(): Promise<Set<string>> {
+  await ensureMigrated();
+  const r = await pool.query(`
     SELECT DISTINCT ps.page_id
     FROM page_states ps
     JOIN runs r ON r.run_id = ps.run_id
     WHERE r.endpoint_id != 'botcake-platform' AND r.endpoint_id IS NOT NULL
-  `).all() as { page_id: string }[];
-  return new Set(rows.map(r => r.page_id));
+  `);
+  return new Set((r.rows as { page_id: string }[]).map(r => r.page_id));
 }
 
-export function getPancakeInactivePageIds(): Set<string> {
-  const active = getPancakeActivePageIds();
-  const latestRunIds = latestGoodRunIds();
+export async function getPancakeInactivePageIds(): Promise<Set<string>> {
+  const active = await getPancakeActivePageIds();
+  const latestRunIds = await latestGoodRunIds();
   if (latestRunIds.length === 0) return new Set<string>();
-
-  const db = getDb();
-  const placeholders = latestRunIds.map(() => '?').join(',');
-  const rows = db.prepare(`
-    SELECT DISTINCT page_id FROM page_states
-    WHERE run_id IN (${placeholders}) AND (is_activated = 0 OR is_activated IS NULL)
-  `).all(...latestRunIds) as { page_id: string }[];
+  const placeholders = latestRunIds.map((_, i) => `$${i + 1}`).join(',');
+  const r = await pool.query(`SELECT DISTINCT page_id FROM page_states WHERE run_id IN (${placeholders}) AND (is_activated = 0 OR is_activated IS NULL)`, latestRunIds);
   const result = new Set<string>();
-  for (const r of rows) {
-    if (!active.has(r.page_id)) result.add(r.page_id);
+  for (const row of r.rows as { page_id: string }[]) {
+    if (!active.has(row.page_id)) result.add(row.page_id);
   }
   return result;
 }
 
-export function getLatestPageStates(endpointId?: string): PageStateRow[] {
-  const db = getDb();
+export async function getLatestPageStates(endpointId?: string): Promise<PageStateRow[]> {
+  await ensureMigrated();
   if (endpointId) {
-    const endpoint = endpointId ? getEndpoint(endpointId) : undefined;
+    const ep = endpointId ? await getEndpoint(endpointId) : undefined;
+    const r = await pool.query(`
+      SELECT ps.* FROM page_states ps
+      JOIN runs r ON r.run_id = ps.run_id
+      WHERE r.endpoint_id = $1
+      AND r.run_id = (SELECT run_id FROM runs WHERE endpoint_id = $2 ORDER BY generated_at DESC LIMIT 1)
+      ORDER BY ps.shop_label, ps.page_name
+    `, [endpointId, endpointId]);
+    if (r.rows.length > 0) return r.rows as PageStateRow[];
 
-    const rows = db
-      .prepare(
-        `SELECT ps.* FROM page_states ps
-         JOIN runs r ON r.run_id = ps.run_id
-         WHERE r.endpoint_id = ?
-         AND r.run_id = (SELECT run_id FROM runs WHERE endpoint_id = ? ORDER BY generated_at DESC LIMIT 1)
-         ORDER BY ps.shop_label, ps.page_name`,
-      )
-      .all(endpointId, endpointId) as PageStateRow[];
-
-    if (rows.length > 0) return rows;
-
-    // Fallback: match by shop_label on legacy runs (no endpoint_id)
-    if (endpoint?.shop_label) {
-      return db
-        .prepare(
-          `SELECT ps.* FROM page_states ps
-           JOIN runs r ON r.run_id = ps.run_id
-           WHERE r.endpoint_id IS NULL
-           AND ps.shop_label = ?
-           AND r.run_id = (SELECT run_id FROM runs WHERE endpoint_id IS NULL ORDER BY generated_at DESC LIMIT 1)
-           ORDER BY ps.page_name`,
-        )
-        .all(endpoint.shop_label) as PageStateRow[];
+    if (ep?.shop_label) {
+      const r2 = await pool.query(`
+        SELECT ps.* FROM page_states ps
+        JOIN runs r ON r.run_id = ps.run_id
+        WHERE r.endpoint_id IS NULL
+        AND ps.shop_label = $1
+        AND r.run_id = (SELECT run_id FROM runs WHERE endpoint_id IS NULL ORDER BY generated_at DESC LIMIT 1)
+        ORDER BY ps.page_name
+      `, [ep.shop_label]);
+      return r2.rows as PageStateRow[];
     }
-
     return [];
   }
-  return db
-    .prepare(
-      `SELECT ps.* FROM page_states ps
-       JOIN runs r ON r.run_id = ps.run_id
-       WHERE r.run_id = (
-         SELECT run_id FROM runs
-         WHERE endpoint_id IS NULL OR endpoint_id != 'botcake-platform'
-         ORDER BY generated_at DESC LIMIT 1
-       )
-       ORDER BY ps.shop_label, ps.page_name`,
+  const r = await pool.query(`
+    SELECT ps.* FROM page_states ps
+    JOIN runs r ON r.run_id = ps.run_id
+    WHERE r.run_id = (
+      SELECT run_id FROM runs
+      WHERE endpoint_id IS NULL OR endpoint_id != 'botcake-platform'
+      ORDER BY generated_at DESC LIMIT 1
     )
-    .all() as PageStateRow[];
+    ORDER BY ps.shop_label, ps.page_name
+  `);
+  return r.rows as PageStateRow[];
 }
 
-export function getPageHistory(pageId: string, limit = 1000): PageStateRow[] {
-  const db = getDb();
-  return db
-    .prepare(
-      `SELECT * FROM page_states
-       WHERE page_id = ?
-       ORDER BY generated_at ASC
-       LIMIT ?`,
-    )
-    .all(pageId, limit) as PageStateRow[];
+export async function getPageHistory(pageId: string, limit = 1000): Promise<PageStateRow[]> {
+  await ensureMigrated();
+  const r = await pool.query('SELECT * FROM page_states WHERE page_id = $1 ORDER BY generated_at ASC LIMIT $2', [pageId, limit]);
+  return r.rows as PageStateRow[];
 }
 
 // ──── Endpoints ───────────────────────────────────────────────────────
@@ -503,37 +451,40 @@ export type EndpointRow = {
   shop_label: string | null;
 };
 
-export function listEndpoints(): EndpointRow[] {
-  const db = getDb();
-  return db.prepare('SELECT * FROM endpoints ORDER BY created_at DESC').all() as EndpointRow[];
+export async function listEndpoints(): Promise<EndpointRow[]> {
+  await ensureMigrated();
+  const r = await pool.query('SELECT * FROM endpoints ORDER BY created_at DESC');
+  return r.rows as EndpointRow[];
 }
 
-export function getEndpoint(id: string): EndpointRow | undefined {
-  const db = getDb();
-  return db.prepare('SELECT * FROM endpoints WHERE id = ?').get(id) as EndpointRow | undefined;
+export async function getEndpoint(id: string): Promise<EndpointRow | undefined> {
+  await ensureMigrated();
+  const r = await pool.query('SELECT * FROM endpoints WHERE id = $1', [id]);
+  return r.rows[0] as EndpointRow | undefined;
 }
 
-export function getEndpointByName(name: string): EndpointRow | undefined {
-  const db = getDb();
-  return db.prepare('SELECT * FROM endpoints WHERE name = ?').get(name) as EndpointRow | undefined;
+export async function getEndpointByName(name: string): Promise<EndpointRow | undefined> {
+  await ensureMigrated();
+  const r = await pool.query('SELECT * FROM endpoints WHERE name = $1', [name]);
+  return r.rows[0] as EndpointRow | undefined;
 }
 
 export function slugify(name: string): string {
   return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 }
 
-export function getEndpointBySlug(slug: string): EndpointRow | undefined {
-  const db = getDb();
-  const all = db.prepare('SELECT * FROM endpoints').all() as EndpointRow[];
-  return all.find((e) => slugify(e.name) === slug);
+export async function getEndpointBySlug(slug: string): Promise<EndpointRow | undefined> {
+  const all = await listEndpoints();
+  return all.find(e => slugify(e.name) === slug);
 }
 
-export function getEndpointByApiKey(apiKey: string): EndpointRow | undefined {
-  const db = getDb();
-  return db.prepare('SELECT * FROM endpoints WHERE api_key = ? AND is_active = 1').get(apiKey) as EndpointRow | undefined;
+export async function getEndpointByApiKey(apiKey: string): Promise<EndpointRow | undefined> {
+  await ensureMigrated();
+  const r = await pool.query('SELECT * FROM endpoints WHERE api_key = $1 AND is_active = 1', [apiKey]);
+  return r.rows[0] as EndpointRow | undefined;
 }
 
-export function upsertEndpoint(input: {
+export async function upsertEndpoint(input: {
   id?: string;
   name: string;
   url?: string | null;
@@ -541,17 +492,17 @@ export function upsertEndpoint(input: {
   access_token?: string | null;
   token_expires_at?: string | null;
   is_active?: number;
-}): EndpointRow {
-  const db = getDb();
+}): Promise<EndpointRow> {
+  await ensureMigrated();
   const id = input.id || crypto.randomUUID();
   const now = new Date().toISOString();
 
   if (input.id) {
-    db.prepare(`
+    await pool.query(q(`
       UPDATE endpoints SET name=@name, url=@url, api_key=@api_key,
         access_token=@access_token, token_expires_at=@token_expires_at, is_active=@is_active
       WHERE id=@id
-    `).run({
+    `, {
       id: input.id,
       name: input.name,
       url: input.url ?? null,
@@ -559,14 +510,14 @@ export function upsertEndpoint(input: {
       access_token: input.access_token ?? null,
       token_expires_at: input.token_expires_at ?? null,
       is_active: input.is_active ?? 1,
-    });
-    return getEndpoint(input.id)!;
+    }));
+    return (await getEndpoint(input.id))!;
   }
 
-  db.prepare(`
+  await pool.query(q(`
     INSERT INTO endpoints (id, name, url, api_key, access_token, token_expires_at, is_active, created_at)
     VALUES (@id, @name, @url, @api_key, @access_token, @token_expires_at, @is_active, @created_at)
-  `).run({
+  `, {
     id,
     name: input.name,
     url: input.url ?? null,
@@ -575,40 +526,41 @@ export function upsertEndpoint(input: {
     token_expires_at: input.token_expires_at ?? null,
     is_active: input.is_active ?? 1,
     created_at: now,
-  });
+  }));
 
-  return getEndpoint(id)!;
+  return (await getEndpoint(id))!;
 }
 
-export function deleteEndpoint(id: string): void {
-  const db = getDb();
-  db.prepare('DELETE FROM platform_pages WHERE endpoint_id = ?').run(id);
-  db.prepare('DELETE FROM endpoints WHERE id = ?').run(id);
+export async function deleteEndpoint(id: string): Promise<void> {
+  await ensureMigrated();
+  await pool.query('DELETE FROM platform_pages WHERE endpoint_id = $1', [id]);
+  await pool.query('DELETE FROM endpoints WHERE id = $1', [id]);
 }
 
-export function touchEndpoint(id: string): void {
-  const db = getDb();
-  db.prepare('UPDATE endpoints SET last_used_at = ? WHERE id = ?').run(new Date().toISOString(), id);
+export async function touchEndpoint(id: string): Promise<void> {
+  await ensureMigrated();
+  await pool.query('UPDATE endpoints SET last_used_at = $1 WHERE id = $2', [new Date().toISOString(), id]);
 }
 
-export function getPreviousRunActiveCount(endpointId: string): number | null {
-  const db = getDb();
-  const row = db.prepare(`
+export async function getPreviousRunActiveCount(endpointId: string): Promise<number | null> {
+  await ensureMigrated();
+  const r = await pool.query(`
     SELECT active_pages FROM runs
-    WHERE endpoint_id = ?
+    WHERE endpoint_id = $1
     ORDER BY generated_at DESC LIMIT 1 OFFSET 1
-  `).get(endpointId) as { active_pages: number } | undefined;
+  `, [endpointId]);
+  const row = r.rows[0] as { active_pages: number } | undefined;
   return row?.active_pages ?? null;
 }
 
-export function getRunCount(endpointId?: string): number {
-  const db = getDb();
+export async function getRunCount(endpointId?: string): Promise<number> {
+  await ensureMigrated();
   if (endpointId) {
-    const row = db.prepare('SELECT COUNT(*) as c FROM runs WHERE endpoint_id = ?').get(endpointId) as { c: number };
-    return row.c;
+    const r = await pool.query('SELECT COUNT(*) as c FROM runs WHERE endpoint_id = $1', [endpointId]);
+    return (r.rows[0] as { c: number }).c;
   }
-  const row = db.prepare('SELECT COUNT(*) as c FROM runs').get() as { c: number };
-  return row.c;
+  const r = await pool.query('SELECT COUNT(*) as c FROM runs');
+  return (r.rows[0] as { c: number }).c;
 }
 
 // ──── Platform Pages ────────────────────────────────────────────────────
@@ -623,51 +575,52 @@ export type PlatformPageRow = {
   updated_at: string;
 };
 
-export function listPlatformPages(endpointId?: string): PlatformPageRow[] {
-  const db = getDb();
+export async function listPlatformPages(endpointId?: string): Promise<PlatformPageRow[]> {
+  await ensureMigrated();
   if (endpointId) {
-    return db
-      .prepare('SELECT * FROM platform_pages WHERE endpoint_id = ? ORDER BY page_name ASC')
-      .all(endpointId) as PlatformPageRow[];
+    const r = await pool.query('SELECT * FROM platform_pages WHERE endpoint_id = $1 ORDER BY page_name ASC', [endpointId]);
+    return r.rows as PlatformPageRow[];
   }
-  return db.prepare('SELECT * FROM platform_pages ORDER BY page_name ASC').all() as PlatformPageRow[];
+  const r = await pool.query('SELECT * FROM platform_pages ORDER BY page_name ASC');
+  return r.rows as PlatformPageRow[];
 }
 
-export function getPlatformPage(id: string): PlatformPageRow | undefined {
-  const db = getDb();
-  return db.prepare('SELECT * FROM platform_pages WHERE id = ?').get(id) as PlatformPageRow | undefined;
+export async function getPlatformPage(id: string): Promise<PlatformPageRow | undefined> {
+  await ensureMigrated();
+  const r = await pool.query('SELECT * FROM platform_pages WHERE id = $1', [id]);
+  return r.rows[0] as PlatformPageRow | undefined;
 }
 
-export function upsertPlatformPage(input: {
+export async function upsertPlatformPage(input: {
   id?: string;
   endpoint_id: string;
   page_name: string;
   page_url?: string | null;
   is_active?: number;
-}): PlatformPageRow {
-  const db = getDb();
+}): Promise<PlatformPageRow> {
+  await ensureMigrated();
   const id = input.id || crypto.randomUUID();
   const now = new Date().toISOString();
 
   if (input.id) {
-    db.prepare(`
+    await pool.query(q(`
       UPDATE platform_pages SET page_name=@page_name, page_url=@page_url,
         is_active=@is_active, updated_at=@updated_at
       WHERE id=@id
-    `).run({
+    `, {
       id: input.id,
       page_name: input.page_name,
       page_url: input.page_url ?? null,
       is_active: input.is_active ?? 1,
       updated_at: now,
-    });
-    return getPlatformPage(input.id)!;
+    }));
+    return (await getPlatformPage(input.id))!;
   }
 
-  db.prepare(`
+  await pool.query(q(`
     INSERT INTO platform_pages (id, endpoint_id, page_name, page_url, is_active, created_at, updated_at)
     VALUES (@id, @endpoint_id, @page_name, @page_url, @is_active, @created_at, @updated_at)
-  `).run({
+  `, {
     id,
     endpoint_id: input.endpoint_id,
     page_name: input.page_name,
@@ -675,14 +628,14 @@ export function upsertPlatformPage(input: {
     is_active: input.is_active ?? 1,
     created_at: now,
     updated_at: now,
-  });
+  }));
 
-  return getPlatformPage(id)!;
+  return (await getPlatformPage(id))!;
 }
 
-export function deletePlatformPage(id: string): void {
-  const db = getDb();
-  db.prepare('DELETE FROM platform_pages WHERE id = ?').run(id);
+export async function deletePlatformPage(id: string): Promise<void> {
+  await ensureMigrated();
+  await pool.query('DELETE FROM platform_pages WHERE id = $1', [id]);
 }
 
 // ──── Platform Connectors ─────────────────────────────────────────────
@@ -701,17 +654,19 @@ export type PlatformConnectorRow = {
   updated_at: string;
 };
 
-export function listPlatformConnectors(): PlatformConnectorRow[] {
-  const db = getDb();
-  return db.prepare('SELECT * FROM platform_connectors ORDER BY name ASC').all() as PlatformConnectorRow[];
+export async function listPlatformConnectors(): Promise<PlatformConnectorRow[]> {
+  await ensureMigrated();
+  const r = await pool.query('SELECT * FROM platform_connectors ORDER BY name ASC');
+  return r.rows as PlatformConnectorRow[];
 }
 
-export function getPlatformConnector(id: string): PlatformConnectorRow | undefined {
-  const db = getDb();
-  return db.prepare('SELECT * FROM platform_connectors WHERE id = ?').get(id) as PlatformConnectorRow | undefined;
+export async function getPlatformConnector(id: string): Promise<PlatformConnectorRow | undefined> {
+  await ensureMigrated();
+  const r = await pool.query('SELECT * FROM platform_connectors WHERE id = $1', [id]);
+  return r.rows[0] as PlatformConnectorRow | undefined;
 }
 
-export function upsertPlatformConnector(input: {
+export async function upsertPlatformConnector(input: {
   id?: string;
   name: string;
   platform_type: string;
@@ -721,18 +676,18 @@ export function upsertPlatformConnector(input: {
   json_path?: string | null;
   interval_ms?: number;
   is_active?: number;
-}): PlatformConnectorRow {
-  const db = getDb();
+}): Promise<PlatformConnectorRow> {
+  await ensureMigrated();
   const id = input.id || crypto.randomUUID();
   const now = new Date().toISOString();
 
   if (input.id) {
-    db.prepare(`
+    await pool.query(q(`
       UPDATE platform_connectors SET name=@name, platform_type=@platform_type, api_url=@api_url,
         auth_header=@auth_header, auth_token=@auth_token, json_path=@json_path,
         interval_ms=@interval_ms, is_active=@is_active, updated_at=@updated_at
       WHERE id=@id
-    `).run({
+    `, {
       id: input.id,
       name: input.name,
       platform_type: input.platform_type,
@@ -743,30 +698,30 @@ export function upsertPlatformConnector(input: {
       interval_ms: input.interval_ms ?? 60000,
       is_active: input.is_active ?? 1,
       updated_at: now,
-    });
-    return getPlatformConnector(input.id)!;
+    }));
+    return (await getPlatformConnector(input.id))!;
   }
 
   // Ensure FK reference exists in endpoints table
-  const endpointExists = db.prepare('SELECT 1 FROM endpoints WHERE id = ?').get(id);
-  if (!endpointExists) {
-    db.prepare(`
+  const exists = await pool.query('SELECT 1 FROM endpoints WHERE id = $1', [id]);
+  if (exists.rows.length === 0) {
+    await pool.query(q(`
       INSERT INTO endpoints (id, name, url, api_key, is_active, created_at)
       VALUES (@id, @name, @url, @api_key, @is_active, @created_at)
-    `).run({
+    `, {
       id,
       name: `${input.name} (Connector)`,
       url: input.api_url,
       api_key: `connector_${id}`,
       is_active: 1,
       created_at: now,
-    });
+    }));
   }
 
-  db.prepare(`
+  await pool.query(q(`
     INSERT INTO platform_connectors (id, name, platform_type, api_url, auth_header, auth_token, json_path, interval_ms, is_active, created_at, updated_at)
     VALUES (@id, @name, @platform_type, @api_url, @auth_header, @auth_token, @json_path, @interval_ms, @is_active, @created_at, @updated_at)
-  `).run({
+  `, {
     id,
     name: input.name,
     platform_type: input.platform_type,
@@ -778,24 +733,24 @@ export function upsertPlatformConnector(input: {
     is_active: input.is_active ?? 1,
     created_at: now,
     updated_at: now,
-  });
+  }));
 
-  return getPlatformConnector(id)!;
+  return (await getPlatformConnector(id))!;
 }
 
-export function deletePlatformConnector(id: string): void {
-  const db = getDb();
-  db.prepare('DELETE FROM platform_connectors WHERE id = ?').run(id);
-  db.prepare('DELETE FROM endpoints WHERE id = ?').run(id);
+export async function deletePlatformConnector(id: string): Promise<void> {
+  await ensureMigrated();
+  await pool.query('DELETE FROM platform_connectors WHERE id = $1', [id]);
+  await pool.query('DELETE FROM endpoints WHERE id = $1', [id]);
 }
 
 // ──── Data Retention ──────────────────────────────────────────────────
 
-export function pruneOldRuns(retentionDays: number): number {
-  const db = getDb();
+export async function pruneOldRuns(retentionDays: number): Promise<number> {
+  await ensureMigrated();
   const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
-  const result = db.prepare('DELETE FROM runs WHERE generated_at < ?').run(cutoff);
-  return result.changes;
+  const r = await pool.query('DELETE FROM runs WHERE generated_at < $1', [cutoff]);
+  return r.rowCount ?? 0;
 }
 
 // ──── BotCake Manual Overrides ───────────────────────────────────────
@@ -807,8 +762,8 @@ export type BotCakeOverride = {
   created_at: string;
 };
 
-export function getBotCakeOverrides(): Map<string, BotCakeOverride> {
-  const raw = getSetting('botcake_overrides');
+export async function getBotCakeOverrides(): Promise<Map<string, BotCakeOverride>> {
+  const raw = await getSetting('botcake_overrides');
   if (!raw) return new Map();
   try {
     const arr = JSON.parse(raw) as BotCakeOverride[];
@@ -818,31 +773,32 @@ export function getBotCakeOverrides(): Map<string, BotCakeOverride> {
   }
 }
 
-export function setBotCakeOverride(pageId: string, isActive: boolean, reason: string): void {
-  const overrides = getBotCakeOverrides();
+export async function setBotCakeOverride(pageId: string, isActive: boolean, reason: string): Promise<void> {
+  const overrides = await getBotCakeOverrides();
   overrides.set(pageId, { page_id: pageId, is_active: isActive, reason, created_at: new Date().toISOString() });
-  setSetting('botcake_overrides', JSON.stringify([...overrides.values()]));
+  await setSetting('botcake_overrides', JSON.stringify([...overrides.values()]));
 }
 
-export function removeBotCakeOverride(pageId: string): void {
-  const overrides = getBotCakeOverrides();
+export async function removeBotCakeOverride(pageId: string): Promise<void> {
+  const overrides = await getBotCakeOverrides();
   overrides.delete(pageId);
-  setSetting('botcake_overrides', JSON.stringify([...overrides.values()]));
+  await setSetting('botcake_overrides', JSON.stringify([...overrides.values()]));
 }
 
 // ──── Settings ─────────────────────────────────────────────────────────
 
-export function getSetting(key: string): string | null {
-  const db = getDb();
-  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined;
+export async function getSetting(key: string): Promise<string | null> {
+  await ensureMigrated();
+  const r = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
+  const row = r.rows[0] as { value: string } | undefined;
   return row ? row.value : null;
 }
 
-export function setSetting(key: string, value: string): void {
-  const db = getDb();
-  db.prepare(`
+export async function setSetting(key: string, value: string): Promise<void> {
+  await ensureMigrated();
+  await pool.query(q(`
     INSERT INTO settings (key, value)
     VALUES (@key, @value)
     ON CONFLICT(key) DO UPDATE SET value = @value
-  `).run({ key, value });
+  `, { key, value }));
 }

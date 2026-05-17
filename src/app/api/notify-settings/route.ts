@@ -5,7 +5,7 @@ import { getSetting, setSetting } from '@/lib/db';
 
 export async function GET() {
   const auth = await requireApiAuth(); if (auth) return auth;
-  const slackWebhook = getSetting('notify_slack_webhook') || '';
+  const slackWebhook = (await getSetting('notify_slack_webhook')) || '';
   return NextResponse.json({
     ok: true,
     slack_webhook: slackWebhook ? slackWebhook.slice(0, 8) + '••••' + slackWebhook.slice(-8) : '',
@@ -16,7 +16,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const cookieStore = await cookies();
   const session = cookieStore.get('session')?.value;
-  if (!validateSession(session)) {
+  if (!(await validateSession(session))) {
     return NextResponse.json({ ok: false, error: 'Not authenticated' }, { status: 401 });
   }
 
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     const { slack_webhook } = body;
 
     if (slack_webhook !== undefined) {
-      setSetting('notify_slack_webhook', slack_webhook);
+      await setSetting('notify_slack_webhook', slack_webhook);
     }
 
     return NextResponse.json({ ok: true, message: 'Notification settings updated' });

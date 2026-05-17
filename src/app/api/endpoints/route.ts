@@ -7,7 +7,7 @@ import { requireApiAuth } from '@/lib/auth';
 
 export async function GET() {
   const auth = await requireApiAuth(); if (auth) return auth;
-  const endpoints = listEndpoints();
+  const endpoints = await listEndpoints();
   const safe = endpoints.map((e) => ({
     ...e,
     api_key: e.api_key ? `${e.api_key.slice(0, 8)}...${e.api_key.slice(-4)}` : null,
@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: 'name and api_key are required' }, { status: 400 });
   }
 
-  const endpoint = upsertEndpoint({
+  const endpoint = await upsertEndpoint({
     id: (body.id as string) || undefined,
     name: body.name as string,
     api_key: body.api_key as string,

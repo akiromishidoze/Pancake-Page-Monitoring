@@ -10,11 +10,12 @@ const KIND_TONE: Record<string, string> = {
 };
 
 export default async function PlatformsPage() {
-  const endpoints = listEndpoints().filter((e) => e.is_active && !e.url?.includes('botcake.io'));
-  const dbCount = getRunCount();
+  const allEndpoints = await listEndpoints();
+  const endpoints = allEndpoints.filter((e: { is_active: number; url?: string | null }) => e.is_active && !e.url?.includes('botcake.io'));
+  const dbCount = await getRunCount();
 
   // Compute per-platform page stats from monitoring data
-  const allStates = dbCount > 0 ? getLatestPageStates() : [];
+  const allStates = dbCount > 0 ? await getLatestPageStates() : [];
   const perEndpoint = new Map<string, { total: number; active: number; inactive: number; kinds: Map<string, number> }>();
   for (const s of allStates) {
     const key = s.shop_label || 'Other';

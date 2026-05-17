@@ -10,16 +10,16 @@ export async function GET() {
     void checkAndRun().catch(e => console.error('[lazy-cron] scheduler err:', e));
     void pollIfNeeded().catch(e => console.error('[lazy-cron] poller err:', e));
 
-    const lastTriggerTimeStr = getSetting('last_trigger_time');
+    const lastTriggerTimeStr = await getSetting('last_trigger_time');
     const lastTriggerTime = lastTriggerTimeStr ? parseInt(lastTriggerTimeStr, 10) : 0;
 
     const now = Date.now();
     const isRunning = (now - lastTriggerTime) < 15000;
 
-    const lastRunStr = getSetting('last_scheduled_run');
+    const lastRunStr = await getSetting('last_scheduled_run');
     const lastRunMs = lastRunStr ? parseInt(lastRunStr, 10) : 0;
 
-    const intervalStr = getSetting('schedule_interval');
+    const intervalStr = await getSetting('schedule_interval');
     const intervalMs = (intervalStr && intervalStr !== 'off') ? parseInt(intervalStr, 10) : null;
 
     const nextRunTime = (lastRunMs > 0 && intervalMs) ? lastRunMs + intervalMs : null;

@@ -20,10 +20,10 @@ const PANCAKE_ENDPOINT_IDS = ['430202960', '1635192689', '1942241731'];
 async function PancakeSection({ endpointId }: { endpointId?: string }) {
   let allPages: PageStateRow[] = [];
   if (endpointId) {
-    allPages = getLatestPageStates(endpointId);
+    allPages = await getLatestPageStates(endpointId);
   } else {
     for (const eid of PANCAKE_ENDPOINT_IDS) {
-      allPages.push(...getLatestPageStates(eid));
+      allPages.push(...(await getLatestPageStates(eid)));
     }
   }
 
@@ -32,8 +32,8 @@ async function PancakeSection({ endpointId }: { endpointId?: string }) {
   const activeCount = allPages.filter((p) => p.is_activated === 1).length;
   const inactiveCount = allPages.filter((p) => p.is_activated !== 1).length;
 
-  const rawBreakdown = PANCAKE_ENDPOINT_IDS.map((eid) => {
-    const ep = getEndpoint(eid);
+  const rawBreakdown = await Promise.all(PANCAKE_ENDPOINT_IDS.map(async (eid) => {
+    const ep = await getEndpoint(eid);
     if (!ep) return null;
     const shopPages = allPages.filter((p) => p.shop_label === ep.shop_label);
     return {
@@ -42,13 +42,13 @@ async function PancakeSection({ endpointId }: { endpointId?: string }) {
       active: shopPages.filter((p) => p.is_activated === 1).length,
       inactive: shopPages.filter((p) => p.is_activated !== 1).length,
     };
-  }).filter(Boolean);
-  const shopBreakdown = rawBreakdown as NonNullable<typeof rawBreakdown[number]>[];
+  }));
+  const shopBreakdown = rawBreakdown.filter(Boolean) as NonNullable<typeof rawBreakdown[number]>[];
 
-  const trendSeries = PANCAKE_ENDPOINT_IDS.map(eid => {
-    const ep = getEndpoint(eid);
+  const trendSeries = (await Promise.all(PANCAKE_ENDPOINT_IDS.map(async (eid) => {
+    const ep = await getEndpoint(eid);
     if (!ep) return null;
-    const history = getRunHistory(eid, 100);
+    const history = await getRunHistory(eid, 100);
     if (history.length < 2) return null;
     return {
       label: ep.shop_label ?? ep.name,
@@ -59,7 +59,7 @@ async function PancakeSection({ endpointId }: { endpointId?: string }) {
         total: r.total_pages ?? 0,
       })),
     };
-  }).filter(Boolean) as { label: string; data: { time: string; active: number; inactive: number; total: number }[] }[];
+  }))).filter(Boolean) as { label: string; data: { time: string; active: number; inactive: number; total: number }[] }[];
 
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
@@ -114,10 +114,11 @@ async function PancakeSection({ endpointId }: { endpointId?: string }) {
 }
 
 async function BotCakeSection() {
-  const pages = getLatestPageStates('botcake-platform');
+  const pages = await getLatestPageStates('botcake-platform');
   if (pages.length === 0) return null;
-  const overrideIds = [...getBotCakeOverrides().keys()];
-  const latestRun = getLatestRun('botcake-platform');
+  const overrides = await getBotCakeOverrides();
+  const overrideIds = [...overrides.keys()];
+  const latestRun = await getLatestRun('botcake-platform');
   const apiHealthy = latestRun && latestRun.heartbeat_ok === 1 && !latestRun.outage_suspected;
 
   const activeCount = pages.filter(p => p.is_activated === 1).length;
@@ -130,7 +131,7 @@ async function BotCakeSection() {
     { label: 'Inactive (no activity)', count: pages.filter(p => p.is_activated !== 1 && p.activation_reason === 'no-activity').length, color: 'text-slate-500' },
   ].filter(b => b.count > 0);
 
-  const botCakeHistory = getRunHistory('botcake-platform', 200);
+  const botCakeHistory = await getRunHistory('botcake-platform', 200);
   const botCakeTrend = botCakeHistory.length >= 2
     ? [{
         label: 'BotCake Active',
@@ -219,17 +220,18 @@ export default async function OverviewPage({
   const sp = await searchParams;
   const endpointId = sp.endpoint_id;
 
-  const endpoint = endpointId ? getEndpoint(endpointId) : undefined;
+  const endpoint = endpointId ? await getEndpoint(endpointId) : undefined;
   const filteredShopLabel = endpoint?.shop_label ?? null;
 
-  const localRun = getLatestRun(endpointId);
-  const recentRuns = getRecentRuns(50, endpointId);
-  const dbRunCount = getRunCount(endpointId);
-  const totalRunCount = getRunCount();
-  const lastScheduledRunStr = getSetting('last_scheduled_run');
+  const localRun = await getLatestRun(endpointId);
+  const recentRuns = await getRecentRuns(50, endpointId);
+  const dbRunCount = await getRunCount(endpointId);
+  const totalRunCount = await getRunCount();
+  const lastScheduledRunStr = await getSetting('last_scheduled_run');
   const lastScheduledRunMs = lastScheduledRunStr ? parseInt(lastScheduledRunStr, 10) : null;
 
-  const endpoints = listEndpoints().map((ep) => ({ id: ep.id, name: ep.name }));
+  const allEndpoints = await listEndpoints();
+  const endpoints = allEndpoints.map((ep: { id: string; name: string }) => ({ id: ep.id, name: ep.name }));
 
   const isFiltered = !!endpointId;
   const isBotCake = endpointId === 'botcake-platform';

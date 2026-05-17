@@ -51,7 +51,7 @@ const sentCache = new Set<string>();
 const CACHE_TTL_MS = 30 * 60 * 1000;
 
 export async function sendAlert(event: AlertEvent): Promise<void> {
-  const slackUrl = getSetting('notify_slack_webhook');
+  const slackUrl = await getSetting('notify_slack_webhook');
 
   if (!slackUrl) return;
 
@@ -72,7 +72,7 @@ export async function sendAlert(event: AlertEvent): Promise<void> {
 }
 
 export async function checkAlertsForRun(runId: string): Promise<void> {
-  const run = getLatestRun();
+  const run = await getLatestRun();
   if (!run || run.run_id !== runId) return;
 
   const h = run;

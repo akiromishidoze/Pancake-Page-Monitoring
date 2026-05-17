@@ -1,6 +1,6 @@
 import { fetchBotCakePages, checkBotCakeConversations, checkBotCakeToolsFlows } from './botcake';
 import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, fetchPancakeActivePageIdsFromCustomers, fetchCachedPancakeShops, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop, type PancakePage } from './pancake';
-import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, getPancakeActivePageIds, getPreviousRunActiveCount, getDb, getBotCakeOverrides, type SlimPage } from './db';
+import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, getPancakeActivePageIds, getPreviousRunActiveCount, pool, getBotCakeOverrides, type SlimPage } from './db';
 import { broadcastSSE } from './sse';
 
 const POLL_INTERVAL_MS = 60_000;
@@ -20,7 +20,7 @@ export function startPoller() {
 export async function refreshAll() {
   _lastPolledAt = new Date().toISOString();
   await Promise.all([refreshBotCake(), refreshPancake()]);
-  setSetting('last_scheduled_run', Date.now().toString());
+  await setSetting('last_scheduled_run', Date.now().toString());
 }
 
 const ALERT_DROP_THRESHOLD_PCT = 0.50;
@@ -30,8 +30,8 @@ export async function refreshBotCake() {
   if (now - _botcakeLastRefresh < POLL_INTERVAL_MS) return;
   _botcakeLastRefresh = now;
 
-  const endpoint = getEndpoint('botcake-platform');
-  if (!endpoint?.access_token) return;
+    const endpoint = await getEndpoint('botcake-platform');
+    if (!endpoint?.access_token) return;
 
   try {
     const pages = await fetchBotCakePages(endpoint.access_token);
@@ -42,7 +42,7 @@ export async function refreshBotCake() {
     const runId = `botcake_refresh_${now}`;
     const ts = new Date().toISOString();
 
-    const pancakeActive = getPancakeActivePageIds();
+    const pancakeActive = await getPancakeActivePageIds();
 
     const noOrders = pages.filter(p => !pancakeActive.has(p.page_id)).map(p => p.page_id);
     const convResult = await checkBotCakeConversations(noOrders, endpoint.access_token);
@@ -112,7 +112,7 @@ export async function refreshBotCake() {
     }
 
     // Apply manual overrides (overrides signal-based decisions)
-    const overrides = getBotCakeOverrides();
+    const overrides = await getBotCakeOverrides();
     if (overrides.size > 0) {
       const toActive: SlimPage[] = [];
       const toInactive: SlimPage[] = [];
@@ -136,7 +136,7 @@ export async function refreshBotCake() {
       }
     }
 
-    const prevActive = getPreviousRunActiveCount('botcake-platform');
+    const prevActive = await getPreviousRunActiveCount('botcake-platform');
     let alertCount = 0;
     let outageSuspected = false;
     if (prevActive !== null && prevActive > 0) {
@@ -153,7 +153,7 @@ export async function refreshBotCake() {
       }
     }
 
-    const result = insertSnapshot({
+    const result = await insertSnapshot({
       run_id: runId,
       endpoint_id: 'botcake-platform',
       generated_at: ts,
@@ -183,7 +183,7 @@ export async function refreshBotCake() {
     });
 
     if (result.inserted) {
-      setSetting('poller_ok_botcake-platform', Date.now().toString());
+      await setSetting('poller_ok_botcake-platform', Date.now().toString());
       const pa = activePages.filter(p => p.activation_reason === 'pancake-activity').length;
       const hc = activePages.filter(p => p.activation_reason === 'has-conversations').length;
       const ht = activePages.filter(p => p.activation_reason === 'has-tools').length;
@@ -202,7 +202,8 @@ async function refreshPancake() {
   if (now - _pancakeLastRefresh < POLL_INTERVAL_MS) return;
   _pancakeLastRefresh = now;
 
-  const endpoints = listEndpoints().filter(ep => ep.id !== 'botcake-platform' && ep.url && ep.access_token && ep.is_active);
+  const allEndpoints = await listEndpoints();
+  const endpoints = allEndpoints.filter(ep => ep.id !== 'botcake-platform' && ep.url && ep.access_token && ep.is_active);
   if (endpoints.length === 0) return;
 
   const token = endpoints[0].access_token!;
@@ -215,7 +216,7 @@ async function refreshPancake() {
     ]);
   } catch (err) {
     console.warn('[poller] pancake: live shops fetch failed, trying cache:', err);
-    shops = fetchCachedPancakeShops();
+    shops = await fetchCachedPancakeShops();
     if (shops.length === 0) {
       console.error('[poller] pancake: no cached shops data available either, skipping');
       return;
@@ -249,15 +250,14 @@ async function refreshPancake() {
 
   if (!anyShopHadData) {
     console.warn('[poller] pancake: all shops returned 0 active pages — likely network/DNS issue, falling back to previous good run data');
-    const db = getDb();
-    for (const sid of TARGET_SHOP_IDS) {
-      const prevRun = db.prepare(`
-        SELECT run_id FROM runs
-        WHERE endpoint_id = ? AND (active_pages > 0 OR active_pages IS NULL)
-        ORDER BY generated_at DESC LIMIT 1
-      `).get(String(sid)) as { run_id: string } | undefined;
-      if (!prevRun) continue;
-      const prevActive = db.prepare('SELECT page_id FROM page_states WHERE run_id = ? AND is_activated = 1').all(prevRun.run_id) as { page_id: string }[];
+      for (const sid of TARGET_SHOP_IDS) {
+        const prevRun = (await pool.query(`
+          SELECT run_id FROM runs
+          WHERE endpoint_id = $1 AND (active_pages > 0 OR active_pages IS NULL)
+          ORDER BY generated_at DESC LIMIT 1
+        `, [String(sid)])).rows[0] as { run_id: string } | undefined;
+        if (!prevRun) continue;
+        const prevActive = (await pool.query('SELECT page_id FROM page_states WHERE run_id = $1 AND is_activated = 1', [prevRun.run_id])).rows as { page_id: string }[];
       const ids = new Set(prevActive.map(p => p.page_id));
       if (ids.size > 0) {
         activePageIdsByShop.set(sid, ids);
@@ -296,7 +296,7 @@ async function refreshPancake() {
       (hasOrders || apiActive ? activePages : inactivePages).push(base);
     }
 
-    const prevActive = getPreviousRunActiveCount(ep.id);
+    const prevActive = await getPreviousRunActiveCount(ep.id);
     let alertCount = 0;
     let outageSuspected = false;
     if (prevActive !== null && prevActive > 0) {
@@ -313,7 +313,7 @@ async function refreshPancake() {
       }
     }
 
-    const result = insertSnapshot({
+    const result = await insertSnapshot({
       run_id: runId, endpoint_id: ep.id, generated_at: ts,
       heartbeat_ok: true, run_quality: 'full', severity: null,
       canary_status: 'ok', canary_alert: false,
@@ -327,7 +327,7 @@ async function refreshPancake() {
     });
 
     if (result.inserted) {
-      setSetting(`poller_ok_${ep.id}`, Date.now().toString());
+      await setSetting(`poller_ok_${ep.id}`, Date.now().toString());
       console.log(`[poller] pancake ${ep.name}: ${activePages.length} active / ${inactivePages.length} inactive (${shop.pages.length} total), run ${runId}`);
       broadcastSSE('refresh', JSON.stringify({ source: 'pancake-poller', run_id: runId, endpoint_id: ep.id }));
     }
@@ -337,9 +337,10 @@ async function refreshPancake() {
   }
 }
 
-export function getPollerStatus() {
+export async function getPollerStatus() {
+  const started = await getSetting('poller_started');
   return {
-    started: getSetting('poller_started') === '1',
+    started: started === '1',
     last_polled_at: _lastPolledAt,
     interval_ms: POLL_INTERVAL_MS,
   };

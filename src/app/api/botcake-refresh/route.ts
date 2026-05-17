@@ -8,14 +8,14 @@ async function handler(apiKey: string | null) {
     return cors(NextResponse.json({ ok: false, error: 'Missing X-Api-Key header or ?key=' }, { status: 401 }));
   }
 
-  const endpoint = getEndpointByApiKey(apiKey);
+  const endpoint = await getEndpointByApiKey(apiKey);
   if (!endpoint || endpoint.id !== 'botcake-platform') {
     return cors(NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 }));
   }
 
   await refreshBotCake();
 
-  const latest = getLatestRun('botcake-platform');
+  const latest = await getLatestRun('botcake-platform');
   return cors(NextResponse.json({
     ok: true,
     run_id: latest?.run_id ?? null,

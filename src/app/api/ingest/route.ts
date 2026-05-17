@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     return cors(NextResponse.json({ ok: false, error: 'Missing X-Api-Key header' }, { status: 401 }));
   }
 
-  const endpoint = getEndpointByApiKey(apiKey);
+  const endpoint = await getEndpointByApiKey(apiKey);
   if (!endpoint) {
     return cors(NextResponse.json({ ok: false, error: 'Invalid or inactive API key' }, { status: 401 }));
   }
@@ -60,7 +60,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = insertSnapshot({
+    const result = await insertSnapshot({
       run_id,
       endpoint_id: endpoint.id,
       generated_at: (body.generated_at as string) ?? new Date().toISOString(),
@@ -83,7 +83,7 @@ export async function POST(req: Request) {
     });
 
     if (result.inserted) {
-      touchEndpoint(endpoint.id);
+      await touchEndpoint(endpoint.id);
       broadcastSSE('refresh', JSON.stringify({ source: 'ingest', run_id, endpoint_id: endpoint.id }));
       // Fire-and-forget alert check for the new run
       checkAlertsForRun(run_id).catch(e => console.error('[ingest] alert check error:', e));

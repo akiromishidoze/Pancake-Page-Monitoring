@@ -2,34 +2,33 @@
 // GET  /api/backup — list recent backups
 
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
-import fs from 'fs';
-import path from 'path';
-import { execSync } from 'child_process';
+import { pool } from '@/lib/db';
 import { requireApiAuth } from '@/lib/auth';
-
-const BACKUPS_DIR = path.join(process.cwd(), 'backups');
-
-function ensureDir() {
-  if (!fs.existsSync(BACKUPS_DIR)) fs.mkdirSync(BACKUPS_DIR, { recursive: true });
-}
 
 export async function POST() {
   const auth = await requireApiAuth(); if (auth) return auth;
   try {
-    ensureDir();
-    const db = getDb();
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupFile = path.join(BACKUPS_DIR, `monitor_${timestamp}.sqlite`);
+    // PostgreSQL backup via pg_dump
+    const { execSync } = await import('child_process');
+    const fs = await import('fs');
+    const path = await import('path');
+    const BACKUPS_DIR = path.join(process.cwd(), 'backups');
+    if (!fs.existsSync(BACKUPS_DIR)) fs.mkdirSync(BACKUPS_DIR, { recursive: true });
 
-    db.exec(`VACUUM INTO '${backupFile.replace(/'/g, "''")}'`);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupFile = path.join(BACKUPS_DIR, `monitor_${timestamp}.sql`);
+
+    const dbUrl = process.env.DATABASE_URL;
+    if (!dbUrl) throw new Error('DATABASE_URL not set');
+
+    execSync(`pg_dump "${dbUrl}" > "${backupFile}"`, { stdio: 'pipe' });
 
     const stats = fs.statSync(backupFile);
     const sizeKb = (stats.size / 1024).toFixed(1);
 
     // Keep only last 30 backups
     const files = fs.readdirSync(BACKUPS_DIR)
-      .filter(f => f.startsWith('monitor_') && f.endsWith('.sqlite'))
+      .filter(f => f.startsWith('monitor_') && f.endsWith('.sql'))
       .sort()
       .reverse();
     for (const old of files.slice(30)) {
@@ -47,12 +46,16 @@ export async function POST() {
 
 export async function GET() {
   const auth = await requireApiAuth(); if (auth) return auth;
-  ensureDir();
+  const fs = await import('fs');
+  const path = await import('path');
+  const BACKUPS_DIR = path.join(process.cwd(), 'backups');
+  if (!fs.existsSync(BACKUPS_DIR)) fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+
   const files = fs.readdirSync(BACKUPS_DIR)
-    .filter(f => f.startsWith('monitor_') && f.endsWith('.sqlite'))
+    .filter(f => f.startsWith('monitor_') && f.endsWith('.sql'))
     .sort()
     .reverse()
-    .map(f => {
+    .map((f: string) => {
       const stats = fs.statSync(path.join(BACKUPS_DIR, f));
       return { file: f, size_kb: (stats.size / 1024).toFixed(1), created_at: stats.mtime.toISOString() };
     });

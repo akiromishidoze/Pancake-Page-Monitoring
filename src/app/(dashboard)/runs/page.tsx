@@ -1,4 +1,4 @@
-import { getDb, listEndpoints, type RunRow } from '@/lib/db';
+import { pool, listEndpoints, type RunRow } from '@/lib/db';
 import { PlatformFilter } from '@/components/PlatformFilter';
 import { Pagination } from '@/components/Pagination';
 
@@ -34,19 +34,26 @@ export default async function RunsPage({
   const page = Math.max(1, parseInt(sp.page || '1', 10));
   const offset = (page - 1) * PAGE_SIZE;
 
-  const db = getDb();
-  const endpoints = listEndpoints();
-
-  let rows: RunRow[];
-  let total: number;
-
-  if (endpointId) {
-    rows = db.prepare('SELECT * FROM runs WHERE endpoint_id = ? ORDER BY generated_at DESC LIMIT ? OFFSET ?').all(endpointId, PAGE_SIZE, offset) as RunRow[];
-    total = (db.prepare('SELECT COUNT(*) as c FROM runs WHERE endpoint_id = ?').get(endpointId) as { c: number }).c;
-  } else {
-    rows = db.prepare('SELECT * FROM runs ORDER BY generated_at DESC LIMIT ? OFFSET ?').all(PAGE_SIZE, offset) as RunRow[];
-    total = (db.prepare('SELECT COUNT(*) as c FROM runs').get() as { c: number }).c;
-  }
+  const [allEndpoints, runsResult] = await Promise.all([
+    listEndpoints(),
+    Promise.resolve().then(async () => {
+      if (endpointId) {
+        const [r, c] = await Promise.all([
+          pool.query('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT $2 OFFSET $3', [endpointId, PAGE_SIZE, offset]),
+          pool.query('SELECT COUNT(*) as c FROM runs WHERE endpoint_id = $1', [endpointId]),
+        ]);
+        return { rows: r.rows as RunRow[], total: parseInt(c.rows[0].c, 10) };
+      } else {
+        const [r, c] = await Promise.all([
+          pool.query('SELECT * FROM runs ORDER BY generated_at DESC LIMIT $1 OFFSET $2', [PAGE_SIZE, offset]),
+          pool.query('SELECT COUNT(*) as c FROM runs'),
+        ]);
+        return { rows: r.rows as RunRow[], total: parseInt(c.rows[0].c, 10) };
+      }
+    }),
+  ]);
+  const endpoints = allEndpoints;
+  const { rows, total } = runsResult;
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 

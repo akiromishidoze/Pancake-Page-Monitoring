@@ -1,6 +1,6 @@
-import { getDb } from './db';
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 
 const BACKUPS_DIR = path.join(process.cwd(), 'backups');
 
@@ -10,15 +10,17 @@ function ensureDir() {
 
 export function backup(): string {
   ensureDir();
-  const db = getDb();
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const backupFile = path.join(BACKUPS_DIR, `monitor_${timestamp}.sqlite`);
+  const backupFile = path.join(BACKUPS_DIR, `monitor_${timestamp}.sql`);
 
-  db.exec(`VACUUM INTO '${backupFile.replace(/'/g, "''")}'`);
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) throw new Error('DATABASE_URL not set');
+
+  execSync(`pg_dump "${dbUrl}" > "${backupFile}"`, { stdio: 'pipe' });
 
   // Keep only last 30 backups
   const files = fs.readdirSync(BACKUPS_DIR)
-    .filter(f => f.startsWith('monitor_') && f.endsWith('.sqlite'))
+    .filter(f => f.startsWith('monitor_') && f.endsWith('.sql'))
     .sort()
     .reverse();
   for (const old of files.slice(30)) {

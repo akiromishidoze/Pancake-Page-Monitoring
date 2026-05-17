@@ -6,7 +6,7 @@ export async function AuthGuard({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
   const session = cookieStore.get('session')?.value;
 
-  if (!validateSession(session)) {
+  if (!(await validateSession(session))) {
     redirect('/login');
   }
 

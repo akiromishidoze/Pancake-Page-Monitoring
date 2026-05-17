@@ -5,13 +5,13 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     const { ensureCredentials } = await import('./lib/auth');
-    ensureCredentials();
+    await ensureCredentials();
 
     const { startPoller } = await import('./lib/poller');
     const { startScheduler } = await import('./lib/scheduler');
     const { startConnectorPollers } = await import('./lib/connector-poller');
     startPoller();
-    startScheduler();
+    await startScheduler();
     startConnectorPollers();
   }
 }

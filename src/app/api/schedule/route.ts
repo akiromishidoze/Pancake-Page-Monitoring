@@ -5,7 +5,7 @@ import { requireApiAuth } from '@/lib/auth';
 export async function GET() {
   const auth = await requireApiAuth(); if (auth) return auth;
   try {
-    const interval = getSetting('schedule_interval') || 'off';
+    const interval = (await getSetting('schedule_interval')) || 'off';
     return NextResponse.json({ ok: true, interval });
   } catch (e) {
     return NextResponse.json(
@@ -25,10 +25,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: 'Invalid interval' }, { status: 400 });
     }
 
-    setSetting('schedule_interval', interval);
-    
-    // Reset the last run time so the new schedule begins its countdown immediately
-    setSetting('last_scheduled_run', Date.now().toString());
+    await setSetting('schedule_interval', interval);
+    await setSetting('last_scheduled_run', Date.now().toString());
 
     return NextResponse.json({ ok: true, interval });
   } catch (e) {

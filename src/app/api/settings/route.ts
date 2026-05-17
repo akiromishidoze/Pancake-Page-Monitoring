@@ -4,7 +4,7 @@ import { requireApiAuth } from '@/lib/auth';
 
 export async function GET() {
   const auth = await requireApiAuth(); if (auth) return auth;
-  const retentionDays = getSetting('retention_days') || '90';
+  const retentionDays = (await getSetting('retention_days')) || '90';
   return NextResponse.json({
     ok: true,
     settings: { retention_days: retentionDays },
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
       if (isNaN(days) || days < 0) {
         return NextResponse.json({ ok: false, error: 'Invalid retention_days' }, { status: 400 });
       }
-      setSetting('retention_days', String(days));
+      await setSetting('retention_days', String(days));
     }
 
     return NextResponse.json({ ok: true, message: 'Settings updated' });

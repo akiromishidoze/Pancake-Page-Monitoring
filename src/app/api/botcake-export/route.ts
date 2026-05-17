@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server';
 import { getLatestPageStates, getBotCakeOverrides } from '@/lib/db';
 
 export async function GET() {
-  const pages = getLatestPageStates('botcake-platform');
-  const overrides = getBotCakeOverrides();
+  const [pages, overrides] = await Promise.all([
+    getLatestPageStates('botcake-platform'),
+    getBotCakeOverrides(),
+  ]);
 
   const header = 'page_id,page_name,status,activation_reason,customer_count,hours_since_last_activity,overridden';
   const rows = pages.map(p => {

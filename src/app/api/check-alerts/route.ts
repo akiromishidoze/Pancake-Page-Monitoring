@@ -5,7 +5,7 @@ import { requireApiAuth } from '@/lib/auth';
 
 export async function POST() {
   const auth = await requireApiAuth(); if (auth) return auth;
-  const run = getLatestRun();
+  const run = await getLatestRun();
   if (!run) {
     return NextResponse.json({ ok: false, error: 'No runs in database' }, { status: 400 });
   }

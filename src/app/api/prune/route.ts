@@ -11,7 +11,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: 'retention_days must be a positive number' }, { status: 400 });
     }
 
-    const deleted = pruneOldRuns(days);
+    const deleted = await pruneOldRuns(days);
     return NextResponse.json({ ok: true, deleted });
   } catch (e) {
     return NextResponse.json(

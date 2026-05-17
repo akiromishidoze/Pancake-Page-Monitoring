@@ -16,7 +16,7 @@ type Row = {
 };
 
 async function loadRows(endpointId?: string): Promise<Row[]> {
-  const states = getLatestPageStates(endpointId);
+  const states = await getLatestPageStates(endpointId);
   return states.map((s) => ({
     page_id: s.page_id,
     shop: s.shop_label,
@@ -37,10 +37,11 @@ export default async function PlatformPage({
 }) {
   const { slug } = await params;
   const sp = await searchParams;
-  let platform = getEndpointBySlug(slug);
+  let platform = await getEndpointBySlug(slug);
   if (!platform) {
-    if (listEndpoints().length === 0) {
-      upsertEndpoint({ name: slug.charAt(0).toUpperCase() + slug.slice(1).replace(/-/g, ' '), api_key: `auto_${crypto.randomUUID()}`, is_active: 1 });
+    const allEndpoints = await listEndpoints();
+    if (allEndpoints.length === 0) {
+      await upsertEndpoint({ name: slug.charAt(0).toUpperCase() + slug.slice(1).replace(/-/g, ' '), api_key: `auto_${crypto.randomUUID()}`, is_active: 1 });
       redirect(`/pages/platform/${slug}`);
     }
     notFound();

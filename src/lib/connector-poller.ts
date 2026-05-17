@@ -1,4 +1,4 @@
-import { listPlatformConnectors, getPlatformConnector, getEndpoint, insertSnapshot, getDb } from './db';
+import { listPlatformConnectors, getPlatformConnector, getEndpoint, insertSnapshot } from './db';
 import { broadcastSSE } from './sse';
 
 const timers = new Map<string, ReturnType<typeof setInterval>>();
@@ -17,7 +17,7 @@ async function pollConnector(connectorId: string) {
   if (now - lastRun < 5000) return;
   lastRuns.set(connectorId, now);
 
-  const connector = getPlatformConnector(connectorId);
+  const connector = await getPlatformConnector(connectorId);
   if (!connector || !connector.is_active) return;
 
   try {
@@ -71,7 +71,7 @@ async function pollConnector(connectorId: string) {
       };
     });
 
-    const result = insertSnapshot({
+    const result = await insertSnapshot({
       run_id: runId,
       endpoint_id: connector.id,
       generated_at: ts,
@@ -102,8 +102,8 @@ async function pollConnector(connectorId: string) {
   }
 }
 
-export function startConnectorPollers() {
-  const connectors = listPlatformConnectors();
+export async function startConnectorPollers() {
+  const connectors = await listPlatformConnectors();
   for (const c of connectors) {
     if (!c.is_active) continue;
     if (timers.has(c.id)) continue;

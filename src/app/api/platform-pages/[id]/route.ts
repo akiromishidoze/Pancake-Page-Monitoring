@@ -3,7 +3,7 @@ import { getPlatformPage, upsertPlatformPage, deletePlatformPage } from '@/lib/d
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const existing = getPlatformPage(id);
+  const existing = await getPlatformPage(id);
   if (!existing) {
     return NextResponse.json({ ok: false, error: 'Platform page not found' }, { status: 404 });
   }
@@ -15,7 +15,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const page = upsertPlatformPage({
+  const page = await upsertPlatformPage({
     id,
     endpoint_id: (body.endpoint_id as string) ?? existing.endpoint_id,
     page_name: (body.page_name as string) ?? existing.page_name,
@@ -28,11 +28,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const existing = getPlatformPage(id);
+  const existing = await getPlatformPage(id);
   if (!existing) {
     return NextResponse.json({ ok: false, error: 'Platform page not found' }, { status: 404 });
   }
 
-  deletePlatformPage(id);
+  await deletePlatformPage(id);
   return NextResponse.json({ ok: true });
 }

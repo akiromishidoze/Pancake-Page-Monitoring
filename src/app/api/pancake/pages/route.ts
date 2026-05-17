@@ -6,7 +6,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const rawShopId = searchParams.get('shop_id');
 
-  const endpoints = listEndpoints().filter(ep => ep.id !== 'botcake-platform' && ep.access_token);
+  const allEndpoints = await listEndpoints();
+  const endpoints = allEndpoints.filter(ep => ep.id !== 'botcake-platform' && ep.access_token);
   if (endpoints.length === 0) {
     return NextResponse.json({ ok: false, error: 'No Pancake endpoints configured' }, { status: 400 });
   }

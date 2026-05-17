@@ -17,9 +17,9 @@ export type PancakeShop = {
   pages: PancakePage[];
 };
 
-function loadCachedShops(): PancakeShop[] | null {
+async function loadCachedShops(): Promise<PancakeShop[] | null> {
   try {
-    const raw = getSetting(PANCAKE_SHOPS_CACHE_KEY);
+    const raw = await getSetting(PANCAKE_SHOPS_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) return parsed as PancakeShop[];
@@ -27,9 +27,9 @@ function loadCachedShops(): PancakeShop[] | null {
   } catch { return null; }
 }
 
-function saveCachedShops(shops: PancakeShop[]): void {
+async function saveCachedShops(shops: PancakeShop[]): Promise<void> {
   try {
-    setSetting(PANCAKE_SHOPS_CACHE_KEY, JSON.stringify(shops));
+    await setSetting(PANCAKE_SHOPS_CACHE_KEY, JSON.stringify(shops));
   } catch { /* best effort */ }
 }
 
@@ -42,8 +42,8 @@ export async function fetchPancakeShops(token: string): Promise<PancakeShop[]> {
   return shops;
 }
 
-export function fetchCachedPancakeShops(): PancakeShop[] {
-  return loadCachedShops() ?? [];
+export async function fetchCachedPancakeShops(): Promise<PancakeShop[]> {
+  return (await loadCachedShops()) ?? [];
 }
 
 export async function fetchPancakePages(token: string): Promise<PancakePage[]> {

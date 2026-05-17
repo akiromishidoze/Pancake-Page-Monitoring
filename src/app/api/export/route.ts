@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDb, type RunRow } from '@/lib/db';
+import { pool, type RunRow } from '@/lib/db';
 import { requireApiAuth } from '@/lib/auth';
 
 export async function GET(req: Request) {
@@ -9,14 +9,14 @@ export async function GET(req: Request) {
   const endpointId = url.searchParams.get('endpoint_id') || null;
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '10000', 10), 100000);
 
-  const db = getDb();
-
   if (format === 'json') {
     let runs: RunRow[];
     if (endpointId) {
-      runs = db.prepare('SELECT * FROM runs WHERE endpoint_id = ? ORDER BY generated_at DESC LIMIT ?').all(endpointId, limit) as RunRow[];
+      const r = await pool.query('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT $2', [endpointId, limit]);
+      runs = r.rows;
     } else {
-      runs = db.prepare('SELECT * FROM runs ORDER BY generated_at DESC LIMIT ?').all(limit) as RunRow[];
+      const r = await pool.query('SELECT * FROM runs ORDER BY generated_at DESC LIMIT $1', [limit]);
+      runs = r.rows;
     }
     return NextResponse.json({ ok: true, runs });
   }
@@ -24,22 +24,24 @@ export async function GET(req: Request) {
   // CSV format
   let rows: Array<Record<string, unknown>>;
   if (endpointId) {
-    rows = db.prepare(`
+    const r = await pool.query(`
       SELECT r.run_id, r.endpoint_id, r.generated_at, r.received_at, r.heartbeat_ok,
              r.run_quality, r.severity, r.canary_status, r.canary_alert,
              r.outage_suspected, r.alert_count, r.total_pages, r.active_pages, r.inactive_pages
       FROM runs r
-      WHERE r.endpoint_id = ?
-      ORDER BY r.generated_at DESC LIMIT ?
-    `).all(endpointId, limit) as Array<Record<string, unknown>>;
+      WHERE r.endpoint_id = $1
+      ORDER BY r.generated_at DESC LIMIT $2
+    `, [endpointId, limit]);
+    rows = r.rows;
   } else {
-    rows = db.prepare(`
+    const r = await pool.query(`
       SELECT r.run_id, r.endpoint_id, r.generated_at, r.received_at, r.heartbeat_ok,
              r.run_quality, r.severity, r.canary_status, r.canary_alert,
              r.outage_suspected, r.alert_count, r.total_pages, r.active_pages, r.inactive_pages
       FROM runs r
-      ORDER BY r.generated_at DESC LIMIT ?
-    `).all(limit) as Array<Record<string, unknown>>;
+      ORDER BY r.generated_at DESC LIMIT $1
+    `, [limit]);
+    rows = r.rows;
   }
 
   const headers = ['run_id', 'endpoint_id', 'generated_at', 'received_at', 'heartbeat_ok', 'run_quality', 'severity', 'canary_status', 'canary_alert', 'outage_suspected', 'alert_count', 'total_pages', 'active_pages', 'inactive_pages'];
