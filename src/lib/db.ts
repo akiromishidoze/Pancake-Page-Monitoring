@@ -137,6 +137,7 @@ function migrate(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS platform_connectors_active ON platform_connectors(is_active);
   `);
+  try { db.exec(`ALTER TABLE page_states ADD COLUMN customer_count INTEGER`); } catch {}
 }
 
 // ──── Types ────────────────────────────────────────────────────────────
@@ -163,6 +164,7 @@ export type SlimPage = {
   fetch_errors?: number;
   fetch_error_count?: number;
   fetch_failed?: boolean;
+  customer_count?: number;
 };
 
 export type RunRow = {
@@ -202,6 +204,7 @@ export type PageStateRow = {
   hours_since_last_customer_activity: number | null;
   response_ms: number | null;
   fetch_errors: number | null;
+  customer_count: number | null;
   generated_at: string;
 };
 
@@ -255,11 +258,11 @@ export function insertSnapshot(input: InsertSnapshotInput): { inserted: boolean 
     INSERT INTO page_states (
       run_id, page_id, shop_label, page_name, activity_kind, is_activated,
       is_canary, activation_reason, state_change, activity_kind_change,
-      hours_since_last_order, hours_since_last_customer_activity, response_ms, fetch_errors, generated_at
+      hours_since_last_order, hours_since_last_customer_activity, response_ms, fetch_errors, generated_at, customer_count
     ) VALUES (
       @run_id, @page_id, @shop_label, @page_name, @activity_kind, @is_activated,
       @is_canary, @activation_reason, @state_change, @activity_kind_change,
-      @hours_since_last_order, @hours_since_last_customer_activity, @response_ms, @fetch_errors, @generated_at
+      @hours_since_last_order, @hours_since_last_customer_activity, @response_ms, @fetch_errors, @generated_at, @customer_count
     )
   `);
 
@@ -327,6 +330,7 @@ export function insertSnapshot(input: InsertSnapshotInput): { inserted: boolean 
         response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
         fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : null),
         generated_at: input.generated_at,
+        customer_count: p.customer_count ?? null,
       });
     }
   });

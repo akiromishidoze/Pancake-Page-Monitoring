@@ -73,10 +73,12 @@ async function getBotCakePageTokens(userToken: string): Promise<Map<string, stri
   return tokens;
 }
 
-let _conversationCache: Map<string, { hasConversations: boolean; lastActivityAt: string | null; checkedAt: number }> = new Map();
+export type ConversationResult = Map<string, { ts: string | null; count: number }>;
 
-export async function checkBotCakeConversations(pageIds: string[], userToken: string): Promise<Map<string, string | null>> {
-  const result = new Map<string, string | null>();
+let _conversationCache: Map<string, { hasConversations: boolean; lastActivityAt: string | null; customerCount: number; checkedAt: number }> = new Map();
+
+export async function checkBotCakeConversations(pageIds: string[], userToken: string): Promise<ConversationResult> {
+  const result: ConversationResult = new Map();
   const tokens = await getBotCakePageTokens(userToken);
   if (tokens.size === 0) return result;
 
@@ -90,7 +92,7 @@ export async function checkBotCakeConversations(pageIds: string[], userToken: st
   });
   for (const id of cached) {
     const c = _conversationCache.get(id)!;
-    result.set(id, c.lastActivityAt);
+    result.set(id, { ts: c.lastActivityAt, count: c.customerCount });
   }
 
   if (needsCheck.length === 0) return result;
@@ -101,7 +103,7 @@ export async function checkBotCakeConversations(pageIds: string[], userToken: st
     await Promise.all(batch.map(async (pageId) => {
       const token = tokens.get(pageId);
       if (!token) {
-        _conversationCache.set(pageId, { hasConversations: false, lastActivityAt: null, checkedAt: Date.now() });
+        _conversationCache.set(pageId, { hasConversations: false, lastActivityAt: null, customerCount: 0, checkedAt: Date.now() });
         return;
       }
       try {
@@ -111,7 +113,8 @@ export async function checkBotCakeConversations(pageIds: string[], userToken: st
         });
         if (r.ok) {
           const data = await r.json() as Record<string, unknown>[];
-          const hasConversations = Array.isArray(data) && data.length > 0;
+          const customerCount = Array.isArray(data) ? data.length : 0;
+          const hasConversations = customerCount > 0;
           let lastActivityAt: string | null = null;
           if (hasConversations) {
             for (const item of data) {
@@ -119,13 +122,13 @@ export async function checkBotCakeConversations(pageIds: string[], userToken: st
               if (typeof ts === 'string' && (!lastActivityAt || ts > lastActivityAt)) lastActivityAt = ts;
             }
           }
-          _conversationCache.set(pageId, { hasConversations, lastActivityAt, checkedAt: Date.now() });
-          if (hasConversations) result.set(pageId, lastActivityAt);
+          _conversationCache.set(pageId, { hasConversations, lastActivityAt, customerCount, checkedAt: Date.now() });
+          if (hasConversations) result.set(pageId, { ts: lastActivityAt, count: customerCount });
         } else {
-          _conversationCache.set(pageId, { hasConversations: false, lastActivityAt: null, checkedAt: Date.now() });
+          _conversationCache.set(pageId, { hasConversations: false, lastActivityAt: null, customerCount: 0, checkedAt: Date.now() });
         }
       } catch {
-        _conversationCache.set(pageId, { hasConversations: false, lastActivityAt: null, checkedAt: Date.now() });
+        _conversationCache.set(pageId, { hasConversations: false, lastActivityAt: null, customerCount: 0, checkedAt: Date.now() });
       }
     }));
   }

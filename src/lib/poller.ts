@@ -45,9 +45,9 @@ export async function refreshBotCake() {
     const pancakeActive = getPancakeActivePageIds();
 
     const noOrders = pages.filter(p => !pancakeActive.has(p.page_id)).map(p => p.page_id);
-    const convActive = await checkBotCakeConversations(noOrders, endpoint.access_token);
+    const convResult = await checkBotCakeConversations(noOrders, endpoint.access_token);
 
-    const noOrdersNoConv = pages.filter(p => !pancakeActive.has(p.page_id) && !convActive.has(p.page_id)).map(p => p.page_id);
+    const noOrdersNoConv = pages.filter(p => !pancakeActive.has(p.page_id) && !convResult.has(p.page_id)).map(p => p.page_id);
     const toolsActive = await checkBotCakeToolsFlows(noOrdersNoConv, endpoint.access_token);
 
     const activePages: SlimPage[] = [];
@@ -67,7 +67,8 @@ export async function refreshBotCake() {
           last_customer_activity_at: null,
           last_order_at: null,
         });
-      } else if (convActive.has(p.page_id)) {
+      } else if (convResult.has(p.page_id)) {
+        const convInfo = convResult.get(p.page_id)!;
         activePages.push({
           page_id: p.page_id, id: p.page_id,
           name: p.name,
@@ -77,8 +78,9 @@ export async function refreshBotCake() {
           state_change: null, activity_kind_change: null,
           is_canary: false,
           response_ms: null, fetch_errors: 0,
-          last_customer_activity_at: convActive.get(p.page_id) ?? null,
+          last_customer_activity_at: convInfo.ts,
           last_order_at: null,
+          customer_count: convInfo.count,
         });
       } else if (toolsActive.has(p.page_id)) {
         activePages.push({

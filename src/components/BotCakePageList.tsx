@@ -9,6 +9,7 @@ type BotCakePage = {
   is_activated: number | null;
   activation_reason: string | null;
   hours_since_last_customer_activity: number | null;
+  customer_count: number | null;
 };
 
 function formatRelativeTime(hours: number): string {
@@ -93,6 +94,7 @@ export function BotCakePageList({ pages, overrideIds = [] }: { pages: BotCakePag
               <th className="px-2 py-1">ID</th>
               <th className="px-2 py-1">Status</th>
               <th className="px-2 py-1">Override</th>
+              <th className="px-2 py-1">Customers</th>
               <th className="px-2 py-1">Last Activity</th>
             </tr>
           </thead>
@@ -135,13 +137,14 @@ export function BotCakePageList({ pages, overrideIds = [] }: { pages: BotCakePag
                       </button>
                     )}
                   </td>
+                  <td className="px-2 py-1 text-slate-400 font-mono">{p.customer_count ?? '—'}</td>
                   <td className="px-2 py-1 text-slate-400 font-mono">{lastActivity}</td>
                 </tr>
               );
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-2 py-4 text-center text-slate-500">No pages match &quot;{query}&quot;</td>
+                <td colSpan={6} className="px-2 py-4 text-center text-slate-500">No pages match &quot;{query}&quot;</td>
               </tr>
             )}
           </tbody>
