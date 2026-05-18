@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import Link from 'next/link';
 
 type BotCakePage = {
@@ -27,10 +27,20 @@ function formatRelativeTime(hours: number): string {
 const PAGE_SIZE = 20;
 
 export function BotCakePageList({ pages, overrideIds = [] }: { pages: BotCakePage[]; overrideIds?: string[] }) {
+  const [rawQuery, setRawQuery] = useState('');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
   const [overriding, setOverriding] = useState<string | null>(null);
   const [overrides, setOverrides] = useState<Set<string>>(new Set(overrideIds));
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setQuery(rawQuery);
+    }, 200);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [rawQuery]);
 
   const handleOverride = useCallback(async (pageId: string, isActive: boolean) => {
     setOverriding(pageId);
@@ -88,8 +98,8 @@ export function BotCakePageList({ pages, overrideIds = [] }: { pages: BotCakePag
       <div className="flex items-center gap-2">
         <input
           type="text"
-          value={query}
-          onChange={e => { setQuery(e.target.value); setPage(0); }}
+          value={rawQuery}
+          onChange={e => { setRawQuery(e.target.value); setPage(0); }}
           placeholder="Search pages by name or ID..."
           className="flex-1 rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:border-blue-500 focus:outline-none"
         />
