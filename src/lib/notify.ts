@@ -1,4 +1,4 @@
-import { getSetting, getLatestRun, getRunCount } from './db';
+import { getSetting, pool, type RunRow } from './db';
 
 type AlertLevel = 'info' | 'warning' | 'critical';
 
@@ -72,8 +72,9 @@ export async function sendAlert(event: AlertEvent): Promise<void> {
 }
 
 export async function checkAlertsForRun(runId: string): Promise<void> {
-  const run = await getLatestRun();
-  if (!run || run.run_id !== runId) return;
+  const r = await pool.query('SELECT * FROM runs WHERE run_id = $1', [runId]);
+  const run = (r.rows[0] ?? null) as RunRow | null;
+  if (!run) return;
 
   const h = run;
   const now = new Date().toISOString();
