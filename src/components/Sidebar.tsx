@@ -27,6 +27,15 @@ export function Sidebar() {
   const sidebarContent = (
     <div className="flex flex-col h-full">
       <div className="p-6 flex-1 flex flex-col">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-8 h-8 rounded-lg bg-blue-700 flex items-center justify-center text-white font-bold text-sm">
+            M
+          </div>
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold text-white">Page Monitor</span>
+            <span className="text-xs text-slate-500">Pancake & BotCake</span>
+          </div>
+        </div>
         <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
           Navigation
         </h2>
