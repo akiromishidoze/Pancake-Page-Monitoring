@@ -10,11 +10,22 @@ export async function register() {
     const { ensureCredentials } = await import('./lib/auth');
     await ensureCredentials();
 
-    const { startPoller } = await import('./lib/poller');
-    const { startScheduler } = await import('./lib/scheduler');
-    const { startConnectorPollers } = await import('./lib/connector-poller');
+    const { startPoller, stopPoller } = await import('./lib/poller');
+    const { startScheduler, stopScheduler } = await import('./lib/scheduler');
+    const { startConnectorPollers, stopConnectorPollers } = await import('./lib/connector-poller');
     startPoller();
     await startScheduler();
     startConnectorPollers();
+
+    function gracefulShutdown() {
+      console.log('[server] shutting down gracefully...');
+      stopPoller();
+      stopScheduler();
+      stopConnectorPollers();
+      process.exit(0);
+    }
+
+    process.on('SIGINT', gracefulShutdown);
+    process.on('SIGTERM', gracefulShutdown);
   }
 }

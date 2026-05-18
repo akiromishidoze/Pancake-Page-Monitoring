@@ -5,16 +5,26 @@ import { broadcastSSE } from './sse';
 
 const POLL_INTERVAL_MS = 60_000;
 
+let _pollerInterval: ReturnType<typeof setInterval> | null = null;
 let _lastPolledAt: string | null = null;
 
 let _botcakeLastRefresh = 0;
 let _pancakeLastRefresh = 0;
 
 export function startPoller() {
+  if (_pollerInterval) return;
   console.log('[poller] starting; interval =', POLL_INTERVAL_MS, 'ms');
 
   void refreshAll();
-  setInterval(() => void refreshAll(), POLL_INTERVAL_MS);
+  _pollerInterval = setInterval(() => void refreshAll(), POLL_INTERVAL_MS);
+}
+
+export function stopPoller() {
+  if (_pollerInterval) {
+    clearInterval(_pollerInterval);
+    _pollerInterval = null;
+    console.log('[poller] stopped');
+  }
 }
 
 export async function refreshAll() {

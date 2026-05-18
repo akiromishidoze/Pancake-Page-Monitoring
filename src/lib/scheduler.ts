@@ -6,6 +6,7 @@ const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 let _started = false;
+const _intervals: NodeJS.Timeout[] = [];
 
 export async function startScheduler() {
   if (_started) return;
@@ -18,17 +19,26 @@ export async function startScheduler() {
     console.log('[scheduler] default retention_days set to 90');
   }
 
-  setInterval(() => {
+  _intervals.push(setInterval(() => {
     checkAndRun().catch(err => console.error('[scheduler] Error in checkAndRun:', err));
-  }, SCHEDULER_POLL_MS);
+  }, SCHEDULER_POLL_MS));
 
-  setInterval(() => {
+  _intervals.push(setInterval(() => {
     checkBackup().catch(err => console.error('[scheduler] Backup error:', err));
-  }, 60_000);
+  }, 60_000));
 
-  setInterval(() => {
+  _intervals.push(setInterval(() => {
     checkPrune().catch(err => console.error('[scheduler] Prune error:', err));
-  }, 60_000);
+  }, 60_000));
+}
+
+export function stopScheduler() {
+  if (_intervals.length > 0) {
+    for (const id of _intervals) clearInterval(id);
+    _intervals.length = 0;
+    _started = false;
+    console.log('[scheduler] stopped');
+  }
 }
 
 async function checkBackup() {

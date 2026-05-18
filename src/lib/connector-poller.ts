@@ -116,10 +116,15 @@ export async function startConnectorPollers() {
 }
 
 export function restartConnectorPollers() {
-  for (const [id, timer] of timers) {
+  stopConnectorPollers();
+  startConnectorPollers();
+}
+
+export function stopConnectorPollers() {
+  for (const timer of timers.values()) {
     clearInterval(timer);
   }
   timers.clear();
   lastRuns.clear();
-  startConnectorPollers();
+  console.log('[connector-poller] all pollers stopped');
 }
