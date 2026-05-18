@@ -1,30 +1,28 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
-import { execSync } from 'child_process';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 
+const execAsync = promisify(exec);
 const BACKUPS_DIR = path.join(process.cwd(), 'backups');
 
-function ensureDir() {
-  if (!fs.existsSync(BACKUPS_DIR)) fs.mkdirSync(BACKUPS_DIR, { recursive: true });
-}
-
-export function backup(): string {
-  ensureDir();
+export async function backup(): Promise<string> {
+  await fs.mkdir(BACKUPS_DIR, { recursive: true });
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const backupFile = path.join(BACKUPS_DIR, `monitor_${timestamp}.sql`);
 
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error('DATABASE_URL not set');
 
-  execSync(`pg_dump "${dbUrl}" > "${backupFile}"`, { stdio: 'pipe' });
+  await execAsync(`pg_dump "${dbUrl}" > "${backupFile}"`);
 
   // Keep only last 30 backups
-  const files = fs.readdirSync(BACKUPS_DIR)
+  const files = (await fs.readdir(BACKUPS_DIR))
     .filter(f => f.startsWith('monitor_') && f.endsWith('.sql'))
     .sort()
     .reverse();
   for (const old of files.slice(30)) {
-    fs.unlinkSync(path.join(BACKUPS_DIR, old));
+    await fs.unlink(path.join(BACKUPS_DIR, old));
   }
 
   return backupFile;

@@ -39,7 +39,7 @@ async function checkBackup() {
 
   try {
     const { backup } = await import('./backup');
-    const file = backup();
+    const file = await backup();
     await setSetting('last_backup_time', now.toString());
     console.log('[scheduler] backup created:', file);
   } catch (err) {
