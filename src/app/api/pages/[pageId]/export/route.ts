@@ -3,8 +3,9 @@ import { pool } from '@/lib/db';
 import { requireApiAuth } from '@/lib/auth';
 
 export async function GET(req: Request, { params }: { params: Promise<{ pageId: string }> }) {
-  const auth = await requireApiAuth(); if (auth) return auth;
-  const { pageId } = await params;
+  try {
+    const auth = await requireApiAuth(); if (auth) return auth;
+    const { pageId } = await params;
   const url = new URL(req.url);
   const shop = url.searchParams.get('shop');
 
@@ -39,4 +40,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ pageId: 
       'Content-Disposition': `attachment; filename="page-${encodeURIComponent(pageId)}-history.csv"`,
     },
   });
+  } catch (e) {
+    return NextResponse.json(
+      { ok: false, error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
+  }
 }

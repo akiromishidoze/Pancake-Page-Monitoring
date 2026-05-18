@@ -5,7 +5,8 @@ const POLL_INTERVAL_MS = 60_000;
 const STALE_THRESHOLD_MS = POLL_INTERVAL_MS * 2;
 
 export async function GET() {
-  const allEndpoints = await listEndpoints();
+  try {
+    const allEndpoints = await listEndpoints();
   const endpoints = allEndpoints.filter(ep => ep.is_active);
   const now = Date.now();
 
@@ -33,4 +34,10 @@ export async function GET() {
     stale_threshold_ms: STALE_THRESHOLD_MS,
     endpoints: checks,
   });
+  } catch (e) {
+    return NextResponse.json(
+      { ok: false, error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
+  }
 }

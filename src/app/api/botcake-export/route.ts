@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { getLatestPageStates, getBotCakeOverrides } from '@/lib/db';
 
 export async function GET() {
-  const [pages, overrides] = await Promise.all([
+  try {
+    const [pages, overrides] = await Promise.all([
     getLatestPageStates('botcake-platform'),
     getBotCakeOverrides(),
   ]);
@@ -32,4 +33,10 @@ export async function GET() {
       'Content-Disposition': `attachment; filename="botcake-pages-${new Date().toISOString().slice(0, 10)}.csv"`,
     },
   });
+  } catch (e) {
+    return NextResponse.json(
+      { ok: false, error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
+  }
 }

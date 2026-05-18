@@ -3,8 +3,9 @@ import { pool, type RunRow } from '@/lib/db';
 import { requireApiAuth } from '@/lib/auth';
 
 export async function GET(req: Request) {
-  const auth = await requireApiAuth(); if (auth) return auth;
-  const url = new URL(req.url);
+  try {
+    const auth = await requireApiAuth(); if (auth) return auth;
+    const url = new URL(req.url);
   const endpointId = url.searchParams.get('endpoint_id') || null;
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '100', 10), 1000);
   const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10));
@@ -31,4 +32,10 @@ export async function GET(req: Request) {
     limit,
     offset,
   });
+  } catch (e) {
+    return NextResponse.json(
+      { ok: false, error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
+  }
 }
