@@ -24,8 +24,11 @@ function formatRelativeTime(hours: number): string {
   return `${days}d ago`;
 }
 
+const PAGE_SIZE = 20;
+
 export function BotCakePageList({ pages, overrideIds = [] }: { pages: BotCakePage[]; overrideIds?: string[] }) {
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(0);
   const [overriding, setOverriding] = useState<string | null>(null);
   const [overrides, setOverrides] = useState<Set<string>>(new Set(overrideIds));
 
@@ -76,19 +79,26 @@ export function BotCakePageList({ pages, overrideIds = [] }: { pages: BotCakePag
     );
   }, [sorted, query]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages - 1);
+  const paged = filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+
   return (
     <div className="mt-4">
-      <input
-        type="text"
-        value={query}
-        onChange={e => setQuery(e.target.value)}
-        placeholder="Search pages by name or ID..."
-        className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:border-blue-500 focus:outline-none"
-      />
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={query}
+          onChange={e => { setQuery(e.target.value); setPage(0); }}
+          placeholder="Search pages by name or ID..."
+          className="flex-1 rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+        />
+        <span className="text-xs text-slate-500">{filtered.length} page{filtered.length !== 1 ? 's' : ''}</span>
+      </div>
       <p className="mt-1 text-xs text-slate-500">Click toggle to manually override a page&apos;s status. Refreshes the poller immediately.</p>
-      <div className="mt-2 max-h-72 overflow-auto rounded border border-slate-700">
+      <div className="mt-2 rounded border border-slate-700">
         <table className="min-w-full text-xs">
-          <thead className="sticky top-0 bg-slate-800">
+          <thead className="bg-slate-800">
             <tr className="text-left text-slate-400 uppercase">
               <th className="px-2 py-1">Page</th>
               <th className="px-2 py-1">ID</th>
@@ -99,7 +109,7 @@ export function BotCakePageList({ pages, overrideIds = [] }: { pages: BotCakePag
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800">
-            {filtered.map(p => {
+            {paged.map(p => {
               const hours = p.hours_since_last_customer_activity;
               const lastActivity = hours !== null && hours !== undefined
                 ? formatRelativeTime(hours)
@@ -150,6 +160,27 @@ export function BotCakePageList({ pages, overrideIds = [] }: { pages: BotCakePag
           </tbody>
         </table>
       </div>
+      {totalPages > 1 && (
+        <div className="mt-2 flex items-center justify-between">
+          <button
+            onClick={() => setPage(p => Math.max(0, p - 1))}
+            disabled={currentPage === 0}
+            className="rounded px-2 py-1 text-xs font-medium transition-colors bg-slate-800 text-slate-400 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            ← Prev
+          </button>
+          <span className="text-xs text-slate-500">
+            Page {currentPage + 1} of {totalPages}
+          </span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+            disabled={currentPage >= totalPages - 1}
+            className="rounded px-2 py-1 text-xs font-medium transition-colors bg-slate-800 text-slate-400 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            Next →
+          </button>
+        </div>
+      )}
     </div>
   );
 }
