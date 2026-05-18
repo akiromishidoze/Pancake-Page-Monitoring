@@ -14,7 +14,7 @@ export function AutoRefresh() {
       esRef.current = es;
 
       es.addEventListener('connected', () => {
-        console.log('[sse] connected');
+        // SSE connection established — no-op
       });
 
       es.addEventListener('refresh', () => {
