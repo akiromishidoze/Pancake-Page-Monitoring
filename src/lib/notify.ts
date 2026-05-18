@@ -1,4 +1,4 @@
-import { getSetting, pool, type RunRow } from './db';
+import { getSetting, setSetting, pool, type RunRow } from './db';
 
 type AlertLevel = 'info' | 'warning' | 'critical';
 
@@ -45,29 +45,73 @@ async function sendSlack(webhookUrl: string, event: AlertEvent): Promise<boolean
   }
 }
 
-// ─── Dispatch ─────────────────────────────────────────────────────────
+// ─── Dedup cache (persisted to settings table) ────────────────────────
 
-const sentCache = new Set<string>();
 const CACHE_TTL_MS = 30 * 60 * 1000;
+const SETTINGS_KEY = 'notify_dedup';
+
+let dedupCache: Map<string, number> | null = null;
+
+async function loadDedupCache(): Promise<Map<string, number>> {
+  if (dedupCache !== null) return dedupCache;
+  const raw = await getSetting(SETTINGS_KEY);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as Record<string, number>;
+      const map = new Map<string, number>();
+      const now = Date.now();
+      for (const [key, expiry] of Object.entries(parsed)) {
+        if (expiry > now) map.set(key, expiry);
+      }
+      dedupCache = map;
+    } catch {
+      dedupCache = new Map();
+    }
+  } else {
+    dedupCache = new Map();
+  }
+  return dedupCache;
+}
+
+async function persistDedupCache(): Promise<void> {
+  if (dedupCache === null) return;
+  const obj: Record<string, number> = {};
+  for (const [key, expiry] of dedupCache.entries()) {
+    obj[key] = expiry;
+  }
+  await setSetting(SETTINGS_KEY, JSON.stringify(obj));
+}
+
+async function isDuplicate(dedupKey: string): Promise<boolean> {
+  const cache = await loadDedupCache();
+  const now = Date.now();
+  const expiry = cache.get(dedupKey);
+  if (expiry !== undefined && expiry > now) return true;
+  return false;
+}
+
+async function markSent(dedupKey: string): Promise<void> {
+  const cache = await loadDedupCache();
+  cache.set(dedupKey, Date.now() + CACHE_TTL_MS);
+  void persistDedupCache();
+}
+
+// ─── Dispatch ─────────────────────────────────────────────────────────
 
 export async function sendAlert(event: AlertEvent): Promise<void> {
   const slackUrl = await getSetting('notify_slack_webhook');
 
   if (!slackUrl) return;
 
-  // Deduplicate: skip identical alerts within 30 minutes
   const dedupKey = `${event.title}|${event.message}`;
-  if (sentCache.has(dedupKey)) return;
-  sentCache.add(dedupKey);
-  setTimeout(() => sentCache.delete(dedupKey), CACHE_TTL_MS);
+  if (await isDuplicate(dedupKey)) return;
+  await markSent(dedupKey);
 
-  if (slackUrl) {
-    const ok = await sendSlack(slackUrl, event);
-    if (ok) {
-      console.log('[notify] slack alert sent:', event.title);
-    } else {
-      console.warn('[notify] slack send failed:', event.title);
-    }
+  const ok = await sendSlack(slackUrl, event);
+  if (ok) {
+    console.log('[notify] slack alert sent:', event.title);
+  } else {
+    console.warn('[notify] slack send failed:', event.title);
   }
 }
 
