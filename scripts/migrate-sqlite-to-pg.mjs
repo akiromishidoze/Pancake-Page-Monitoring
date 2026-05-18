@@ -2,14 +2,20 @@ import Database from 'better-sqlite3';
 import pg from 'pg';
 import { parse } from 'pg-connection-string';
 import { performance } from 'node:perf_hooks';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 
-const SQLITE_PATH = '/home/jm/Desktop/BotCake Page Monitoring/data/monitor.sqlite';
-const DATABASE_URL = 'postgresql://jm@/botcake_monitor';
-const BATCH_SIZE = 500;
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const projectRoot = resolve(scriptDir, '..');
+
+const SQLITE_PATH = process.env.SQLITE_PATH || resolve(projectRoot, 'data/monitor.sqlite');
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://jm@/botcake_monitor';
 
 async function main() {
   const startTime = performance.now();
   console.log('=== SQLite → PostgreSQL Migration ===\n');
+  console.log(`  SQLite: ${SQLITE_PATH}`);
+  console.log(`  PostgreSQL: ${DATABASE_URL}\n`);
 
   const sqlite = new Database(SQLITE_PATH);
   sqlite.pragma('journal_mode = WAL');
