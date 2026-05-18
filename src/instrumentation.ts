@@ -4,6 +4,9 @@
 
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    const { initHttpAgent } = await import('./lib/http');
+    initHttpAgent();
+
     const { ensureCredentials } = await import('./lib/auth');
     await ensureCredentials();
 
