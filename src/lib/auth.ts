@@ -14,12 +14,7 @@ export async function ensureCredentials(): Promise<void> {
 
   await setSetting('auth_email', DEFAULT_EMAIL);
   await setSetting('auth_password', DEFAULT_PASSWORD);
-  console.log('═══════════════════════════════════════');
-  console.log('  First-time setup: default credentials');
-  console.log(`  Email:    ${DEFAULT_EMAIL}`);
-  console.log(`  Password: ${DEFAULT_PASSWORD}`);
-  console.log('  Change them in Settings > Change Password');
-  console.log('═══════════════════════════════════════');
+  console.warn('[auth] Default credentials initialized. Change them in Settings > Change Password.');
 }
 
 export async function validateCredentials(email: string, password: string): Promise<boolean> {
