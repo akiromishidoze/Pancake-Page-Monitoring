@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getLatestPageStates, getBotCakeOverrides } from '@/lib/db';
+import { cors, corsOptions } from '@/lib/cors';
+
+export async function OPTIONS() {
+  return corsOptions();
+}
 
 export async function GET() {
   try {
@@ -27,16 +32,16 @@ export async function GET() {
 
   const csv = [header, ...rows].join('\n');
 
-  return new NextResponse(csv, {
+  return cors(new NextResponse(csv, {
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
       'Content-Disposition': `attachment; filename="botcake-pages-${new Date().toISOString().slice(0, 10)}.csv"`,
     },
-  });
+  }));
   } catch (e) {
-    return NextResponse.json(
+    return cors(NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : String(e) },
       { status: 500 },
-    );
+    ));
   }
 }

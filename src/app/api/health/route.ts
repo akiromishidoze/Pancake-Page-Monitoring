@@ -1,13 +1,18 @@
 import { NextResponse } from 'next/server';
 import { getSetting, listEndpoints } from '@/lib/db';
+import { cors, corsOptions } from '@/lib/cors';
 
 const POLL_INTERVAL_MS = 60_000;
 const STALE_THRESHOLD_MS = POLL_INTERVAL_MS * 2;
 
+export async function OPTIONS() {
+  return corsOptions();
+}
+
 export async function GET() {
   try {
     const allEndpoints = await listEndpoints();
-  const endpoints = allEndpoints.filter(ep => ep.is_active);
+    const endpoints = allEndpoints.filter(ep => ep.is_active);
   const now = Date.now();
 
   const checks = await Promise.all(endpoints.map(async (ep) => {
@@ -28,16 +33,16 @@ export async function GET() {
   const allOk = checks.every(c => c.ok);
   const anyData = checks.some(c => c.last_run_ms !== null);
 
-  return NextResponse.json({
+  return cors(NextResponse.json({
     ok: allOk && anyData,
     poll_interval_ms: POLL_INTERVAL_MS,
     stale_threshold_ms: STALE_THRESHOLD_MS,
     endpoints: checks,
-  });
+  }));
   } catch (e) {
-    return NextResponse.json(
+    return cors(NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : String(e) },
       { status: 500 },
-    );
+    ));
   }
 }
