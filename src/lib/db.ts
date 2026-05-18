@@ -126,7 +126,9 @@ async function migrate() {
     );
     CREATE INDEX IF NOT EXISTS platform_connectors_active ON platform_connectors(is_active);
   `);
-  try { await pool.query(`ALTER TABLE page_states ADD COLUMN IF NOT EXISTS customer_count INTEGER`); } catch {}
+  try { await pool.query(`ALTER TABLE page_states ADD COLUMN IF NOT EXISTS customer_count INTEGER`); } catch {
+    // Column may already exist, safe to ignore
+  }
 }
 
 let _migrated = false;

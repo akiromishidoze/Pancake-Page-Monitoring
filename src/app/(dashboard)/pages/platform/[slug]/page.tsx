@@ -37,7 +37,7 @@ export default async function PlatformPage({
 }) {
   const { slug } = await params;
   const sp = await searchParams;
-  let platform = await getEndpointBySlug(slug);
+  const platform = await getEndpointBySlug(slug);
   if (!platform) {
     const allEndpoints = await listEndpoints();
     if (allEndpoints.length === 0) {

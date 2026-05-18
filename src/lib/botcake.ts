@@ -75,7 +75,7 @@ async function getBotCakePageTokens(userToken: string): Promise<Map<string, stri
 
 export type ConversationResult = Map<string, { ts: string | null; count: number }>;
 
-let _conversationCache: Map<string, { hasConversations: boolean; lastActivityAt: string | null; customerCount: number; checkedAt: number }> = new Map();
+const _conversationCache: Map<string, { hasConversations: boolean; lastActivityAt: string | null; customerCount: number; checkedAt: number }> = new Map();
 
 export async function checkBotCakeConversations(pageIds: string[], userToken: string): Promise<ConversationResult> {
   const result: ConversationResult = new Map();
@@ -138,7 +138,7 @@ export async function checkBotCakeConversations(pageIds: string[], userToken: st
 
 // ──── Deeper probe: tools + flows for pages without conversations ────
 
-let _toolsFlowsCache = new Map<string, { hasToolsOrFlows: boolean; lastActivityAt: string | null; checkedAt: number }>();
+const _toolsFlowsCache = new Map<string, { hasToolsOrFlows: boolean; lastActivityAt: string | null; checkedAt: number }>();
 
 export async function checkBotCakeToolsFlows(pageIds: string[], userToken: string): Promise<Map<string, string | null>> {
   const result = new Map<string, string | null>();
@@ -225,7 +225,7 @@ export function clearConversationCache() {
 
 // ---- FB Graph API name resolution (used for page names only, not status) ----
 
-let _fbPageInfoCache = new Map<string, { status: 'valid' | 'not-found'; name?: string } | 'checking'>();
+const _fbPageInfoCache = new Map<string, { status: 'valid' | 'not-found'; name?: string } | 'checking'>();
 
 async function resolveFbPages(pageIds: string[]): Promise<Map<string, { status: 'valid' | 'not-found'; name?: string }>> {
   const result = new Map<string, { status: 'valid' | 'not-found'; name?: string }>();

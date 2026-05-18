@@ -1,17 +1,16 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 
 export function RunStatusIndicator() {
   const [isRunning, setIsRunning] = useState(false);
   const [nextRunTime, setNextRunTime] = useState<number | null>(null);
-  const [timeRemaining, setTimeRemaining] = useState<string | null>(null);
-  
+  const [now, setNow] = useState(Date.now());
+
   const router = useRouter();
   const wasRunningRef = useRef(false);
 
-  // Poll for status from the server every 5 seconds
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
 
@@ -19,22 +18,21 @@ export function RunStatusIndicator() {
       try {
         const res = await fetch('/api/status', { cache: 'no-store' });
         const data = await res.json();
-        
+
         if (data.ok) {
           setIsRunning(data.isRunning);
           setNextRunTime(data.nextRunTime);
-          
-          // If it just transitioned from running to NOT running, refresh the page immediately
+
           if (wasRunningRef.current && !data.isRunning) {
             router.refresh();
           }
-          
+
           wasRunningRef.current = data.isRunning;
         }
       } catch (err) {
         console.error('Failed to fetch run status:', err);
       }
-      
+
       timeoutId = setTimeout(checkStatus, 5000);
     }
 
@@ -43,32 +41,21 @@ export function RunStatusIndicator() {
     return () => clearTimeout(timeoutId);
   }, [router]);
 
-  // Live countdown timer that updates every second
   useEffect(() => {
-    if (isRunning || !nextRunTime) {
-      setTimeRemaining(null);
-      return;
-    }
-
-    const updateCountdown = () => {
-      const now = Date.now();
-      const diffMs = nextRunTime - now;
-
-      if (diffMs <= 0) {
-        setTimeRemaining('Pending...');
-        return;
-      }
-
-      const m = Math.floor(diffMs / 60000);
-      const s = Math.floor((diffMs % 60000) / 1000);
-      setTimeRemaining(`${m}m ${s.toString().padStart(2, '0')}s`);
-    };
-
-    updateCountdown();
-    const intervalId = setInterval(updateCountdown, 1000);
-
+    const intervalId = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(intervalId);
-  }, [nextRunTime, isRunning]);
+  }, []);
+
+  const timeRemaining = useMemo(() => {
+    if (isRunning || !nextRunTime) return null;
+
+    const diffMs = nextRunTime - now;
+    if (diffMs <= 0) return 'Pending...';
+
+    const m = Math.floor(diffMs / 60000);
+    const s = Math.floor((diffMs % 60000) / 1000);
+    return `${m}m ${s.toString().padStart(2, '0')}s`;
+  }, [nextRunTime, isRunning, now]);
 
   if (isRunning) {
     return (

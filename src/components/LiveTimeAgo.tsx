@@ -1,38 +1,27 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 
 export function LiveTimeAgo({ timestampMs }: { timestampMs: number | null | undefined }) {
-  const [timeAgo, setTimeAgo] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now());
+
+  const timeAgo = useMemo(() => {
+    if (!timestampMs) return 'No runs received';
+
+    const diffMs = now - timestampMs;
+    if (diffMs < 0) return 'Just now';
+
+    const m = Math.floor(diffMs / 60000);
+    const s = Math.floor((diffMs % 60000) / 1000);
+
+    if (m === 0) return `Last run ${s}s ago`;
+    return `Last run ${m}m ${s.toString().padStart(2, '0')}s ago`;
+  }, [timestampMs, now]);
 
   useEffect(() => {
-    if (!timestampMs) {
-      setTimeAgo('No runs received');
-      return;
-    }
-
-    const updateTimer = () => {
-      const diffMs = Date.now() - timestampMs;
-      if (diffMs < 0) {
-        setTimeAgo('Just now');
-        return;
-      }
-
-      const m = Math.floor(diffMs / 60000);
-      const s = Math.floor((diffMs % 60000) / 1000);
-      
-      if (m === 0) {
-        setTimeAgo(`Last run ${s}s ago`);
-      } else {
-        setTimeAgo(`Last run ${m}m ${s.toString().padStart(2, '0')}s ago`);
-      }
-    };
-
-    updateTimer();
-    const intervalId = setInterval(updateTimer, 1000);
-
+    const intervalId = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(intervalId);
-  }, [timestampMs]);
+  }, []);
 
   if (!timeAgo) return null;
 

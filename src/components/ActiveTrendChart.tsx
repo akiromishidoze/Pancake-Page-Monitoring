@@ -19,8 +19,6 @@ export function ActiveTrendChart({ series }: { series: Series[] }) {
 
   const COLORS = ['#22c55e', '#3b82f6', '#a855f7', '#f59e0b', '#ef4444'];
 
-  if (series.length === 0) return null;
-
   const filtered = useMemo(() => {
     const cutoff = Date.now() - RANGES[range].ms;
     return series.map(s => ({
@@ -56,6 +54,8 @@ export function ActiveTrendChart({ series }: { series: Series[] }) {
       return row;
     });
   }, [series, range]);
+
+  if (series.length === 0) return null;
 
   const isEmpty = chartData.length === 0;
 
