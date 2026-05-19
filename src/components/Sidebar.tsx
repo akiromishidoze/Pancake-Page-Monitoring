@@ -31,6 +31,15 @@ function NavIcon({ children }: { children: React.ReactNode }) {
   );
 }
 
+const navLinkBase = (active: boolean, collapsed: boolean) =>
+  `flex items-center rounded-md transition-colors text-sm font-medium ${
+    collapsed ? 'justify-center mx-2 h-9' : 'px-3 py-2 gap-3'
+  } ${
+    active
+      ? 'bg-slate-800 text-white'
+      : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+  }`;
+
 export function Sidebar() {
   const pathname = usePathname();
   const { collapsed, toggle } = useCollapsed();
@@ -53,16 +62,10 @@ export function Sidebar() {
     setMobileOpen(false);
   }
 
-  const linkClass = (active: boolean) =>
-    `flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-      active
-        ? 'bg-slate-800 text-white'
-        : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
-    }`;
-
   const sidebarContent = (
     <div className="flex flex-col h-full">
       <div className="p-4 flex-1 flex flex-col overflow-hidden">
+        {/* Logo */}
         <div className={`flex items-center gap-2 mb-4 ${collapsed ? 'justify-center' : ''}`}>
           <div className="w-8 h-8 rounded-lg bg-blue-700 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
             M
@@ -75,7 +78,8 @@ export function Sidebar() {
           )}
         </div>
 
-        <div className={`flex items-center mb-3 ${collapsed ? 'justify-center' : ''}`}>
+        {/* Collapse toggle */}
+        <div className={`flex items-center mb-3 ${collapsed ? 'justify-center' : 'justify-end'}`}>
           <button
             onClick={toggle}
             className="p-1.5 rounded-md text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer"
@@ -93,14 +97,15 @@ export function Sidebar() {
           </h2>
         )}
 
+        {/* Nav items */}
         <nav className="space-y-1">
           <Link
             href="/"
             onClick={closeMobile}
-            className={linkClass(pathname === '/')}
+            className={navLinkBase(pathname === '/', collapsed)}
             title="Overview"
           >
-            <NavIcon path="/">
+            <NavIcon>
               <rect x="3" y="3" width="7" height="7" />
               <rect x="14" y="3" width="7" height="7" />
               <rect x="14" y="14" width="7" height="7" />
@@ -112,10 +117,10 @@ export function Sidebar() {
           <Link
             href="/runs"
             onClick={closeMobile}
-            className={linkClass(pathname === '/runs')}
+            className={navLinkBase(pathname === '/runs', collapsed)}
             title="Run History"
           >
-            <NavIcon path="/runs">
+            <NavIcon>
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
             </NavIcon>
@@ -127,10 +132,10 @@ export function Sidebar() {
               <Link
                 href="/pages"
                 onClick={closeMobile}
-                className={linkClass(isPagesActive)}
+                className={navLinkBase(isPagesActive, collapsed)}
                 title="Pages"
               >
-                <NavIcon path="/pages">
+                <NavIcon>
                   <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
                   <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
                 </NavIcon>
@@ -139,19 +144,17 @@ export function Sidebar() {
               <>
                 <button
                   onClick={() => toggleGroup('pages')}
-                  className={`w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer ${
+                  className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer ${
                     isPagesActive
                       ? 'bg-slate-800 text-white'
                       : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <NavIcon path="/pages">
-                      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-                    </NavIcon>
-                    <span>Pages</span>
-                  </div>
+                  <NavIcon>
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                  </NavIcon>
+                  <span className="flex-1 text-left">Pages</span>
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="14"
@@ -200,12 +203,13 @@ export function Sidebar() {
         </nav>
       </div>
 
-      <div className={`border-t border-slate-800 p-4 ${collapsed ? 'flex justify-center' : ''}`}>
+      {/* Settings */}
+      <div className="border-t border-slate-800 p-4">
         <Link
           href="/settings"
           onClick={closeMobile}
-          className={`flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-            collapsed ? 'w-10 h-10' : ''
+          className={`flex items-center rounded-md transition-colors text-sm font-medium ${
+            collapsed ? 'justify-center mx-2 h-9' : 'px-3 py-2 gap-3'
           } ${
             pathname === '/settings'
               ? 'bg-slate-800 text-white'
@@ -217,7 +221,7 @@ export function Sidebar() {
             <circle cx="12" cy="12" r="3"/>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
-          {!collapsed && <span className="text-xs">Settings</span>}
+          {!collapsed && <span>Settings</span>}
         </Link>
       </div>
     </div>
