@@ -115,11 +115,6 @@ export async function startConnectorPollers() {
   }
 }
 
-export function restartConnectorPollers() {
-  stopConnectorPollers();
-  startConnectorPollers();
-}
-
 export function stopConnectorPollers() {
   for (const timer of timers.values()) {
     clearInterval(timer);

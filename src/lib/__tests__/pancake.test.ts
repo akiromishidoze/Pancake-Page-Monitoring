@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergePagesActivation, filterTargetShops, TARGET_SHOP_IDS } from '@/lib/pancake';
+import { mergePagesActivation, TARGET_SHOP_IDS } from '@/lib/pancake';
 
 describe('mergePagesActivation', () => {
   it('returns shops with merged activation status', () => {
@@ -56,32 +56,6 @@ describe('mergePagesActivation', () => {
     ];
     const result = mergePagesActivation(shops, pagesApi);
     expect(result[0].pages[0].is_activated).toBe(false);
-  });
-});
-
-describe('filterTargetShops', () => {
-  it('filters shops by target IDs', () => {
-    const shops = [
-      { id: 1, name: 'Shop A', pages: [] },
-      { id: 2, name: 'Shop B', pages: [] },
-      { id: 3, name: 'Shop C', pages: [] },
-    ];
-    const result = filterTargetShops(shops, [1, 3]);
-    expect(result).toHaveLength(2);
-    expect(result[0].name).toBe('Shop A');
-    expect(result[1].name).toBe('Shop C');
-  });
-
-  it('returns empty array when no targets match', () => {
-    const shops = [
-      { id: 1, name: 'Shop A', pages: [] },
-    ];
-    const result = filterTargetShops(shops, [99]);
-    expect(result).toEqual([]);
-  });
-
-  it('returns empty array for empty input', () => {
-    expect(filterTargetShops([], [1, 2])).toEqual([]);
   });
 });
 

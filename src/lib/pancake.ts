@@ -185,8 +185,4 @@ export async function fetchPancakeActivePageIdsFromCustomers(
   return allIds;
 }
 
-export function filterTargetShops(shops: PancakeShop[], targetIds: number[]): PancakeShop[] {
-  return shops.filter(s => targetIds.includes(s.id));
-}
-
 export const TARGET_SHOP_IDS = [430202960, 1635192689, 1942241731];

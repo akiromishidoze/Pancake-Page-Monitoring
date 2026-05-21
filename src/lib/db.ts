@@ -388,30 +388,6 @@ export async function getPancakeActivePageIds(): Promise<Set<string>> {
   return new Set((r.rows as { page_id: string }[]).map(r => r.page_id));
 }
 
-export async function getPancakeSeenEver(): Promise<Set<string>> {
-  await ensureMigrated();
-  const r = await pool.query(`
-    SELECT DISTINCT ps.page_id
-    FROM page_states ps
-    JOIN runs r ON r.run_id = ps.run_id
-    WHERE r.endpoint_id != 'botcake-platform' AND r.endpoint_id IS NOT NULL
-  `);
-  return new Set((r.rows as { page_id: string }[]).map(r => r.page_id));
-}
-
-export async function getPancakeInactivePageIds(): Promise<Set<string>> {
-  const active = await getPancakeActivePageIds();
-  const latestRunIds = await latestGoodRunIds();
-  if (latestRunIds.length === 0) return new Set<string>();
-  const placeholders = latestRunIds.map((_, i) => `$${i + 1}`).join(',');
-  const r = await pool.query(`SELECT DISTINCT page_id FROM page_states WHERE run_id IN (${placeholders}) AND (is_activated = 0 OR is_activated IS NULL)`, latestRunIds);
-  const result = new Set<string>();
-  for (const row of r.rows as { page_id: string }[]) {
-    if (!active.has(row.page_id)) result.add(row.page_id);
-  }
-  return result;
-}
-
 export async function getLatestPageStates(endpointId?: string): Promise<PageStateRow[]> {
   await ensureMigrated();
   if (endpointId) {
@@ -481,12 +457,6 @@ export async function listEndpoints(): Promise<EndpointRow[]> {
 export async function getEndpoint(id: string): Promise<EndpointRow | undefined> {
   await ensureMigrated();
   const r = await pool.query('SELECT * FROM endpoints WHERE id = $1', [id]);
-  return r.rows[0] as EndpointRow | undefined;
-}
-
-export async function getEndpointByName(name: string): Promise<EndpointRow | undefined> {
-  await ensureMigrated();
-  const r = await pool.query('SELECT * FROM endpoints WHERE name = $1', [name]);
   return r.rows[0] as EndpointRow | undefined;
 }
 

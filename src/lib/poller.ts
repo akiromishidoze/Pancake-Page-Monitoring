@@ -347,15 +347,6 @@ async function refreshPancake() {
   }
 }
 
-export async function getPollerStatus() {
-  const started = await getSetting('poller_started');
-  return {
-    started: started === '1',
-    last_polled_at: _lastPolledAt,
-    interval_ms: POLL_INTERVAL_MS,
-  };
-}
-
 let _isPolling = false;
 export async function pollIfNeeded() {
   if (_isPolling) return;

@@ -217,12 +217,6 @@ export async function checkBotCakeToolsFlows(pageIds: string[], userToken: strin
   return result;
 }
 
-export function clearConversationCache() {
-  _conversationCache.clear();
-  _toolsFlowsCache.clear();
-  _pageTokenCache = null;
-}
-
 // ---- FB Graph API name resolution (used for page names only, not status) ----
 
 const _fbPageInfoCache = new Map<string, { status: 'valid' | 'not-found'; name?: string } | 'checking'>();
