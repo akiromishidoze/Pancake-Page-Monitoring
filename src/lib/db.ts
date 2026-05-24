@@ -18,11 +18,6 @@ pool.on('error', (err) => {
 });
 export { pool };
 
-// Log connection errors without crashing
-pool.on('error', (err) => {
-  console.error('[db] unexpected pool error:', err.message);
-});
-
 // ──── SQL helper: convert @name params to $1, $2 positional ──────────
 
 function q(sql: string, params?: Record<string, unknown>): { text: string; values: unknown[] } {

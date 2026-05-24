@@ -1,26 +1,68 @@
 import { NextResponse } from 'next/server';
+import bcrypt from 'bcrypt';
 import { getSetting, setSetting } from './db';
 
+const BCRYPT_ROUNDS = 12;
 const DEFAULT_EMAIL = 'admin';
-const DEFAULT_PASSWORD = 'admin'; // fallback only; replaced on first boot
+const DEFAULT_PASSWORD = 'admin';
+
 let _credsInitialized = false;
 
+/**
+ * Returns true if the value looks like a bcrypt hash (starts with $2b$ or $2a$).
+ */
+function isBcryptHash(value: string): boolean {
+  return value.startsWith('$2b$') || value.startsWith('$2a$');
+}
+
+/**
+ * On first boot: seed default hashed credentials if none exist.
+ * On subsequent boots: transparently upgrade any plain-text password still in DB.
+ */
 export async function ensureCredentials(): Promise<void> {
   if (_credsInitialized) return;
   _credsInitialized = true;
 
-  const existing = await getSetting('auth_password');
-  if (existing) return;
+  const existingPassword = await getSetting('auth_password');
 
-  await setSetting('auth_email', DEFAULT_EMAIL);
-  await setSetting('auth_password', DEFAULT_PASSWORD);
-  console.warn('[auth] Default credentials initialized. Change them in Settings > Change Password.');
+  if (!existingPassword) {
+    // First boot — store hashed defaults
+    const hashed = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_ROUNDS);
+    await setSetting('auth_email', DEFAULT_EMAIL);
+    await setSetting('auth_password', hashed);
+    console.warn('[auth] Default credentials initialized (hashed). Change them in Settings > Change Password.');
+    return;
+  }
+
+  // Silently upgrade plain-text password to bcrypt hash
+  if (!isBcryptHash(existingPassword)) {
+    console.warn('[auth] Upgrading plain-text password to bcrypt hash...');
+    const hashed = await bcrypt.hash(existingPassword, BCRYPT_ROUNDS);
+    await setSetting('auth_password', hashed);
+    console.log('[auth] Password upgraded successfully.');
+  }
 }
 
 export async function validateCredentials(email: string, password: string): Promise<boolean> {
   const storedEmail = (await getSetting('auth_email')) || DEFAULT_EMAIL;
-  const storedPassword = (await getSetting('auth_password')) || DEFAULT_PASSWORD;
-  return email === storedEmail && password === storedPassword;
+  const storedPassword = (await getSetting('auth_password')) || '';
+
+  if (email !== storedEmail) return false;
+
+  // Support both hashed (normal) and plain-text (legacy fallback only)
+  if (isBcryptHash(storedPassword)) {
+    return bcrypt.compare(password, storedPassword);
+  }
+
+  // Plain-text fallback (should only happen if DB was manually edited)
+  return password === storedPassword;
+}
+
+/**
+ * Hash a plain-text password using bcrypt.
+ */
+export async function hashPassword(plain: string): Promise<string> {
+  return bcrypt.hash(plain, BCRYPT_ROUNDS);
 }
 
 export async function createSession(): Promise<string> {

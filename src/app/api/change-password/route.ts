@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { validateSession } from '@/lib/auth';
-import { getSetting, setSetting } from '@/lib/db';
+import { validateSession, validateCredentials, hashPassword } from '@/lib/auth';
+import { setSetting } from '@/lib/db';
 
 export async function POST(req: Request) {
   try {
@@ -17,20 +17,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: 'Current password is required' }, { status: 400 });
     }
 
-    const storedEmail = (await getSetting('auth_email')) || 'admin';
-    const storedPassword = (await getSetting('auth_password')) || 'admin';
-    if ((current_email || storedEmail) !== storedEmail || current_password !== storedPassword) {
+    // Validate current credentials using bcrypt-aware comparison
+    if (!(await validateCredentials(current_email || 'admin', current_password))) {
       return NextResponse.json({ ok: false, error: 'Current credentials are incorrect' }, { status: 403 });
     }
 
     if (new_email) {
       await setSetting('auth_email', new_email);
     }
+
     if (new_password) {
-      if (new_password.length < 4) {
-        return NextResponse.json({ ok: false, error: 'Password must be at least 4 characters' }, { status: 400 });
+      if (new_password.length < 8) {
+        return NextResponse.json({ ok: false, error: 'Password must be at least 8 characters' }, { status: 400 });
       }
-      await setSetting('auth_password', new_password);
+      // Hash before storing — never save plain text
+      const hashed = await hashPassword(new_password);
+      await setSetting('auth_password', hashed);
     }
 
     return NextResponse.json({ ok: true, message: 'Credentials updated' });
