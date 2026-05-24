@@ -120,6 +120,12 @@ async function migrate() {
       updated_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS platform_connectors_active ON platform_connectors(is_active);
+    CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS sessions_expires_at ON sessions(expires_at);
   `);
   try { await pool.query(`ALTER TABLE page_states ADD COLUMN IF NOT EXISTS customer_count INTEGER`); } catch {
     // Column may already exist, safe to ignore
@@ -788,3 +794,43 @@ export async function setSetting(key: string, value: string): Promise<void> {
     ON CONFLICT(key) DO UPDATE SET value = @value
   `, { key, value }));
 }
+
+// ──── Sessions ─────────────────────────────────────────────────────────
+
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+export async function createSessionToken(): Promise<string> {
+  await ensureMigrated();
+  const token = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const expires = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+  await pool.query(
+    'INSERT INTO sessions (token, created_at, expires_at) VALUES ($1, $2, $3)',
+    [token, now, expires],
+  );
+  // Prune expired sessions on each new login (lazy cleanup)
+  void pruneExpiredSessions();
+  return token;
+}
+
+export async function validateSessionToken(token: string | null | undefined): Promise<boolean> {
+  if (!token) return false;
+  await ensureMigrated();
+  const r = await pool.query(
+    'SELECT expires_at FROM sessions WHERE token = $1',
+    [token],
+  );
+  const row = r.rows[0] as { expires_at: string } | undefined;
+  if (!row) return false;
+  return new Date(row.expires_at) > new Date();
+}
+
+export async function clearSessionToken(token: string): Promise<void> {
+  await ensureMigrated();
+  await pool.query('DELETE FROM sessions WHERE token = $1', [token]);
+}
+
+export async function pruneExpiredSessions(): Promise<void> {
+  await pool.query('DELETE FROM sessions WHERE expires_at < $1', [new Date().toISOString()]);
+}
+
