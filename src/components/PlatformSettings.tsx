@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { formatWithTz } from '@/lib/format';
 
 type Endpoint = {
   id: string;
@@ -161,7 +162,7 @@ export function PlatformSettings({ endpoint: initial }: { endpoint: Endpoint }) 
           {initial.url && <div className="text-slate-500">URL: <span className="text-slate-400">{initial.url}</span></div>}
           <div className="text-slate-500">Key: <span className="font-mono text-slate-400">{mask(initial.api_key)}</span></div>
           {initial.access_token && <div className="text-slate-500">Token: <span className="font-mono text-slate-400">{mask(initial.access_token)}</span></div>}
-          {initial.token_expires_at && <div className="text-slate-500">Expires: <span className="text-slate-400">{new Date(initial.token_expires_at).toLocaleString()}</span></div>}
+          {initial.token_expires_at && <div className="text-slate-500">Expires: <span className="text-slate-400">{formatWithTz(initial.token_expires_at)}</span></div>}
         </div>
       )}
     </div>

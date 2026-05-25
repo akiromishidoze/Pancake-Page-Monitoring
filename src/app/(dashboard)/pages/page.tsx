@@ -1,6 +1,7 @@
 import { listEndpoints, slugify } from '@/lib/db';
 import { getRunCount, getLatestPageStates } from '@/lib/db';
 import Link from 'next/link';
+import { formatDateWithTz } from '@/lib/format';
 
 const KIND_TONE: Record<string, string> = {
   funnel_converting: 'bg-green-900/30 text-green-300 border-green-800',
@@ -58,7 +59,7 @@ export default async function PlatformsPage() {
                 <div className="flex gap-3 text-sm text-slate-500">
                   <span className="text-green-400 font-medium">{ep.is_active ? 'active' : 'inactive'}</span>
                   {ep.last_used_at && (
-                    <span>Last used: {new Date(ep.last_used_at).toLocaleDateString()}</span>
+                    <span>Last used: {formatDateWithTz(ep.last_used_at)}</span>
                   )}
                 </div>
               </Link>

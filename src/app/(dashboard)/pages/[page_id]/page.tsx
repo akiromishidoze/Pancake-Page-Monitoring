@@ -4,6 +4,7 @@ import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { ActiveDonutChart } from '@/components/ActiveDonutChart';
 import { PageWaterfallChart } from '@/components/PageWaterfallChart';
 import type { SlimPage } from '@/lib/db';
+import { formatWithTz } from '@/lib/format';
 
 function formatDurationSeconds(sec: number) {
   if (sec <= 0) return '0s';
@@ -339,7 +340,7 @@ export default async function Page({
                 <tbody className="divide-y divide-slate-800">
                   {recentIncidents.map((it, idx) => (
                     <tr key={`${it.startMs}-${idx}`} className="hover:bg-slate-800/30">
-                      <td className="px-3 py-2 text-slate-300">{new Date(it.startMs).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-slate-300">{formatWithTz(it.startMs)}</td>
                       <td className="px-3 py-2 text-slate-200">{it.durationSec ? formatDurationSeconds(it.durationSec) : '—'}</td>
                       <td className="px-3 py-2">
                         {it.severity === 'critical' ? (
@@ -422,7 +423,7 @@ export default async function Page({
             <tbody className="divide-y divide-slate-800">
               {rows.slice(-500).reverse().map((r, i) => (
                 <tr key={`${r.id}-${i}`} className="hover:bg-slate-800/30">
-                  <td className="px-3 py-2 text-slate-300">{new Date(r.generated_at).toLocaleString()}</td>
+                  <td className="px-3 py-2 text-slate-300">{formatWithTz(r.generated_at)}</td>
                   <td className="px-3 py-2">
                     {r.is_activated ? (
                       <span className="inline-block px-2 py-1 rounded text-xs font-mono bg-green-900/40 text-green-300 border border-green-800">active</span>

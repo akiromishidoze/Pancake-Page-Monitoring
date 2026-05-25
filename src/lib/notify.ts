@@ -1,3 +1,4 @@
+import nodemailer from 'nodemailer';
 import { getSetting, setSetting, pool, type RunRow } from './db';
 
 type AlertLevel = 'info' | 'warning' | 'critical';
@@ -40,6 +41,43 @@ async function sendSlack(webhookUrl: string, event: AlertEvent): Promise<boolean
       body: JSON.stringify(payload),
     });
     return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// ─── Email ────────────────────────────────────────────────────────────
+
+async function sendEmail(event: AlertEvent): Promise<boolean> {
+  const [host, portStr, user, pass, from, to] = await Promise.all([
+    getSetting('notify_smtp_host'),
+    getSetting('notify_smtp_port'),
+    getSetting('notify_smtp_user'),
+    getSetting('notify_smtp_pass'),
+    getSetting('notify_email_from'),
+    getSetting('notify_email_to'),
+  ]);
+
+  if (!host || !user || !pass || !to) return false;
+
+  const port = portStr ? parseInt(portStr, 10) : 587;
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: { user, pass },
+    });
+
+    await transporter.sendMail({
+      from: from || user,
+      to,
+      subject: `[${event.level.toUpperCase()}] ${event.title}`,
+      text: `${event.message}\n\nLevel: ${event.level.toUpperCase()}\nPlatform: ${event.platform || '—'}\nTimestamp: ${event.timestamp || new Date().toISOString()}`,
+    });
+
+    return true;
   } catch {
     return false;
   }
@@ -99,19 +137,26 @@ async function markSent(dedupKey: string): Promise<void> {
 // ─── Dispatch ─────────────────────────────────────────────────────────
 
 export async function sendAlert(event: AlertEvent): Promise<void> {
-  const slackUrl = await getSetting('notify_slack_webhook');
-
-  if (!slackUrl) return;
+  const [slackUrl] = await Promise.all([
+    getSetting('notify_slack_webhook'),
+  ]);
 
   const dedupKey = `${event.title}|${event.message}`;
   if (await isDuplicate(dedupKey)) return;
   await markSent(dedupKey);
 
-  const ok = await sendSlack(slackUrl, event);
-  if (ok) {
-    console.log('[notify] slack alert sent:', event.title);
-  } else {
-    console.warn('[notify] slack send failed:', event.title);
+  if (slackUrl) {
+    const ok = await sendSlack(slackUrl, event);
+    if (ok) {
+      console.log('[notify] slack alert sent:', event.title);
+    } else {
+      console.warn('[notify] slack send failed:', event.title);
+    }
+  }
+
+  const emailOk = await sendEmail(event);
+  if (emailOk) {
+    console.log('[notify] email alert sent:', event.title);
   }
 }
 

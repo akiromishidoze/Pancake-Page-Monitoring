@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { validateSession, validateCredentials, hashPassword } from '@/lib/auth';
-import { setSetting } from '@/lib/db';
+import { setSetting, logAuditEntry } from '@/lib/db';
 
 export async function POST(req: Request) {
   try {
@@ -26,6 +26,8 @@ export async function POST(req: Request) {
       await setSetting('auth_email', new_email);
     }
 
+    const changes: string[] = [];
+
     if (new_password) {
       if (new_password.length < 8) {
         return NextResponse.json({ ok: false, error: 'Password must be at least 8 characters' }, { status: 400 });
@@ -33,6 +35,16 @@ export async function POST(req: Request) {
       // Hash before storing — never save plain text
       const hashed = await hashPassword(new_password);
       await setSetting('auth_password', hashed);
+      changes.push('password');
+    }
+
+    if (new_email) {
+      changes.push('email');
+    }
+
+    if (changes.length > 0) {
+      const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '';
+      void logAuditEntry('update_credentials', 'auth', 'credentials', `Changed: ${changes.join(', ')}`, ip);
     }
 
     return NextResponse.json({ ok: true, message: 'Credentials updated' });

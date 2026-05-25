@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getLatestRun, getRunCount, getSetting, listEndpoints, getEndpoint, getLatestPageStates, getLatestPageStatesForEndpoints, getRecentRuns, getRunHistory, getRunHistories, getBotCakeOverrides, type PageStateRow, type RunRow, type EndpointRow } from '@/lib/db';
 import { StatusCard } from '@/components/StatusCard';
 import { RunNowButton } from '@/components/RunNowButton';
+import { formatWithTz } from '@/lib/format';
 import { RunStatusIndicator } from '@/components/RunStatusIndicator';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { ActiveDonutChart } from '@/components/ActiveDonutChart';
@@ -287,7 +288,7 @@ export default async function OverviewPage({
   const isPancakeShop = isFiltered && !isBotCake;
 
   const lastUpdatedDisplay = localRun
-    ? new Date(localRun.received_at).toLocaleString()
+    ? formatWithTz(localRun.received_at)
     : '—';
 
   const cardData: StatusCardData = {

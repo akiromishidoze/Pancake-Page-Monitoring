@@ -1,6 +1,7 @@
 import { pool, listEndpoints, type RunRow } from '@/lib/db';
 import { PlatformFilter } from '@/components/PlatformFilter';
 import { Pagination } from '@/components/Pagination';
+import { formatWithTz } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 
@@ -110,7 +111,7 @@ export default async function RunsPage({
                     {r.endpoint_id === 'botcake-platform' ? 'BotCake' : r.endpoint_id || 'Legacy'}
                   </td>
                   <td className="px-4 py-3 text-slate-400 text-xs">
-                    {new Date(r.generated_at).toLocaleString()}
+                    {formatWithTz(r.generated_at)}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`inline-block px-2 py-0.5 rounded text-xs font-mono border ${tone(r.run_quality)}`}>

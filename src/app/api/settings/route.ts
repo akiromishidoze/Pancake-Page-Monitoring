@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSetting, setSetting } from '@/lib/db';
+import { getSetting, setSetting, logAuditEntry } from '@/lib/db';
 import { requireApiAuth } from '@/lib/auth';
 
 export async function GET() {
@@ -23,6 +23,8 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: false, error: 'Invalid retention_days' }, { status: 400 });
       }
       await setSetting('retention_days', String(days));
+      const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '';
+      void logAuditEntry('update_retention', 'settings', 'retention_days', `Changed to ${days}`, ip);
     }
 
     return NextResponse.json({ ok: true, message: 'Settings updated' });

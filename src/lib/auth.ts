@@ -65,8 +65,13 @@ export async function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, BCRYPT_ROUNDS);
 }
 
-export async function createSession(): Promise<string> {
-  return createSessionToken();
+export async function createSession(role?: string): Promise<string> {
+  return createSessionToken(role);
+}
+
+export async function requireAdminSession(token: string | null | undefined): Promise<boolean> {
+  const { requireAdminSession: dbRequireAdmin } = await import('./db');
+  return dbRequireAdmin(token);
 }
 
 export async function validateSession(token: string | null | undefined): Promise<boolean> {

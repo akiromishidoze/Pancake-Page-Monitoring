@@ -122,6 +122,7 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS platform_connectors_active ON platform_connectors(is_active);
     CREATE TABLE IF NOT EXISTS sessions (
       token TEXT PRIMARY KEY,
+      role TEXT NOT NULL DEFAULT 'admin',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       expires_at TIMESTAMPTZ NOT NULL
     );
@@ -132,8 +133,20 @@ async function migrate() {
       reason TEXT NOT NULL DEFAULT '',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-  `);
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id SERIAL PRIMARY KEY,
+      action TEXT NOT NULL,
+      entity_type TEXT,
+      entity_id TEXT,
+      detail TEXT,
+      ip_address TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    `);
   try { await pool.query(`ALTER TABLE page_states ADD COLUMN IF NOT EXISTS customer_count INTEGER`); } catch {
+    // Column may already exist, safe to ignore
+  }
+  try { await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'admin'`); } catch {
     // Column may already exist, safe to ignore
   }
   await migrateTimestampTypes();
@@ -1042,22 +1055,50 @@ export async function setSetting(key: string, value: string): Promise<void> {
   `, { key, value }));
 }
 
+// ──── Audit Log ────────────────────────────────────────────────────────
+
+export async function logAuditEntry(action: string, entityType?: string, entityId?: string, detail?: string, ipAddress?: string): Promise<void> {
+  await ensureMigrated();
+  try {
+    await pool.query(q(`
+      INSERT INTO audit_log (action, entity_type, entity_id, detail, ip_address)
+      VALUES (@action, @entityType, @entityId, @detail, @ipAddress)
+    `, { action, entityType: entityType ?? null, entityId: entityId ?? null, detail: detail ?? null, ipAddress: ipAddress ?? null }));
+  } catch (e) {
+    console.error('[audit] failed to log entry:', e);
+  }
+}
+
 // ──── Sessions ─────────────────────────────────────────────────────────
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
-export async function createSessionToken(): Promise<string> {
+export async function createSessionToken(role?: string): Promise<string> {
   await ensureMigrated();
   const token = crypto.randomUUID();
   const now = new Date().toISOString();
   const expires = new Date(Date.now() + SESSION_TTL_MS).toISOString();
   await pool.query(
-    'INSERT INTO sessions (token, created_at, expires_at) VALUES ($1, $2, $3)',
-    [token, now, expires],
+    'INSERT INTO sessions (token, role, created_at, expires_at) VALUES ($1, $2, $3, $4)',
+    [token, role || 'admin', now, expires],
   );
   // Prune expired sessions on each new login (lazy cleanup)
   void pruneExpiredSessions();
   return token;
+}
+
+export async function getSessionRole(token: string | null | undefined): Promise<string | null> {
+  if (!token) return null;
+  await ensureMigrated();
+  const r = await pool.query('SELECT role FROM sessions WHERE token = $1', [token]);
+  const row = r.rows[0] as { role: string } | undefined;
+  return row ? row.role : null;
+}
+
+export async function requireAdminSession(token: string | null | undefined): Promise<boolean> {
+  if (!token) return false;
+  const role = await getSessionRole(token);
+  return role === 'admin';
 }
 
 export async function validateSessionToken(token: string | null | undefined): Promise<boolean> {

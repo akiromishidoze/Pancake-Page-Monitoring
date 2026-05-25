@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { formatWithTz } from '@/lib/format';
 
 type Endpoint = {
   id: string;
@@ -86,8 +87,8 @@ export function SettingsForm({ initialEndpoints }: { initialEndpoints: Endpoint[
             {ep.url && <div>URL: {ep.url}</div>}
             <div>Key: <span className="font-mono text-slate-400">{mask(ep.api_key)}</span></div>
             {ep.access_token && <div>Token: <span className="font-mono text-slate-400">{mask(ep.access_token)}</span></div>}
-            {ep.token_expires_at && <div>Expires: {new Date(ep.token_expires_at).toLocaleString()}</div>}
-            {ep.last_used_at && <div>Last used: {new Date(ep.last_used_at).toLocaleString()}</div>}
+            {ep.token_expires_at && <div>Expires: {formatWithTz(ep.token_expires_at)}</div>}
+            {ep.last_used_at && <div>Last used: {formatWithTz(ep.last_used_at)}</div>}
           </div>
         </div>
         <div className="flex items-center gap-2 ml-4 shrink-0">

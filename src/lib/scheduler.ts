@@ -1,12 +1,16 @@
-import { getSetting, setSetting, pruneOldRuns } from './db';
+import { getSetting, setSetting, pruneOldRuns, listEndpoints } from './db';
 import { refreshAll } from './poller';
 
 const SCHEDULER_POLL_MS = 5_000;
 const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const CACHE_TTL_MS = 60_000;
+const POLLER_HEALTH_INTERVAL_MS = 60_000;
+const POLLER_GRACE_PERIOD_MS = 3 * 60_000;
+const POLLER_STALE_THRESHOLD_MS = 3 * 60_000;
 
 let _started = false;
+let _serverStartTime = Date.now();
 const _intervals: NodeJS.Timeout[] = [];
 
 // In-memory cache for schedule settings to avoid 17k DB reads/day
@@ -58,6 +62,10 @@ export async function startScheduler() {
   _intervals.push(setInterval(() => {
     checkPrune().catch(err => console.error('[scheduler] Prune error:', err));
   }, 60_000));
+
+  _intervals.push(setInterval(() => {
+    checkPollerHealth().catch(err => console.error('[scheduler] Poller health check error:', err));
+  }, POLLER_HEALTH_INTERVAL_MS));
 }
 
 export function stopScheduler() {
@@ -103,6 +111,46 @@ async function checkPrune() {
     }
   } catch (err) {
     console.error('[scheduler] prune failed:', err);
+  }
+}
+
+// ─── Poller health alerting ─────────────────────────────────────────
+
+async function checkPollerHealth() {
+  const now = Date.now();
+
+  // Skip during grace period after server start
+  if (now - _serverStartTime < POLLER_GRACE_PERIOD_MS) return;
+
+  const lastRunStr = await getSetting('last_scheduled_run');
+  if (!lastRunStr) return;
+
+  const lastRunMs = parseInt(lastRunStr, 10);
+  if (isNaN(lastRunMs)) return;
+
+  const elapsed = now - lastRunMs;
+  if (elapsed < POLLER_STALE_THRESHOLD_MS) return;
+
+  // Check if there are any active endpoints to monitor
+  const endpoints = await listEndpoints();
+  const activeEndpoints = endpoints.filter(e => e.is_active);
+  if (activeEndpoints.length === 0) return;
+
+  // Poller is stale — send alert
+  const elapsedMin = Math.round(elapsed / 60000);
+  console.warn(`[scheduler] Poller stale — no refresh for ${elapsedMin} min`);
+
+  try {
+    const { sendAlert } = await import('./notify');
+    await sendAlert({
+      title: '⏰ Poller Stale',
+      message: `No data refresh for ${elapsedMin} minutes (threshold: ${POLLER_STALE_THRESHOLD_MS / 60000} min). Active endpoints: ${activeEndpoints.length}.`,
+      level: 'warning',
+      platform: 'system',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('[scheduler] Failed to send poller health alert:', err);
   }
 }
 
