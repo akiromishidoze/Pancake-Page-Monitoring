@@ -11,7 +11,7 @@ const KIND_TONE: Record<string, string> = {
 
 export default async function PlatformsPage() {
   const allEndpoints = await listEndpoints();
-  const endpoints = allEndpoints.filter((e: { is_active: number; url?: string | null }) => e.is_active && !e.url?.includes('botcake.io'));
+  const endpoints = allEndpoints.filter((e: { is_active: boolean; url?: string | null }) => e.is_active && !e.url?.includes('botcake.io'));
   const dbCount = await getRunCount();
 
   // Compute per-platform page stats from monitoring data

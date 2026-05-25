@@ -44,7 +44,7 @@ async function migrate() {
       access_token TEXT,
       shop_label TEXT,
       token_expires_at TIMESTAMPTZ,
-      is_active INTEGER NOT NULL DEFAULT 1,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       last_used_at TIMESTAMPTZ
     );
@@ -53,15 +53,15 @@ async function migrate() {
       endpoint_id TEXT REFERENCES endpoints(id) ON DELETE SET NULL,
       generated_at TIMESTAMPTZ NOT NULL,
       received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      heartbeat_ok INTEGER,
+      heartbeat_ok BOOLEAN,
       run_quality TEXT,
       severity TEXT,
       canary_status TEXT,
-      canary_alert INTEGER,
-      outage_suspected INTEGER,
+      canary_alert BOOLEAN,
+      outage_suspected BOOLEAN,
       alert_count INTEGER,
       rule_version INTEGER,
-      in_maintenance_window INTEGER,
+      in_maintenance_window BOOLEAN,
       total_pages INTEGER,
       active_pages INTEGER,
       inactive_pages INTEGER,
@@ -77,8 +77,8 @@ async function migrate() {
       shop_label TEXT,
       page_name TEXT,
       activity_kind TEXT,
-      is_activated INTEGER,
-      is_canary INTEGER,
+      is_activated BOOLEAN,
+      is_canary BOOLEAN,
       activation_reason TEXT,
       state_change TEXT,
       activity_kind_change TEXT,
@@ -101,7 +101,7 @@ async function migrate() {
       endpoint_id TEXT NOT NULL REFERENCES endpoints(id) ON DELETE CASCADE,
       page_name TEXT NOT NULL,
       page_url TEXT,
-      is_active INTEGER NOT NULL DEFAULT 1,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -115,7 +115,7 @@ async function migrate() {
       auth_token TEXT,
       json_path TEXT,
       interval_ms INTEGER NOT NULL DEFAULT 60000,
-      is_active INTEGER NOT NULL DEFAULT 1,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -131,6 +131,7 @@ async function migrate() {
     // Column may already exist, safe to ignore
   }
   await migrateTimestampTypes();
+  await migrateBooleanTypes();
 }
 
 async function migrateTimestampTypes() {
@@ -154,6 +155,29 @@ async function migrateTimestampTypes() {
       );
     } catch {
       // Column may already be TIMESTAMPTZ or not exist — skip
+    }
+  }
+}
+
+async function migrateBooleanTypes() {
+  const conversions: { table: string; column: string }[] = [
+    { table: 'endpoints', column: 'is_active' },
+    { table: 'runs', column: 'heartbeat_ok' },
+    { table: 'runs', column: 'canary_alert' },
+    { table: 'runs', column: 'outage_suspected' },
+    { table: 'runs', column: 'in_maintenance_window' },
+    { table: 'page_states', column: 'is_activated' },
+    { table: 'page_states', column: 'is_canary' },
+    { table: 'platform_pages', column: 'is_active' },
+    { table: 'platform_connectors', column: 'is_active' },
+  ];
+  for (const { table, column } of conversions) {
+    try {
+      await pool.query(
+        `ALTER TABLE ${table} ALTER COLUMN ${column} TYPE BOOLEAN USING ${column}::boolean`,
+      );
+    } catch {
+      // Column may already be BOOLEAN or not exist — skip
     }
   }
 }
@@ -289,15 +313,15 @@ export type RunRow = {
   endpoint_id: string | null;
   generated_at: string;
   received_at: string;
-  heartbeat_ok: number | null;
+  heartbeat_ok: boolean | null;
   run_quality: string | null;
   severity: string | null;
   canary_status: string | null;
-  canary_alert: number | null;
-  outage_suspected: number | null;
+  canary_alert: boolean | null;
+  outage_suspected: boolean | null;
   alert_count: number | null;
   rule_version: number | null;
-  in_maintenance_window: number | null;
+  in_maintenance_window: boolean | null;
   total_pages: number | null;
   active_pages: number | null;
   inactive_pages: number | null;
@@ -312,8 +336,8 @@ export type PageStateRow = {
   shop_label: string | null;
   page_name: string | null;
   activity_kind: string | null;
-  is_activated: number | null;
-  is_canary: number | null;
+  is_activated: boolean | null;
+  is_canary: boolean | null;
   activation_reason: string | null;
   state_change: string | null;
   activity_kind_change: string | null;
@@ -359,13 +383,13 @@ export async function insertSnapshot(input: InsertSnapshotInput): Promise<{ inse
   const allPages = [
     ...input.active_pages.map(p => ({
       ...p,
-      _is_active: 1,
+      _is_active: true,
       response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
       fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
     })),
     ...input.inactive_pages.map(p => ({
       ...p,
-      _is_active: 0,
+      _is_active: false,
       response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
       fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
     })),
@@ -397,15 +421,15 @@ export async function insertSnapshot(input: InsertSnapshotInput): Promise<{ inse
       endpoint_id: input.endpoint_id ?? null,
       generated_at: input.generated_at,
       received_at: new Date().toISOString(),
-      heartbeat_ok: input.heartbeat_ok ? 1 : 0,
+      heartbeat_ok: input.heartbeat_ok,
       run_quality: input.run_quality,
       severity: input.severity,
       canary_status: input.canary_status,
-      canary_alert: input.canary_alert ? 1 : 0,
-      outage_suspected: input.outage_suspected ? 1 : 0,
+      canary_alert: input.canary_alert,
+      outage_suspected: input.outage_suspected,
       alert_count: input.alert_count,
       rule_version: input.rule_version,
-      in_maintenance_window: input.in_maintenance_window ? 1 : 0,
+      in_maintenance_window: input.in_maintenance_window,
       total_pages: input.total_pages,
       active_pages: input.active_pages_count,
       inactive_pages: input.inactive_pages_count,
@@ -431,7 +455,7 @@ export async function insertSnapshot(input: InsertSnapshotInput): Promise<{ inse
         page_name: p.name ?? null,
         activity_kind: p.activity_kind ?? p.kind ?? null,
         is_activated: p._is_active,
-        is_canary: p.is_canary ? 1 : 0,
+        is_canary: p.is_canary ?? false,
         activation_reason: p.activation_reason ?? p.reason ?? null,
         state_change: p.state_change ?? null,
         activity_kind_change: p.activity_kind_change ?? null,
@@ -521,7 +545,7 @@ export async function getPancakeActivePageIds(): Promise<Set<string>> {
   const latestRunIds = await latestGoodRunIds();
   if (latestRunIds.length === 0) return new Set<string>();
   const placeholders = latestRunIds.map((_, i) => `$${i + 1}`).join(',');
-  const r = await pool.query(`SELECT page_id FROM page_states WHERE run_id IN (${placeholders}) AND is_activated = 1`, latestRunIds);
+  const r = await pool.query(`SELECT page_id FROM page_states WHERE run_id IN (${placeholders}) AND is_activated IS TRUE`, latestRunIds);
   return new Set((r.rows as { page_id: string }[]).map(r => r.page_id));
 }
 
@@ -597,7 +621,7 @@ export type EndpointRow = {
   api_key: string;
   access_token: string | null;
   token_expires_at: string | null;
-  is_active: number;
+  is_active: boolean;
   created_at: string;
   last_used_at: string | null;
   shop_label: string | null;
@@ -626,7 +650,7 @@ export async function getEndpointBySlug(slug: string): Promise<EndpointRow | und
 
 export async function getEndpointByApiKey(apiKey: string): Promise<EndpointRow | undefined> {
   await ensureMigrated();
-  const r = await pool.query('SELECT * FROM endpoints WHERE api_key = $1 AND is_active = 1', [apiKey]);
+  const r = await pool.query('SELECT * FROM endpoints WHERE api_key = $1 AND is_active IS TRUE', [apiKey]);
   return r.rows[0] as EndpointRow | undefined;
 }
 
@@ -637,7 +661,7 @@ export async function upsertEndpoint(input: {
   api_key: string;
   access_token?: string | null;
   token_expires_at?: string | null;
-  is_active?: number;
+  is_active?: boolean;
 }): Promise<EndpointRow> {
   await ensureMigrated();
   const id = input.id || crypto.randomUUID();
@@ -655,7 +679,7 @@ export async function upsertEndpoint(input: {
       api_key: input.api_key,
       access_token: input.access_token ?? null,
       token_expires_at: input.token_expires_at ?? null,
-      is_active: input.is_active ?? 1,
+      is_active: input.is_active ?? true,
     }));
     return (await getEndpoint(input.id))!;
   }
@@ -670,7 +694,7 @@ export async function upsertEndpoint(input: {
     api_key: input.api_key,
     access_token: input.access_token ?? null,
     token_expires_at: input.token_expires_at ?? null,
-    is_active: input.is_active ?? 1,
+    is_active: input.is_active ?? true,
     created_at: now,
   }));
 
@@ -716,7 +740,7 @@ export type PlatformPageRow = {
   endpoint_id: string;
   page_name: string;
   page_url: string | null;
-  is_active: number;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -742,7 +766,7 @@ export async function upsertPlatformPage(input: {
   endpoint_id: string;
   page_name: string;
   page_url?: string | null;
-  is_active?: number;
+  is_active?: boolean;
 }): Promise<PlatformPageRow> {
   await ensureMigrated();
   const id = input.id || crypto.randomUUID();
@@ -757,7 +781,7 @@ export async function upsertPlatformPage(input: {
       id: input.id,
       page_name: input.page_name,
       page_url: input.page_url ?? null,
-      is_active: input.is_active ?? 1,
+      is_active: input.is_active ?? true,
       updated_at: now,
     }));
     return (await getPlatformPage(input.id))!;
@@ -771,7 +795,7 @@ export async function upsertPlatformPage(input: {
     endpoint_id: input.endpoint_id,
     page_name: input.page_name,
     page_url: input.page_url ?? null,
-    is_active: input.is_active ?? 1,
+    is_active: input.is_active ?? true,
     created_at: now,
     updated_at: now,
   }));
@@ -795,7 +819,7 @@ export type PlatformConnectorRow = {
   auth_token: string | null;
   json_path: string | null;
   interval_ms: number;
-  is_active: number;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -821,7 +845,7 @@ export async function upsertPlatformConnector(input: {
   auth_token?: string | null;
   json_path?: string | null;
   interval_ms?: number;
-  is_active?: number;
+  is_active?: boolean;
 }): Promise<PlatformConnectorRow> {
   await ensureMigrated();
   const id = input.id || crypto.randomUUID();
@@ -842,7 +866,7 @@ export async function upsertPlatformConnector(input: {
       auth_token: input.auth_token ?? null,
       json_path: input.json_path ?? null,
       interval_ms: input.interval_ms ?? 60000,
-      is_active: input.is_active ?? 1,
+      is_active: input.is_active ?? true,
       updated_at: now,
     }));
     return (await getPlatformConnector(input.id))!;
@@ -876,7 +900,7 @@ export async function upsertPlatformConnector(input: {
     auth_token: input.auth_token ?? null,
     json_path: input.json_path ?? null,
     interval_ms: input.interval_ms ?? 60000,
-    is_active: input.is_active ?? 1,
+    is_active: input.is_active ?? true,
     created_at: now,
     updated_at: now,
   }));

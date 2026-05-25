@@ -71,16 +71,16 @@ async function PancakeSection({ endpointId, pancakeIds }: { endpointId?: string;
 
   if (allPages.length === 0) return null;
 
-  const activeCount = allPages.filter((p) => p.is_activated === 1).length;
-  const inactiveCount = allPages.filter((p) => p.is_activated !== 1).length;
+  const activeCount = allPages.filter((p) => p.is_activated).length;
+  const inactiveCount = allPages.filter((p) => p!.is_activated).length;
 
   const shopBreakdown = pancakeEndpoints.map((ep) => {
     const shopPages = allPages.filter((p) => p.shop_label === ep.shop_label);
     return {
       label: ep.shop_label ?? ep.name,
       total: shopPages.length,
-      active: shopPages.filter((p) => p.is_activated === 1).length,
-      inactive: shopPages.filter((p) => p.is_activated !== 1).length,
+      active: shopPages.filter((p) => p.is_activated).length,
+      inactive: shopPages.filter((p) => p!.is_activated).length,
     };
   });
 
@@ -166,16 +166,16 @@ async function BotCakeSection() {
   const overrides = await getBotCakeOverrides();
   const overrideIds = [...overrides.keys()];
   const latestRun = await getLatestRun('botcake-platform');
-  const apiHealthy = latestRun && latestRun.heartbeat_ok === 1 && !latestRun.outage_suspected;
+  const apiHealthy = latestRun && latestRun.heartbeat_ok && !latestRun.outage_suspected;
 
-  const activeCount = pages.filter(p => p.is_activated === 1).length;
-  const inactiveCount = pages.filter(p => p.is_activated !== 1).length;
+  const activeCount = pages.filter(p => p.is_activated).length;
+  const inactiveCount = pages.filter(p => p!.is_activated).length;
 
   const breakdown = [
-    { label: 'Active (has orders)', count: pages.filter(p => p.is_activated === 1 && p.activation_reason === 'pancake-activity').length, color: 'text-green-400' },
-    { label: 'Active (has conversations)', count: pages.filter(p => p.is_activated === 1 && p.activation_reason === 'has-conversations').length, color: 'text-emerald-400' },
-    { label: 'Active (has tools/flows)', count: pages.filter(p => p.is_activated === 1 && p.activation_reason === 'has-tools').length, color: 'text-teal-400' },
-    { label: 'Inactive (no activity)', count: pages.filter(p => p.is_activated !== 1 && p.activation_reason === 'no-activity').length, color: 'text-slate-500' },
+    { label: 'Active (has orders)', count: pages.filter(p => p.is_activated && p.activation_reason === 'pancake-activity').length, color: 'text-green-400' },
+    { label: 'Active (has conversations)', count: pages.filter(p => p.is_activated && p.activation_reason === 'has-conversations').length, color: 'text-emerald-400' },
+    { label: 'Active (has tools/flows)', count: pages.filter(p => p.is_activated && p.activation_reason === 'has-tools').length, color: 'text-teal-400' },
+    { label: 'Inactive (no activity)', count: pages.filter(p => p!.is_activated && p.activation_reason === 'no-activity').length, color: 'text-slate-500' },
   ].filter(b => b.count > 0);
 
   const botCakeHistory = await getRunHistory('botcake-platform', 200);
@@ -291,19 +291,19 @@ export default async function OverviewPage({
     : '—';
 
   const cardData: StatusCardData = {
-    heartbeatFresh: localRun ? localRun.heartbeat_ok === 1 : null,
+    heartbeatFresh: localRun ? localRun.heartbeat_ok : null,
     lastScheduledRunMs,
     runQuality: localRun?.run_quality ?? null,
     severity: localRun?.severity ?? null,
     canaryStatus: localRun?.canary_status ?? null,
-    canaryAlert: localRun?.canary_alert === 1,
+    canaryAlert: localRun?.canary_alert ?? false,
     alertCount: localRun?.alert_count ?? 0,
-    outageSuspected: localRun?.outage_suspected === 1,
+    outageSuspected: localRun?.outage_suspected ?? false,
   };
 
   const runId = localRun?.run_id ?? null;
   const ruleVersion = localRun?.rule_version ?? null;
-  const inMaintenance = localRun?.in_maintenance_window === 1;
+  const inMaintenance = localRun?.in_maintenance_window;
 
   return (
     <div className="space-y-6">

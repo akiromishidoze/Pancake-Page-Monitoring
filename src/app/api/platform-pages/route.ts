@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     endpoint_id: body.endpoint_id as string,
     page_name: body.page_name as string,
     page_url: (body.page_url as string) || null,
-    is_active: (body.is_active as number) ?? 1,
+    is_active: (body.is_active as boolean) ?? true,
   });
 
   return NextResponse.json({ ok: true, page });

@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     auth_token: (body.auth_token as string) || null,
     json_path: (body.json_path as string) || null,
     interval_ms: (body.interval_ms as number) || 60000,
-    is_active: (body.is_active as number) ?? 1,
+    is_active: (body.is_active as boolean) ?? true,
   });
 
   return NextResponse.json({ ok: true, connector });

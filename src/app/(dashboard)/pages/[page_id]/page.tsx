@@ -69,7 +69,7 @@ export default async function Page({
     const tnext = Date.parse(next.generated_at);
     if (isNaN(tcur) || isNaN(tnext)) continue;
     const delta = Math.max(0, Math.floor((tnext - tcur) / 1000));
-    if (cur.is_activated === 1) activeSeconds += delta;
+    if (cur.is_activated) activeSeconds += delta;
     else inactiveSeconds += delta;
   }
 
@@ -78,7 +78,7 @@ export default async function Page({
   const now = Date.now();
   if (!isNaN(lastTs)) {
     const delta = Math.max(0, Math.floor((now - lastTs) / 1000));
-    if (latest.is_activated === 1) activeSeconds += delta;
+    if (latest.is_activated) activeSeconds += delta;
     else inactiveSeconds += delta;
   }
 
@@ -102,7 +102,7 @@ export default async function Page({
       const start = Math.max(tcur, windowStart);
       const end = Math.min(tnext, now);
       const delta = Math.max(0, Math.floor((end - start) / 1000));
-      if (cur.is_activated === 1) active += delta;
+      if (cur.is_activated) active += delta;
       totalSec += delta;
     }
     const pct = totalSec === 0 ? 0 : Math.round((active / totalSec) * 100);
@@ -125,12 +125,12 @@ export default async function Page({
     if (isNaN(tPrev) || isNaN(tCur)) continue;
 
     // active -> inactive : incident start
-    if (prev.is_activated === 1 && cur.is_activated !== 1) {
+    if (prev.is_activated && cur!.is_activated) {
       pendingStart = tCur;
     }
 
     // inactive -> active : incident end
-    if (prev.is_activated !== 1 && cur.is_activated === 1) {
+    if (prev!.is_activated && cur.is_activated) {
       if (pendingStart === null) {
         // If we didn't record start, use prev timestamp as heuristic
         pendingStart = tPrev;
@@ -197,13 +197,13 @@ export default async function Page({
   const flapping = changes1h >= 3 || changes24h >= 10;
 
   // For activity charts: produce counts from latest snapshot if present
-  const activePages = rows.filter(r => r.is_activated === 1).map(r => ({
+  const activePages = rows.filter(r => r.is_activated).map(r => ({
     name: r.page_name ?? '—',
     page_id: r.page_id,
     kind: r.activity_kind ?? r.activity_kind,
     shop_label: r.shop_label ?? r.shop_label,
   }));
-  const inactivePages = rows.filter(r => r.is_activated !== 1).map(r => ({
+  const inactivePages = rows.filter(r => r!.is_activated).map(r => ({
     name: r.page_name ?? '—',
     page_id: r.page_id,
     kind: r.activity_kind ?? r.activity_kind,
@@ -275,7 +275,7 @@ export default async function Page({
         <div className="dashboard-data rounded-lg border border-slate-800 bg-slate-900 p-4">
           <div className="text-xs text-slate-400">Current status</div>
           <div className="mt-2 text-lg font-semibold">
-            {latest.is_activated === 1 ? (
+            {latest.is_activated ? (
               <span className="inline-block px-2 py-1 rounded text-xs font-mono bg-green-900/40 text-green-300 border border-green-800">active</span>
             ) : (
               <span className="inline-block px-2 py-1 rounded text-xs font-mono bg-red-900/30 text-red-400 border border-red-900">inactive</span>
@@ -424,7 +424,7 @@ export default async function Page({
                 <tr key={`${r.id}-${i}`} className="hover:bg-slate-800/30">
                   <td className="px-3 py-2 text-slate-300">{new Date(r.generated_at).toLocaleString()}</td>
                   <td className="px-3 py-2">
-                    {r.is_activated === 1 ? (
+                    {r.is_activated ? (
                       <span className="inline-block px-2 py-1 rounded text-xs font-mono bg-green-900/40 text-green-300 border border-green-800">active</span>
                     ) : (
                       <span className="inline-block px-2 py-1 rounded text-xs font-mono bg-red-900/30 text-red-400 border border-red-900">inactive</span>

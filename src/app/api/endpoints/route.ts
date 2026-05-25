@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     url: (body.url as string) || null,
     access_token: (body.access_token as string) || null,
     token_expires_at: (body.token_expires_at as string) || null,
-    is_active: (body.is_active as number) ?? 1,
+    is_active: (body.is_active as boolean) ?? true,
   });
 
   return NextResponse.json({

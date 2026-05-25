@@ -267,7 +267,7 @@ async function refreshPancake() {
           ORDER BY generated_at DESC LIMIT 1
         `, [String(sid)])).rows[0] as { run_id: string } | undefined;
         if (!prevRun) continue;
-        const prevActive = (await pool.query('SELECT page_id FROM page_states WHERE run_id = $1 AND is_activated = 1', [prevRun.run_id])).rows as { page_id: string }[];
+        const prevActive = (await pool.query('SELECT page_id FROM page_states WHERE run_id = $1 AND is_activated IS TRUE', [prevRun.run_id])).rows as { page_id: string }[];
       const ids = new Set(prevActive.map(p => p.page_id));
       if (ids.size > 0) {
         activePageIdsByShop.set(sid, ids);

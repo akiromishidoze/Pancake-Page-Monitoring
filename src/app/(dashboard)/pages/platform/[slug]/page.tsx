@@ -22,8 +22,8 @@ async function loadRows(endpointId?: string): Promise<Row[]> {
     shop: s.shop_label,
     name: s.page_name,
     kind: s.activity_kind,
-    is_activated: s.is_activated === 1,
-    is_canary: s.is_canary === 1,
+    is_activated: s.is_activated ?? false,
+    is_canary: s.is_canary ?? false,
     reason: s.activation_reason,
   }));
 }
@@ -41,7 +41,7 @@ export default async function PlatformPage({
   if (!platform) {
     const allEndpoints = await listEndpoints();
     if (allEndpoints.length === 0) {
-      await upsertEndpoint({ name: slug.charAt(0).toUpperCase() + slug.slice(1).replace(/-/g, ' '), api_key: `auto_${crypto.randomUUID()}`, is_active: 1 });
+      await upsertEndpoint({ name: slug.charAt(0).toUpperCase() + slug.slice(1).replace(/-/g, ' '), api_key: `auto_${crypto.randomUUID()}`, is_active: true });
       redirect(`/pages/platform/${slug}`);
     }
     notFound();

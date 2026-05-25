@@ -6,7 +6,7 @@ import Link from 'next/link';
 type BotCakePage = {
   page_id: string;
   page_name: string | null;
-  is_activated: number | null;
+  is_activated: boolean | null;
   activation_reason: string | null;
   hours_since_last_customer_activity: number | null;
   customer_count: number | null;
@@ -75,8 +75,8 @@ export function BotCakePageList({ pages, overrideIds = [] }: { pages: BotCakePag
   }, []);
 
   const sorted = useMemo(() => {
-    const active = pages.filter(p => p.is_activated === 1).sort((a, b) => (a.page_name ?? a.page_id).localeCompare(b.page_name ?? b.page_id));
-    const inactive = pages.filter(p => p.is_activated !== 1).sort((a, b) => (a.page_name ?? a.page_id).localeCompare(b.page_name ?? b.page_id));
+    const active = pages.filter(p => p.is_activated).sort((a, b) => (a.page_name ?? a.page_id).localeCompare(b.page_name ?? b.page_id));
+    const inactive = pages.filter(p => !p.is_activated).sort((a, b) => (a.page_name ?? a.page_id).localeCompare(b.page_name ?? b.page_id));
     return [...active, ...inactive];
   }, [pages]);
 
@@ -130,8 +130,8 @@ export function BotCakePageList({ pages, overrideIds = [] }: { pages: BotCakePag
                     <Link href={`/pages/${p.page_id}`} className="hover:underline">{p.page_name ?? p.page_id}</Link>
                   </td>
                   <td className="px-2 py-1 text-slate-500 font-mono">{p.page_id}</td>
-                  <td className={`px-2 py-1 font-mono ${p.is_activated === 1 ? 'text-green-400' : 'text-red-400'}`}>
-                    {p.is_activated === 1 ? 'active' : p.activation_reason ?? 'inactive'}
+                  <td className={`px-2 py-1 font-mono ${p.is_activated ? 'text-green-400' : 'text-red-400'}`}>
+                    {p.is_activated ? 'active' : p.activation_reason ?? 'inactive'}
                     {overrides.has(p.page_id) && <span className="ml-1 text-yellow-400">*</span>}
                   </td>
                   <td className="px-2 py-1">
@@ -145,15 +145,15 @@ export function BotCakePageList({ pages, overrideIds = [] }: { pages: BotCakePag
                       </button>
                     ) : (
                       <button
-                        onClick={() => handleOverride(p.page_id, p.is_activated === 1)}
+                        onClick={() => handleOverride(p.page_id, p.is_activated ?? false)}
                         disabled={overriding === p.page_id}
                         className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${
-                          p.is_activated === 1
+                          p.is_activated
                             ? 'bg-red-900/50 text-red-300 hover:bg-red-800/50'
                             : 'bg-green-900/50 text-green-300 hover:bg-green-800/50'
                         } disabled:opacity-50`}
                       >
-                        {overriding === p.page_id ? '...' : p.is_activated === 1 ? 'Deactivate' : 'Activate'}
+                        {overriding === p.page_id ? '...' : p.is_activated ? 'Deactivate' : 'Activate'}
                       </button>
                     )}
                   </td>

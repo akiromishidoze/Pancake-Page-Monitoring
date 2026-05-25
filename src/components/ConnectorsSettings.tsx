@@ -11,7 +11,7 @@ type Connector = {
   auth_token: string | null;
   json_path: string | null;
   interval_ms: number;
-  is_active: number;
+  is_active: boolean;
 };
 
 function mask(val: string | null | undefined) {
@@ -79,7 +79,7 @@ export function ConnectorsSettings() {
           </p>
         </div>
         <button
-          onClick={() => setEditing({ name: '', platform_type: 'rest', api_url: '', interval_ms: 60000, is_active: 1 })}
+          onClick={() => setEditing({ name: '', platform_type: 'rest', api_url: '', interval_ms: 60000, is_active: true })}
           className="text-xs px-3 py-1.5 rounded border border-blue-700 bg-blue-900/30 text-blue-300 hover:bg-blue-800/40 transition-colors cursor-pointer"
         >
           + Add Connector
@@ -169,8 +169,8 @@ export function ConnectorsSettings() {
                   className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200" min="10" />
               </div>
               <div className="flex items-center gap-2">
-                <input type="checkbox" id="c_is_active" checked={editing.is_active !== 0}
-                  onChange={(e) => setEditing({ ...editing, is_active: e.target.checked ? 1 : 0 })}
+                <input type="checkbox" id="c_is_active" checked={editing.is_active}
+                  onChange={(e) => setEditing({ ...editing, is_active: e.target.checked })}
                   className="rounded border-slate-700 bg-slate-800" />
                 <label htmlFor="c_is_active" className="text-xs text-slate-400">Active</label>
               </div>

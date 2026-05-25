@@ -10,7 +10,7 @@ type Endpoint = {
   api_key: string;
   access_token: string | null;
   token_expires_at: string | null;
-  is_active: number;
+  is_active: boolean;
 };
 
 function mask(val: string | null | undefined) {
@@ -140,8 +140,8 @@ export function PlatformSettings({ endpoint: initial }: { endpoint: Endpoint }) 
                 className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200 font-mono" placeholder="eyJ..." />
             </div>
             <div className="flex items-center gap-2">
-              <input type="checkbox" id="ps_active" checked={form.is_active !== 0}
-                onChange={(e) => setForm({ ...form, is_active: e.target.checked ? 1 : 0 })}
+              <input type="checkbox" id="ps_active" checked={form.is_active}
+                onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
                 className="rounded border-slate-700 bg-slate-800" />
               <label htmlFor="ps_active" className="text-xs text-slate-400">Active</label>
             </div>

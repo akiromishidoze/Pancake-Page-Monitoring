@@ -17,7 +17,7 @@ export async function GET() {
   const rows = pages.map(p => {
     const hours = p.hours_since_last_customer_activity;
     const lastActivity = hours !== null ? hours.toFixed(1) : '';
-    const status = p.is_activated === 1 ? 'active' : 'inactive';
+    const status = p.is_activated ? 'active' : 'inactive';
     const overridden = overrides.has(p.page_id) ? 'yes' : 'no';
     return [
       p.page_id,

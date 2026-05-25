@@ -27,7 +27,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     api_key: (body.api_key as string) ?? existing.api_key,
     access_token: body.access_token !== undefined ? (body.access_token as string) : existing.access_token,
     token_expires_at: body.token_expires_at !== undefined ? (body.token_expires_at as string) : existing.token_expires_at,
-    is_active: body.is_active !== undefined ? (body.is_active as number) : existing.is_active,
+    is_active: body.is_active !== undefined ? (body.is_active as boolean) : existing.is_active,
   });
 
   return NextResponse.json({ ok: true, endpoint: { ...endpoint, api_key: undefined } });

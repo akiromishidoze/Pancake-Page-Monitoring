@@ -20,7 +20,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     endpoint_id: (body.endpoint_id as string) ?? existing.endpoint_id,
     page_name: (body.page_name as string) ?? existing.page_name,
     page_url: body.page_url !== undefined ? (body.page_url as string) : existing.page_url,
-    is_active: body.is_active !== undefined ? (body.is_active as number) : existing.is_active,
+    is_active: body.is_active !== undefined ? (body.is_active as boolean) : existing.is_active,
   });
 
   return NextResponse.json({ ok: true, page });

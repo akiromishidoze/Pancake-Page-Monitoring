@@ -168,7 +168,7 @@ export async function checkAlertsForRun(runId: string): Promise<void> {
   }
 
   // Heartbeat stale
-  if (h.heartbeat_ok === 0) {
+  if (!h.heartbeat_ok) {
     await sendAlert({
       title: '💔 Heartbeat Stale',
       message: `Heartbeat is stale. Last run: ${h.run_id}`,

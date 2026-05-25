@@ -9,7 +9,7 @@ type Endpoint = {
   api_key: string;
   access_token: string | null;
   token_expires_at: string | null;
-  is_active: number;
+  is_active: boolean;
   created_at: string;
   last_used_at: string | null;
 };
@@ -216,8 +216,8 @@ export function SettingsForm({ initialEndpoints }: { initialEndpoints: Endpoint[
                 <input
                   type="checkbox"
                   id="is_active"
-                  checked={editing.is_active !== 0}
-                  onChange={(e) => setEditing({ ...editing, is_active: e.target.checked ? 1 : 0 })}
+                  checked={editing.is_active}
+                  onChange={(e) => setEditing({ ...editing, is_active: e.target.checked })}
                   className="rounded border-slate-700 bg-slate-800"
                 />
                 <label htmlFor="is_active" className="text-xs text-slate-400">Active</label>

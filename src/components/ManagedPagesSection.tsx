@@ -7,7 +7,7 @@ type PlatformPage = {
   endpoint_id: string;
   page_name: string;
   page_url: string | null;
-  is_active: number;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -124,8 +124,8 @@ export function ManagedPagesSection({ endpointId, initialPages }:
                   className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200" placeholder="https://..." />
               </div>
               <div className="flex items-center gap-2">
-                <input type="checkbox" id="pp_active" checked={editing.is_active !== 0}
-                  onChange={(e) => setEditing({ ...editing, is_active: e.target.checked ? 1 : 0 })}
+                <input type="checkbox" id="pp_active" checked={editing.is_active}
+                  onChange={(e) => setEditing({ ...editing, is_active: e.target.checked })}
                   className="rounded border-slate-700 bg-slate-800" />
                 <label htmlFor="pp_active" className="text-xs text-slate-400">Active</label>
               </div>
