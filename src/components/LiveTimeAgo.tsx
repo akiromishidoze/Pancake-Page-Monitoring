@@ -25,5 +25,5 @@ export function LiveTimeAgo({ timestampMs }: { timestampMs: number | null | unde
 
   if (!timeAgo) return null;
 
-  return <span>{timeAgo}</span>;
+  return <span suppressHydrationWarning>{timeAgo}</span>;
 }
