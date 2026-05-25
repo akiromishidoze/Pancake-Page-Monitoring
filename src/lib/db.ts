@@ -149,22 +149,8 @@ async function migratePageStatesPartitioning() {
   );
   if (check.rows.length > 0) return;
 
-  // If page_states doesn't exist but page_states_old does, a prior attempt failed after rename.
-  // Rename back so we can retry cleanly.
-  const oldExists = await pool.query(
-    `SELECT relkind FROM pg_class WHERE relname = 'page_states_old'`,
-  );
-  const currentExists = await pool.query(
-    `SELECT relkind FROM pg_class WHERE relname = 'page_states'`,
-  );
-  if (oldExists.rows.length > 0 && currentExists.rows.length === 0) {
-    await pool.query('ALTER TABLE page_states_old RENAME TO page_states');
-  }
-
-  const check2 = await pool.query(
-    `SELECT relkind FROM pg_class WHERE relname = 'page_states' AND relkind = 'p'`,
-  );
-  if (check2.rows.length > 0) return;
+  // Drop stale page_states_old from any prior failed migration attempt
+  await pool.query('DROP TABLE IF EXISTS page_states_old CASCADE');
 
   await pool.query('BEGIN');
   try {
