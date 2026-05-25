@@ -136,7 +136,113 @@ let _migrated = false;
 async function ensureMigrated() {
   if (_migrated) return;
   await migrate();
+  await migratePageStatesPartitioning();
   _migrated = true;
+}
+
+// ──── Partitioning ──────────────────────────────────────────────────────
+
+async function migratePageStatesPartitioning() {
+  // Already partitioned — nothing to do
+  const check = await pool.query(
+    `SELECT relkind FROM pg_class WHERE relname = 'page_states' AND relkind = 'p'`,
+  );
+  if (check.rows.length > 0) return;
+
+  // If page_states doesn't exist but page_states_old does, a prior attempt failed after rename.
+  // Rename back so we can retry cleanly.
+  const oldExists = await pool.query(
+    `SELECT relkind FROM pg_class WHERE relname = 'page_states_old'`,
+  );
+  const currentExists = await pool.query(
+    `SELECT relkind FROM pg_class WHERE relname = 'page_states'`,
+  );
+  if (oldExists.rows.length > 0 && currentExists.rows.length === 0) {
+    await pool.query('ALTER TABLE page_states_old RENAME TO page_states');
+  }
+
+  const check2 = await pool.query(
+    `SELECT relkind FROM pg_class WHERE relname = 'page_states' AND relkind = 'p'`,
+  );
+  if (check2.rows.length > 0) return;
+
+  await pool.query('BEGIN');
+  try {
+    await pool.query('ALTER TABLE page_states RENAME TO page_states_old');
+
+    await pool.query(`
+      CREATE TABLE page_states (
+        id SERIAL,
+        run_id TEXT NOT NULL REFERENCES runs(run_id) ON DELETE CASCADE,
+        page_id TEXT NOT NULL,
+        shop_label TEXT,
+        page_name TEXT,
+        activity_kind TEXT,
+        is_activated INTEGER,
+        is_canary INTEGER,
+        activation_reason TEXT,
+        state_change TEXT,
+        activity_kind_change TEXT,
+        hours_since_last_order REAL,
+        hours_since_last_customer_activity REAL,
+        response_ms REAL,
+        fetch_errors INTEGER,
+        customer_count INTEGER,
+        generated_at TEXT NOT NULL,
+        PRIMARY KEY (generated_at, id)
+      ) PARTITION BY RANGE (generated_at)
+    `);
+
+    await ensureMonthlyPartitions();
+
+    await pool.query(`
+      INSERT INTO page_states (id, run_id, page_id, shop_label, page_name, activity_kind,
+        is_activated, is_canary, activation_reason, state_change, activity_kind_change,
+        hours_since_last_order, hours_since_last_customer_activity, response_ms, fetch_errors,
+        customer_count, generated_at)
+      SELECT id, run_id, page_id, shop_label, page_name, activity_kind,
+        is_activated, is_canary, activation_reason, state_change, activity_kind_change,
+        hours_since_last_order, hours_since_last_customer_activity, response_ms, fetch_errors,
+        customer_count, generated_at
+      FROM page_states_old
+    `);
+
+    await pool.query('DROP TABLE page_states_old');
+
+    await pool.query('CREATE INDEX IF NOT EXISTS page_states_page_id_time ON page_states(page_id, generated_at DESC)');
+    await pool.query('CREATE INDEX IF NOT EXISTS page_states_run_id ON page_states(run_id)');
+    await pool.query('CREATE INDEX IF NOT EXISTS page_states_kind_time ON page_states(activity_kind, generated_at DESC)');
+
+    await pool.query(`SELECT setval(pg_get_serial_sequence('page_states', 'id'), COALESCE((SELECT MAX(id) FROM page_states), 1))`);
+
+    await pool.query('COMMIT');
+    console.log('[db] page_states migrated to partitioned table');
+  } catch (e) {
+    await pool.query('ROLLBACK');
+    console.error('[db] partitioning migration failed, reverting:', e);
+    throw e;
+  }
+}
+
+export async function ensureMonthlyPartitions(): Promise<void> {
+  await ensureMigrated();
+  const partitions = await pool.query(
+    `SELECT inhrelid::regclass::text AS name FROM pg_inherits
+     WHERE inhparent = 'page_states'::regclass`,
+  );
+  const existing = new Set(partitions.rows.map((r: { name: string }) => r.name));
+
+  const now = new Date();
+  for (let offset = -3; offset <= 6; offset++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+    const dNext = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+    const name = `page_states_${d.getFullYear()}_${String(d.getMonth() + 1).padStart(2, '0')}`;
+    if (existing.has(name)) continue;
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ${name} PARTITION OF page_states
+      FOR VALUES FROM ('${d.toISOString().slice(0, 10)}') TO ('${dNext.toISOString().slice(0, 10)}')
+    `);
+  }
 }
 
 // ──── Types ────────────────────────────────────────────────────────────
@@ -234,6 +340,7 @@ export type InsertSnapshotInput = {
 
 export async function insertSnapshot(input: InsertSnapshotInput): Promise<{ inserted: boolean }> {
   await ensureMigrated();
+  await ensureMonthlyPartitions();
   const existing = await pool.query('SELECT 1 FROM runs WHERE run_id = $1', [input.run_id]);
   if (existing.rows.length > 0) return { inserted: false };
 
@@ -775,8 +882,26 @@ export async function deletePlatformConnector(id: string): Promise<void> {
 
 export async function pruneOldRuns(retentionDays: number): Promise<number> {
   await ensureMigrated();
-  const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
-  const r = await pool.query('DELETE FROM runs WHERE generated_at < $1', [cutoff]);
+  const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+  const cutoffStr = cutoff.toISOString();
+
+  // Drop old page_states partitions (much faster than DELETE CASCADE)
+  const partitions = await pool.query(
+    `SELECT inhrelid::regclass::text AS name FROM pg_inherits
+     WHERE inhparent = 'page_states'::regclass`,
+  );
+  const cutoffMonth = new Date(cutoff.getFullYear(), cutoff.getMonth(), 1);
+  for (const row of partitions.rows as { name: string }[]) {
+    const m = row.name.match(/page_states_(\d{4})_(\d{2})$/);
+    if (m) {
+      const partDate = new Date(parseInt(m[1]), parseInt(m[2]) - 1, 1);
+      if (partDate < cutoffMonth) {
+        await pool.query(`DROP TABLE IF EXISTS ${row.name}`);
+      }
+    }
+  }
+
+  const r = await pool.query('DELETE FROM runs WHERE generated_at < $1', [cutoffStr]);
   return r.rowCount ?? 0;
 }
 
