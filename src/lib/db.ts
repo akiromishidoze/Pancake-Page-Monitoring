@@ -420,7 +420,7 @@ export async function getLatestPageStatesForEndpoints(endpointIds: string[]): Pr
       GROUP BY endpoint_id
     )
     ORDER BY ps.shop_label, ps.page_name
-  `, [...endpointIds, ...endpointIds]);
+  `, endpointIds);
   return r.rows as PageStateRow[];
 }
 
