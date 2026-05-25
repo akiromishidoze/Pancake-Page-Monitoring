@@ -40,6 +40,14 @@ const ICONS = {
   settings: 'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z',
 };
 
+type NavItem = {
+  href: string;
+  icon: string;
+  label: string;
+  active: boolean;
+  children?: { href: string; label: string; active: boolean }[];
+};
+
 export function Sidebar() {
   const pathname = usePathname();
   const { collapsed, toggle } = useCollapsed();
@@ -48,6 +56,23 @@ export function Sidebar() {
 
   const isPagesActive = pathname === '/pages' || pathname?.startsWith('/pages/platform');
   const isBotCakeActive = pathname === '/pages/platform/botcake-platform';
+  const isSettingsActive = pathname === '/settings';
+
+  const navItems: NavItem[] = [
+    { href: '/', icon: ICONS.overview, label: 'Overview', active: pathname === '/' },
+    { href: '/runs', icon: ICONS.runs, label: 'Run History', active: pathname === '/runs' },
+    {
+      href: '/pages',
+      icon: ICONS.pages,
+      label: 'Pages',
+      active: isPagesActive,
+      children: [
+        { href: '/pages', label: 'Pancake Platform', active: pathname === '/pages' || (pathname?.startsWith('/pages/platform') && !isBotCakeActive) },
+        { href: '/pages/platform/botcake-platform', label: 'BotCake Platform', active: isBotCakeActive },
+      ],
+    },
+    { href: '/settings', icon: ICONS.settings, label: 'Settings', active: isSettingsActive },
+  ];
 
   function closeMobile() {
     setMobileOpen(false);
@@ -59,9 +84,7 @@ export function Sidebar() {
         href={href}
         onClick={closeMobile}
         className={`flex items-center rounded-md transition-colors text-sm font-medium ${
-          collapsed
-            ? 'justify-center h-9 w-full'
-            : 'px-3 py-2 gap-3'
+          collapsed ? 'justify-center h-9 w-full' : 'px-3 py-2 gap-3'
         } ${active ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
         title={label}
       >
@@ -71,71 +94,71 @@ export function Sidebar() {
     );
   }
 
-  return (
-    <>
-      {/* Desktop */}
-      <aside className={`hidden lg:flex border-r border-slate-800 bg-slate-900 flex-shrink-0 flex-col h-full transition-[width] duration-200 ${collapsed ? 'w-16' : 'w-64'}`}>
-        {/* Logo */}
-        <div className={`flex items-center h-14 border-b border-slate-800 ${collapsed ? 'justify-center' : 'px-4 gap-3'}`}>
-          <div className="w-8 h-8 rounded-lg bg-blue-700 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-            M
-          </div>
-          {!collapsed && (
-            <div className="flex flex-col min-w-0">
-              <div className="text-sm font-semibold text-white truncate leading-tight">Page Monitor</div>
-              <div className="text-xs text-slate-500 truncate leading-tight">Pancake & BotCake</div>
+  function NavGroup({ item, isMobile }: { item: NavItem; isMobile?: boolean }) {
+    if (isMobile || !collapsed) {
+      return (
+        <div>
+          <button
+            onClick={() => setPagesOpen(prev => !prev)}
+            className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer ${
+              item.active ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+            }`}
+          >
+            <SvgIcon d={item.icon} />
+            <span className="flex-1 text-left">{item.label}</span>
+            <SvgIcon d={ICONS.chevron} size={14} className={`transition-transform ${pagesOpen ? 'rotate-90' : ''}`} />
+          </button>
+          {pagesOpen && item.children && (
+            <div className="ml-4 mt-1 space-y-1">
+              {item.children.map(child => (
+                <Link
+                  key={child.href}
+                  href={child.href}
+                  onClick={closeMobile}
+                  className={`block px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    child.active ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                  }`}
+                >
+                  {child.label}
+                </Link>
+              ))}
             </div>
           )}
         </div>
+      );
+    }
+    return <NavLink href={item.href} icon={item.icon} label={item.label} active={item.active} />;
+  }
 
-        {/* Nav */}
+  function Logo({ compact }: { compact?: boolean }) {
+    return (
+      <div className={`flex items-center h-14 border-b border-slate-800 ${compact ? 'justify-center' : 'px-4 gap-3'}`}>
+        <div className="w-8 h-8 rounded-lg bg-blue-700 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+          M
+        </div>
+        {!compact && (
+          <div className="flex flex-col min-w-0">
+            <div className="text-sm font-semibold text-white truncate leading-tight">Page Monitor</div>
+            <div className="text-xs text-slate-500 truncate leading-tight">Pancake & BotCake</div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* Desktop sidebar */}
+      <aside className={`hidden lg:flex border-r border-slate-800 bg-slate-900 flex-shrink-0 flex-col h-full transition-[width] duration-200 ${collapsed ? 'w-16' : 'w-64'}`}>
+        <Logo compact={collapsed} />
+
         <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
-          <NavLink href="/" icon={ICONS.overview} label="Overview" active={pathname === '/'} />
-          <NavLink href="/runs" icon={ICONS.runs} label="Run History" active={pathname === '/runs'} />
-
-          {collapsed ? (
-            <NavLink href="/pages" icon={ICONS.pages} label="Pages" active={isPagesActive} />
-          ) : (
-            <div>
-              <button
-                onClick={() => setPagesOpen(prev => !prev)}
-                className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer ${
-                  isPagesActive ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
-                }`}
-              >
-                <SvgIcon d={ICONS.pages} />
-                <span className="flex-1 text-left">Pages</span>
-                <SvgIcon d={ICONS.chevron} size={14} className={`transition-transform ${pagesOpen ? 'rotate-90' : ''}`} />
-              </button>
-              {pagesOpen && (
-                <div className="ml-4 mt-1 space-y-1">
-                  <Link
-                    href="/pages"
-                    onClick={closeMobile}
-                    className={`block px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                      pathname === '/pages' || (pathname?.startsWith('/pages/platform') && !isBotCakeActive)
-                        ? 'bg-slate-800 text-white'
-                        : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
-                    }`}
-                  >
-                    Pancake Platform
-                  </Link>
-                  <Link
-                    href="/pages/platform/botcake-platform"
-                    onClick={closeMobile}
-                    className={`block px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                      isBotCakeActive ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
-                    }`}
-                  >
-                    BotCake Platform
-                  </Link>
-                </div>
-              )}
-            </div>
-          )}
+          {navItems.slice(0, 2).map(item => (
+            <NavLink key={item.href} {...item} />
+          ))}
+          {navItems[2].children && <NavGroup item={navItems[2]} />}
         </nav>
 
-        {/* Bottom */}
         <div className="border-t border-slate-800 px-3 py-3 space-y-1">
           <div className={`flex ${collapsed ? 'justify-center' : 'justify-end'}`}>
             <button
@@ -146,17 +169,7 @@ export function Sidebar() {
               <SvgIcon d={ICONS.collapse} size={16} />
             </button>
           </div>
-          <Link
-            href="/settings"
-            onClick={closeMobile}
-            className={`flex items-center rounded-md transition-colors text-sm font-medium ${
-              collapsed ? 'justify-center h-9 w-full' : 'px-3 py-2 gap-3'
-            } ${pathname === '/settings' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-800/50 hover:text-slate-300'}`}
-            title="Settings"
-          >
-            <SvgIcon d={ICONS.settings} size={16} />
-            {!collapsed && <span>Settings</span>}
-          </Link>
+          <NavLink {...navItems[3]} label={navItems[3].label} />
         </div>
       </aside>
 
@@ -165,84 +178,29 @@ export function Sidebar() {
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/60" onClick={closeMobile} />
           <aside className="relative w-64 h-full border-r border-slate-800 bg-slate-900 flex-shrink-0 flex flex-col">
-            {/* Logo */}
-            <div className="flex items-center h-14 px-4 gap-3 border-b border-slate-800">
-              <div className="w-8 h-8 rounded-lg bg-blue-700 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                M
-              </div>
-              <div className="flex flex-col min-w-0">
-                <div className="text-sm font-semibold text-white truncate leading-tight">Page Monitor</div>
-                <div className="text-xs text-slate-500 truncate leading-tight">Pancake & BotCake</div>
-              </div>
-            </div>
-
-            {/* Nav */}
+            <Logo />
             <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
-              <Link
-                href="/"
-                onClick={closeMobile}
-                className={`flex items-center px-3 py-2 gap-3 text-sm font-medium rounded-md transition-colors ${
-                  pathname === '/' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
-                }`}
-              >
-                <SvgIcon d={ICONS.overview} />
-                <span>Overview</span>
-              </Link>
-              <Link
-                href="/runs"
-                onClick={closeMobile}
-                className={`flex items-center px-3 py-2 gap-3 text-sm font-medium rounded-md transition-colors ${
-                  pathname === '/runs' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
-                }`}
-              >
-                <SvgIcon d={ICONS.runs} />
-                <span>Run History</span>
-              </Link>
-              <div>
-                <button
-                  onClick={() => setPagesOpen(prev => !prev)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer ${
-                    isPagesActive ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+              {navItems.slice(0, 2).map(item => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={closeMobile}
+                  className={`flex items-center px-3 py-2 gap-3 text-sm font-medium rounded-md transition-colors ${
+                    item.active ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
                   }`}
                 >
-                  <SvgIcon d={ICONS.pages} />
-                  <span className="flex-1 text-left">Pages</span>
-                <SvgIcon d={ICONS.chevron} size={14} className={`transition-transform ${pagesOpen ? 'rotate-90' : ''}`} />
-                </button>
-                {pagesOpen && (
-                  <div className="ml-4 mt-1 space-y-1">
-                    <Link
-                      href="/pages"
-                      onClick={closeMobile}
-                      className={`block px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                        pathname === '/pages' || (pathname?.startsWith('/pages/platform') && !isBotCakeActive)
-                          ? 'bg-slate-800 text-white'
-                          : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
-                      }`}
-                    >
-                      Pancake Platform
-                    </Link>
-                    <Link
-                      href="/pages/platform/botcake-platform"
-                      onClick={closeMobile}
-                      className={`block px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                        isBotCakeActive ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
-                      }`}
-                    >
-                      BotCake Platform
-                    </Link>
-                  </div>
-                )}
-              </div>
+                  <SvgIcon d={item.icon} />
+                  <span>{item.label}</span>
+                </Link>
+              ))}
+              <NavGroup item={navItems[2]} isMobile />
             </nav>
-
-            {/* Settings */}
             <div className="border-t border-slate-800 px-3 py-3">
               <Link
                 href="/settings"
                 onClick={closeMobile}
                 className={`flex items-center px-3 py-2 gap-3 text-sm font-medium rounded-md transition-colors ${
-                  pathname === '/settings' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-800/50 hover:text-slate-300'
+                  isSettingsActive ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-800/50 hover:text-slate-300'
                 }`}
               >
                 <SvgIcon d={ICONS.settings} size={16} />
