@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getLatestRun, getRunCount, getSetting, listEndpoints, getEndpoint, getLatestPageStates, getRecentRuns, getRunHistory, getBotCakeOverrides, type PageStateRow } from '@/lib/db';
+import { getLatestRun, getRunCount, getSetting, listEndpoints, getEndpoint, getLatestPageStates, getLatestPageStatesForEndpoints, getRecentRuns, getRunHistory, getRunHistories, getBotCakeOverrides, type PageStateRow, type RunRow, type EndpointRow } from '@/lib/db';
 import { StatusCard } from '@/components/StatusCard';
 import { RunNowButton } from '@/components/RunNowButton';
 import { RunStatusIndicator } from '@/components/RunStatusIndicator';
@@ -15,16 +15,58 @@ type SearchParams = {
   endpoint_id?: string;
 };
 
-const PANCAKE_ENDPOINT_IDS = ['430202960', '1635192689', '1942241731'];
+type StatusCardData = {
+  heartbeatFresh: boolean | null;
+  lastScheduledRunMs: number | null;
+  runQuality: string | null;
+  severity: string | null;
+  canaryStatus: string | null;
+  canaryAlert: boolean;
+  alertCount: number;
+  outageSuspected: boolean;
+};
 
-async function PancakeSection({ endpointId }: { endpointId?: string }) {
+function StatusCardGrid({ data }: { data: StatusCardData }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <StatusCard
+        title="Heartbeat"
+        value={data.heartbeatFresh === null ? '—' : data.heartbeatFresh ? 'FRESH' : 'STALE'}
+        tone={data.heartbeatFresh === true ? 'green' : data.heartbeatFresh === false ? 'red' : 'gray'}
+        subtitle={<LiveTimeAgo timestampMs={data.lastScheduledRunMs} />}
+      />
+      <StatusCard
+        title="Run Quality"
+        value={(data.runQuality ?? 'unknown').toUpperCase()}
+        tone={data.runQuality === 'full' ? 'green' : data.runQuality === 'partial' ? 'yellow' : data.runQuality === 'degraded' ? 'red' : 'gray'}
+        subtitle={`Severity: ${data.severity ?? '—'}`}
+      />
+      <StatusCard
+        title="Canary"
+        value={(data.canaryStatus ?? 'unknown').toUpperCase()}
+        tone={data.canaryStatus === 'ok' ? 'green' : data.canaryStatus === 'down' ? 'red' : 'gray'}
+        subtitle={data.canaryAlert ? 'ALERT' : '—'}
+      />
+      <StatusCard
+        title="Alerts"
+        value={String(data.alertCount)}
+        tone={data.alertCount > 0 ? 'red' : 'green'}
+        subtitle={data.outageSuspected ? 'Outage suspected' : 'No outage flagged'}
+      />
+    </div>
+  );
+}
+
+async function PancakeSection({ endpointId, pancakeIds }: { endpointId?: string; pancakeIds: string[] }) {
   let allPages: PageStateRow[] = [];
+  let endpoints = await listEndpoints();
+  let pancakeEndpoints = endpoints.filter(e => e.id !== 'botcake-platform' && pancakeIds.includes(e.id));
+
   if (endpointId) {
     allPages = await getLatestPageStates(endpointId);
-  } else {
-    for (const eid of PANCAKE_ENDPOINT_IDS) {
-      allPages.push(...(await getLatestPageStates(eid)));
-    }
+    pancakeEndpoints = pancakeEndpoints.filter(e => e.id === endpointId);
+  } else if (pancakeIds.length > 0) {
+    allPages = await getLatestPageStatesForEndpoints(pancakeIds);
   }
 
   if (allPages.length === 0) return null;
@@ -32,9 +74,7 @@ async function PancakeSection({ endpointId }: { endpointId?: string }) {
   const activeCount = allPages.filter((p) => p.is_activated === 1).length;
   const inactiveCount = allPages.filter((p) => p.is_activated !== 1).length;
 
-  const rawBreakdown = await Promise.all(PANCAKE_ENDPOINT_IDS.map(async (eid) => {
-    const ep = await getEndpoint(eid);
-    if (!ep) return null;
+  const shopBreakdown = pancakeEndpoints.map((ep) => {
     const shopPages = allPages.filter((p) => p.shop_label === ep.shop_label);
     return {
       label: ep.shop_label ?? ep.name,
@@ -42,13 +82,11 @@ async function PancakeSection({ endpointId }: { endpointId?: string }) {
       active: shopPages.filter((p) => p.is_activated === 1).length,
       inactive: shopPages.filter((p) => p.is_activated !== 1).length,
     };
-  }));
-  const shopBreakdown = rawBreakdown.filter(Boolean) as NonNullable<typeof rawBreakdown[number]>[];
+  });
 
-  const trendSeries = (await Promise.all(PANCAKE_ENDPOINT_IDS.map(async (eid) => {
-    const ep = await getEndpoint(eid);
-    if (!ep) return null;
-    const history = await getRunHistory(eid, 100);
+  const histories = pancakeIds.length > 0 ? await getRunHistories(pancakeIds, 100) : new Map();
+  const trendSeries = pancakeEndpoints.map((ep) => {
+    const history: RunRow[] = histories.get(ep.id) ?? [];
     if (history.length < 2) return null;
     return {
       label: ep.shop_label ?? ep.name,
@@ -59,7 +97,7 @@ async function PancakeSection({ endpointId }: { endpointId?: string }) {
         total: r.total_pages ?? 0,
       })),
     };
-  }))).filter(Boolean) as { label: string; data: { time: string; active: number; inactive: number; total: number }[] }[];
+  }).filter(Boolean) as { label: string; data: { time: string; active: number; inactive: number; total: number }[] }[];
 
   const exportHref = endpointId
     ? `/api/export?format=csv&endpoint_id=${encodeURIComponent(endpointId)}`
@@ -230,17 +268,19 @@ export default async function OverviewPage({
   const endpointId = sp.endpoint_id;
 
   const endpoint = endpointId ? await getEndpoint(endpointId) : undefined;
-  const filteredShopLabel = endpoint?.shop_label ?? null;
 
-  const localRun = await getLatestRun(endpointId);
-  const recentRuns = await getRecentRuns(50, endpointId);
-  const dbRunCount = await getRunCount(endpointId);
-  const totalRunCount = await getRunCount();
-  const lastScheduledRunStr = await getSetting('last_scheduled_run');
+  const [localRun, recentRuns, dbRunCount, totalRunCount, lastScheduledRunStr, allEndpoints] = await Promise.all([
+    getLatestRun(endpointId),
+    getRecentRuns(50, endpointId),
+    getRunCount(endpointId),
+    getRunCount(),
+    getSetting('last_scheduled_run'),
+    listEndpoints(),
+  ]);
   const lastScheduledRunMs = lastScheduledRunStr ? parseInt(lastScheduledRunStr, 10) : null;
 
-  const allEndpoints = await listEndpoints();
-  const endpoints = allEndpoints.map((ep: { id: string; name: string }) => ({ id: ep.id, name: ep.name }));
+  const pancakeIds = allEndpoints.filter(e => e.id !== 'botcake-platform').map(e => e.id);
+  const endpoints = allEndpoints.map((ep) => ({ id: ep.id, name: ep.name }));
 
   const isFiltered = !!endpointId;
   const isBotCake = endpointId === 'botcake-platform';
@@ -250,13 +290,17 @@ export default async function OverviewPage({
     ? new Date(localRun.received_at).toLocaleString()
     : '—';
 
-  const heartbeatFresh = localRun ? localRun.heartbeat_ok === 1 : null;
-  const runQuality = localRun?.run_quality ?? null;
-  const severity = localRun?.severity ?? null;
-  const canaryStatus = localRun?.canary_status ?? null;
-  const canaryAlert = localRun?.canary_alert === 1;
-  const alertCount = localRun?.alert_count ?? 0;
-  const outageSuspected = localRun?.outage_suspected === 1;
+  const cardData: StatusCardData = {
+    heartbeatFresh: localRun ? localRun.heartbeat_ok === 1 : null,
+    lastScheduledRunMs,
+    runQuality: localRun?.run_quality ?? null,
+    severity: localRun?.severity ?? null,
+    canaryStatus: localRun?.canary_status ?? null,
+    canaryAlert: localRun?.canary_alert === 1,
+    alertCount: localRun?.alert_count ?? 0,
+    outageSuspected: localRun?.outage_suspected === 1,
+  };
+
   const runId = localRun?.run_id ?? null;
   const ruleVersion = localRun?.rule_version ?? null;
   const inMaintenance = localRun?.in_maintenance_window === 1;
@@ -280,154 +324,79 @@ export default async function OverviewPage({
       <div className="dashboard-data space-y-6">
         {!isFiltered && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <StatusCard
-                    title="Heartbeat"
-                    value={heartbeatFresh === null ? '—' : heartbeatFresh ? 'FRESH' : 'STALE'}
-                    tone={heartbeatFresh === true ? 'green' : heartbeatFresh === false ? 'red' : 'gray'}
-                    subtitle={<LiveTimeAgo timestampMs={lastScheduledRunMs} />}
-                  />
-                  <StatusCard
-                    title="Run Quality"
-                    value={(runQuality ?? 'unknown').toUpperCase()}
-                    tone={runQuality === 'full' ? 'green' : runQuality === 'partial' ? 'yellow' : runQuality === 'degraded' ? 'red' : 'gray'}
-                    subtitle={`Severity: ${severity ?? '—'}`}
-                  />
-                  <StatusCard
-                    title="Canary"
-                    value={(canaryStatus ?? 'unknown').toUpperCase()}
-                    tone={canaryStatus === 'ok' ? 'green' : canaryStatus === 'down' ? 'red' : 'gray'}
-                    subtitle={canaryAlert ? 'ALERT' : '—'}
-                  />
-                  <StatusCard
-                    title="Alerts"
-                    value={String(alertCount)}
-                    tone={alertCount > 0 ? 'red' : 'green'}
-                    subtitle={outageSuspected ? 'Outage suspected' : 'No outage flagged'}
-                  />
-                </div>
+            <StatusCardGrid data={cardData} />
 
-                {recentRuns.length > 1 && (
-                  <div className="rounded-lg border border-slate-800 bg-slate-900 p-4 flex items-center gap-4">
-                    <div className="text-xs text-slate-400 uppercase shrink-0">Alert Trend (last {recentRuns.length} runs)</div>
-                    <AlertSparkline runs={recentRuns.map(r => ({ alert_count: r.alert_count ?? 0, generated_at: r.generated_at }))} />
-                    <div className="text-xs text-slate-500">Red dots = alerts</div>
+            {recentRuns.length > 1 && (
+              <div className="rounded-lg border border-slate-800 bg-slate-900 p-4 flex items-center gap-4">
+                <div className="text-xs text-slate-400 uppercase shrink-0">Alert Trend (last {recentRuns.length} runs)</div>
+                <AlertSparkline runs={recentRuns.map(r => ({ alert_count: r.alert_count ?? 0, generated_at: r.generated_at }))} />
+                <div className="text-xs text-slate-500">Red dots = alerts</div>
+              </div>
+            )}
+
+            <div className="space-y-8">
+              <PancakeSection pancakeIds={pancakeIds} />
+              <BotCakeSection />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
+                <h3 className="text-sm font-medium text-slate-400 uppercase">Database</h3>
+                <dl className="mt-3 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <dt className="text-slate-400">Total runs</dt>
+                    <dd className="font-mono">{totalRunCount}</dd>
                   </div>
-                )}
-
-                <div className="space-y-8">
-                  <PancakeSection />
-                  <BotCakeSection />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
-                    <h3 className="text-sm font-medium text-slate-400 uppercase">Database</h3>
-                    <dl className="mt-3 space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <dt className="text-slate-400">Total runs</dt>
-                        <dd className="font-mono">{totalRunCount}</dd>
-                      </div>
-                      <div className="flex justify-between">
-                        <dt className="text-slate-400">Platforms</dt>
-                        <dd className="font-mono">{endpoints.length}</dd>
-                      </div>
-                      <div className="flex justify-between">
-                        <dt className="text-slate-400">Last run ID</dt>
-                        <dd className="font-mono text-xs">{runId ?? '—'}</dd>
-                      </div>
-                      <div className="flex justify-between">
-                        <dt className="text-slate-400">Ingest endpoint</dt>
-                        <dd className="font-mono text-xs">POST /api/ingest</dd>
-                      </div>
-                    </dl>
+                  <div className="flex justify-between">
+                    <dt className="text-slate-400">Platforms</dt>
+                    <dd className="font-mono">{endpoints.length}</dd>
                   </div>
-
-                  <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
-                    <h3 className="text-sm font-medium text-slate-400 uppercase">Run details</h3>
-                    <dl className="mt-3 space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <dt className="text-slate-400">Run ID</dt>
-                        <dd className="font-mono text-xs">{runId ?? '—'}</dd>
-                      </div>
-                      <div className="flex justify-between">
-                        <dt className="text-slate-400">Rule version</dt>
-                        <dd className="font-mono">v{ruleVersion ?? '—'}</dd>
-                      </div>
-                      <div className="flex justify-between">
-                        <dt className="text-slate-400">In maintenance</dt>
-                        <dd className="font-mono">{inMaintenance ? 'YES' : 'no'}</dd>
-                      </div>
-                      <div className="flex justify-between">
-                        <dt className="text-slate-400">Data source</dt>
-                        <dd className="font-mono text-xs">{localRun ? (localRun.endpoint_id === 'botcake-platform' ? 'BotCake API' : 'Pancake / Ingest') : '—'}</dd>
-                      </div>
-                    </dl>
+                  <div className="flex justify-between">
+                    <dt className="text-slate-400">Last run ID</dt>
+                    <dd className="font-mono text-xs">{runId ?? '—'}</dd>
                   </div>
-                </div>
+                  <div className="flex justify-between">
+                    <dt className="text-slate-400">Ingest endpoint</dt>
+                    <dd className="font-mono text-xs">POST /api/ingest</dd>
+                  </div>
+                </dl>
+              </div>
+
+              <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
+                <h3 className="text-sm font-medium text-slate-400 uppercase">Run details</h3>
+                <dl className="mt-3 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <dt className="text-slate-400">Run ID</dt>
+                    <dd className="font-mono text-xs">{runId ?? '—'}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-slate-400">Rule version</dt>
+                    <dd className="font-mono">v{ruleVersion ?? '—'}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-slate-400">In maintenance</dt>
+                    <dd className="font-mono">{inMaintenance ? 'YES' : 'no'}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-slate-400">Data source</dt>
+                    <dd className="font-mono text-xs">{localRun ? (localRun.endpoint_id === 'botcake-platform' ? 'BotCake API' : 'Pancake / Ingest') : '—'}</dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
           </>
         )}
 
         {isPancakeShop && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatusCard
-                title="Heartbeat"
-                value={heartbeatFresh === null ? '—' : heartbeatFresh ? 'FRESH' : 'STALE'}
-                tone={heartbeatFresh === true ? 'green' : heartbeatFresh === false ? 'red' : 'gray'}
-                subtitle={<LiveTimeAgo timestampMs={lastScheduledRunMs} />}
-              />
-              <StatusCard
-                title="Run Quality"
-                value={(runQuality ?? 'unknown').toUpperCase()}
-                tone={runQuality === 'full' ? 'green' : runQuality === 'partial' ? 'yellow' : runQuality === 'degraded' ? 'red' : 'gray'}
-                subtitle={`Severity: ${severity ?? '—'}`}
-              />
-              <StatusCard
-                title="Canary"
-                value={(canaryStatus ?? 'unknown').toUpperCase()}
-                tone={canaryStatus === 'ok' ? 'green' : canaryStatus === 'down' ? 'red' : 'gray'}
-                subtitle={canaryAlert ? 'ALERT' : '—'}
-              />
-              <StatusCard
-                title="Alerts"
-                value={String(alertCount)}
-                tone={alertCount > 0 ? 'red' : 'green'}
-                subtitle={outageSuspected ? 'Outage suspected' : 'No outage flagged'}
-              />
-            </div>
-            <PancakeSection endpointId={endpointId} />
+            <StatusCardGrid data={cardData} />
+            <PancakeSection endpointId={endpointId} pancakeIds={pancakeIds} />
           </>
         )}
 
         {isBotCake && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatusCard
-                title="Heartbeat"
-                value={heartbeatFresh === null ? '—' : heartbeatFresh ? 'FRESH' : 'STALE'}
-                tone={heartbeatFresh === true ? 'green' : heartbeatFresh === false ? 'red' : 'gray'}
-                subtitle={<LiveTimeAgo timestampMs={lastScheduledRunMs} />}
-              />
-              <StatusCard
-                title="Run Quality"
-                value={(runQuality ?? 'unknown').toUpperCase()}
-                tone={runQuality === 'full' ? 'green' : runQuality === 'partial' ? 'yellow' : runQuality === 'degraded' ? 'red' : 'gray'}
-                subtitle={`Severity: ${severity ?? '—'}`}
-              />
-              <StatusCard
-                title="Canary"
-                value={(canaryStatus ?? 'unknown').toUpperCase()}
-                tone={canaryStatus === 'ok' ? 'green' : canaryStatus === 'down' ? 'red' : 'gray'}
-                subtitle={canaryAlert ? 'ALERT' : '—'}
-              />
-              <StatusCard
-                title="Alerts"
-                value={String(alertCount)}
-                tone={alertCount > 0 ? 'red' : 'green'}
-                subtitle={outageSuspected ? 'Outage suspected' : 'No outage flagged'}
-              />
-            </div>
+            <StatusCardGrid data={cardData} />
             <BotCakeSection />
           </>
         )}
