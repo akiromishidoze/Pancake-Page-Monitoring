@@ -126,12 +126,19 @@ async function migrate() {
       expires_at TIMESTAMPTZ NOT NULL
     );
     CREATE INDEX IF NOT EXISTS sessions_expires_at ON sessions(expires_at);
+    CREATE TABLE IF NOT EXISTS botcake_overrides (
+      page_id TEXT PRIMARY KEY,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      reason TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   `);
   try { await pool.query(`ALTER TABLE page_states ADD COLUMN IF NOT EXISTS customer_count INTEGER`); } catch {
     // Column may already exist, safe to ignore
   }
   await migrateTimestampTypes();
   await migrateBooleanTypes();
+  await migrateBotCakeOverrides();
 }
 
 async function migrateTimestampTypes() {
@@ -971,27 +978,50 @@ export type BotCakeOverride = {
   created_at: string;
 };
 
-export async function getBotCakeOverrides(): Promise<Map<string, BotCakeOverride>> {
+async function migrateBotCakeOverrides() {
   const raw = await getSetting('botcake_overrides');
-  if (!raw) return new Map();
+  if (!raw) return;
   try {
     const arr = JSON.parse(raw) as BotCakeOverride[];
-    return new Map(arr.map(o => [o.page_id, o]));
+    if (arr.length === 0) return;
+    for (const o of arr) {
+      await pool.query(
+        `INSERT INTO botcake_overrides (page_id, is_active, reason, created_at)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (page_id) DO NOTHING`,
+        [o.page_id, o.is_active, o.reason, o.created_at],
+      );
+    }
+    // Clear the old JSON blob from settings
+    await setSetting('botcake_overrides', '');
+    console.log(`[db] migrated ${arr.length} botcake overrides from settings to botcake_overrides table`);
   } catch {
-    return new Map();
+    // If migration fails, leave old data in settings for manual recovery
   }
 }
 
+export async function getBotCakeOverrides(): Promise<Map<string, BotCakeOverride>> {
+  await ensureMigrated();
+  const r = await pool.query(
+    'SELECT page_id, is_active, reason, created_at FROM botcake_overrides ORDER BY created_at DESC',
+  );
+  const rows = r.rows as BotCakeOverride[];
+  return new Map(rows.map(o => [o.page_id, o]));
+}
+
 export async function setBotCakeOverride(pageId: string, isActive: boolean, reason: string): Promise<void> {
-  const overrides = await getBotCakeOverrides();
-  overrides.set(pageId, { page_id: pageId, is_active: isActive, reason, created_at: new Date().toISOString() });
-  await setSetting('botcake_overrides', JSON.stringify([...overrides.values()]));
+  await ensureMigrated();
+  await pool.query(
+    `INSERT INTO botcake_overrides (page_id, is_active, reason, created_at)
+     VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (page_id) DO UPDATE SET is_active = $2, reason = $3, created_at = NOW()`,
+    [pageId, isActive, reason],
+  );
 }
 
 export async function removeBotCakeOverride(pageId: string): Promise<void> {
-  const overrides = await getBotCakeOverrides();
-  overrides.delete(pageId);
-  await setSetting('botcake_overrides', JSON.stringify([...overrides.values()]));
+  await ensureMigrated();
+  await pool.query('DELETE FROM botcake_overrides WHERE page_id = $1', [pageId]);
 }
 
 // ──── Settings ─────────────────────────────────────────────────────────
