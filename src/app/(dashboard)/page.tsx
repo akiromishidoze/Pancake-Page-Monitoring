@@ -3,6 +3,8 @@ import { getLatestRun, getRunCount, getSetting, listEndpoints, getEndpoint, getL
 import { StatusCard } from '@/components/StatusCard';
 import { RunNowButton } from '@/components/RunNowButton';
 import { formatWithTz } from '@/lib/format';
+
+export const dynamic = 'force-dynamic';
 import { RunStatusIndicator } from '@/components/RunStatusIndicator';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { ActiveDonutChart } from '@/components/ActiveDonutChart';

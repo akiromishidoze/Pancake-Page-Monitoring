@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { notFound, redirect } from 'next/navigation';
 import { getLatestPageStates, getEndpointBySlug, listPlatformPages, listEndpoints, upsertEndpoint } from '@/lib/db';
 import Link from 'next/link';

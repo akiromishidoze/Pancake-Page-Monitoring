@@ -3,6 +3,8 @@ import { getRunCount, getLatestPageStates } from '@/lib/db';
 import Link from 'next/link';
 import { formatDateWithTz } from '@/lib/format';
 
+export const dynamic = 'force-dynamic';
+
 const KIND_TONE: Record<string, string> = {
   funnel_converting: 'bg-green-900/30 text-green-300 border-green-800',
   direct_orders_only: 'bg-emerald-900/30 text-emerald-300 border-emerald-800',

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { listEndpoints } from '@/lib/db';
 import { SettingsForm } from './SettingsForm';
 import { ChangeCredentials } from '@/components/ChangeCredentials';

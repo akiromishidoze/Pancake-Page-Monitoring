@@ -6,6 +6,8 @@ import { PageWaterfallChart } from '@/components/PageWaterfallChart';
 import type { SlimPage } from '@/lib/db';
 import { formatWithTz } from '@/lib/format';
 
+export const dynamic = 'force-dynamic';
+
 function formatDurationSeconds(sec: number) {
   if (sec <= 0) return '0s';
   const days = Math.floor(sec / 86400);
