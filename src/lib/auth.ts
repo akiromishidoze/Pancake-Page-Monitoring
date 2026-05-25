@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcrypt';
-import { getSetting, setSetting } from './db';
+import { getSetting, setSetting, createSessionToken, validateSessionToken, clearSessionToken } from './db';
 
 const BCRYPT_ROUNDS = 12;
 const DEFAULT_EMAIL = 'admin';
@@ -66,19 +66,16 @@ export async function hashPassword(plain: string): Promise<string> {
 }
 
 export async function createSession(): Promise<string> {
-  const token = crypto.randomUUID();
-  await setSetting('session_token', token);
-  return token;
+  return createSessionToken();
 }
 
 export async function validateSession(token: string | null | undefined): Promise<boolean> {
-  if (!token) return false;
-  const stored = await getSetting('session_token');
-  return stored === token;
+  return validateSessionToken(token);
 }
 
-export async function clearSession(): Promise<void> {
-  await setSetting('session_token', '');
+export async function clearSession(token?: string): Promise<void> {
+  if (!token) return;
+  await clearSessionToken(token);
 }
 
 export async function requireApiAuth(): Promise<NextResponse | null> {

@@ -356,6 +356,23 @@ export async function getRunHistory(endpointId: string, limit = 100): Promise<Ru
   return r.rows as RunRow[];
 }
 
+export async function getRunHistories(endpointIds: string[], limit = 100): Promise<Map<string, RunRow[]>> {
+  await ensureMigrated();
+  if (endpointIds.length === 0) return new Map();
+  const placeholders = endpointIds.map((_, i) => `$${i + 1}`).join(',');
+  const r = await pool.query(`
+    SELECT * FROM runs WHERE endpoint_id IN (${placeholders})
+    ORDER BY endpoint_id, generated_at ASC
+  `, endpointIds);
+  const map = new Map<string, RunRow[]>();
+  for (const row of r.rows as RunRow[]) {
+    const arr = map.get(row.endpoint_id!) ?? [];
+    if (arr.length < limit) arr.push(row);
+    map.set(row.endpoint_id!, arr);
+  }
+  return map;
+}
+
 export async function getRecentRuns(limit = 50, endpointId?: string): Promise<RunRow[]> {
   await ensureMigrated();
   if (endpointId) {
@@ -387,6 +404,24 @@ export async function getPancakeActivePageIds(): Promise<Set<string>> {
   const placeholders = latestRunIds.map((_, i) => `$${i + 1}`).join(',');
   const r = await pool.query(`SELECT page_id FROM page_states WHERE run_id IN (${placeholders}) AND is_activated = 1`, latestRunIds);
   return new Set((r.rows as { page_id: string }[]).map(r => r.page_id));
+}
+
+export async function getLatestPageStatesForEndpoints(endpointIds: string[]): Promise<PageStateRow[]> {
+  await ensureMigrated();
+  if (endpointIds.length === 0) return [];
+  const placeholders = endpointIds.map((_, i) => `$${i + 1}`).join(',');
+  const r = await pool.query(`
+    SELECT ps.* FROM page_states ps
+    JOIN runs r ON r.run_id = ps.run_id
+    WHERE r.endpoint_id IN (${placeholders})
+    AND (r.endpoint_id, r.generated_at) IN (
+      SELECT endpoint_id, MAX(generated_at) FROM runs
+      WHERE endpoint_id IN (${placeholders})
+      GROUP BY endpoint_id
+    )
+    ORDER BY ps.shop_label, ps.page_name
+  `, [...endpointIds, ...endpointIds]);
+  return r.rows as PageStateRow[];
 }
 
 export async function getLatestPageStates(endpointId?: string): Promise<PageStateRow[]> {

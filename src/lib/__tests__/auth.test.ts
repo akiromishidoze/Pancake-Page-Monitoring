@@ -2,9 +2,26 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/db', () => {
   const store = new Map<string, string>();
+  const sessionTokens = new Map<string, string>();
   return {
     getSetting: vi.fn(async (key: string) => store.get(key) ?? null),
     setSetting: vi.fn(async (key: string, value: string) => { store.set(key, value); }),
+    createSessionToken: vi.fn(async () => {
+      const token = crypto.randomUUID();
+      const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      sessionTokens.set(token, expires);
+      return token;
+    }),
+    validateSessionToken: vi.fn(async (token: string | null | undefined) => {
+      if (!token) return false;
+      const expires = sessionTokens.get(token);
+      if (!expires) return false;
+      return new Date(expires) > new Date();
+    }),
+    clearSessionToken: vi.fn(async (token: string) => {
+      sessionTokens.delete(token);
+    }),
+    pruneExpiredSessions: vi.fn(async () => {}),
   };
 });
 
@@ -16,7 +33,10 @@ describe('ensureCredentials', () => {
     const { getSetting, setSetting } = await import('@/lib/db');
     await ensureCredentials();
     expect(setSetting).toHaveBeenCalledWith('auth_email', 'admin');
-    expect(setSetting).toHaveBeenCalledWith('auth_password', 'admin');
+    expect(setSetting).toHaveBeenCalledWith(
+      'auth_password',
+      expect.stringMatching(/^\$2[ab]\$\d+\$/),
+    );
   });
 
   it('does not overwrite existing credentials', async () => {
@@ -82,7 +102,7 @@ describe('createSession and validateSession', () => {
     const { createSession, validateSession, clearSession } = await import('@/lib/auth');
     const token = await createSession();
     expect(await validateSession(token)).toBe(true);
-    await clearSession();
+    await clearSession(token);
     expect(await validateSession(token)).toBe(false);
   });
 });

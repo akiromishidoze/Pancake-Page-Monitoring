@@ -4,8 +4,9 @@ import { clearSession } from '@/lib/auth';
 
 export async function POST() {
   try {
-    await clearSession();
     const cookieStore = await cookies();
+    const session = cookieStore.get('session')?.value;
+    await clearSession(session);
     cookieStore.set('session', '', { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 0 });
 
     return NextResponse.json({ ok: true });
