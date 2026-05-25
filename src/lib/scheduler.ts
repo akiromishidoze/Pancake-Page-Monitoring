@@ -4,9 +4,37 @@ import { refreshAll } from './poller';
 const SCHEDULER_POLL_MS = 5_000;
 const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const CACHE_TTL_MS = 60_000;
 
 let _started = false;
 const _intervals: NodeJS.Timeout[] = [];
+
+// In-memory cache for schedule settings to avoid 17k DB reads/day
+let _cachedInterval: number | null = null;
+let _cachedLastRun: number = 0;
+let _cacheExpiresAt: number = 0;
+
+async function getScheduleSettings() {
+  const now = Date.now();
+  if (now < _cacheExpiresAt) return { intervalMs: _cachedInterval, lastRunMs: _cachedLastRun };
+
+  const [intervalStr, lastRunStr] = await Promise.all([
+    getSetting('schedule_interval'),
+    getSetting('last_scheduled_run'),
+  ]);
+
+  _cachedInterval = intervalStr && intervalStr !== 'off' ? parseInt(intervalStr, 10) : null;
+  if (_cachedInterval !== null && isNaN(_cachedInterval)) _cachedInterval = null;
+
+  _cachedLastRun = lastRunStr ? parseInt(lastRunStr, 10) : 0;
+  _cacheExpiresAt = now + CACHE_TTL_MS;
+
+  return { intervalMs: _cachedInterval, lastRunMs: _cachedLastRun };
+}
+
+function invalidateCache() {
+  _cacheExpiresAt = 0;
+}
 
 export async function startScheduler() {
   if (_started) return;
@@ -79,25 +107,17 @@ async function checkPrune() {
 }
 
 export async function checkAndRun() {
-  const intervalStr = await getSetting('schedule_interval');
+  const { intervalMs, lastRunMs } = await getScheduleSettings();
 
-  if (!intervalStr || intervalStr === 'off') {
-    return;
-  }
+  if (intervalMs === null || intervalMs <= 0) return;
 
-  const intervalMs = parseInt(intervalStr, 10);
-  if (isNaN(intervalMs)) {
-    return;
-  }
-
-  const lastRunStr = await getSetting('last_scheduled_run');
-  const lastRunMs = lastRunStr ? parseInt(lastRunStr, 10) : 0;
   const now = Date.now();
 
   if (now - lastRunMs >= intervalMs) {
     console.log('[scheduler] Triggering platform refresh... interval:', intervalMs, 'ms');
     await setSetting('last_scheduled_run', now.toString());
     await setSetting('last_trigger_time', now.toString());
+    invalidateCache();
 
     await refreshAll();
   }
