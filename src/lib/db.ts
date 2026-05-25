@@ -43,16 +43,16 @@ async function migrate() {
       api_key TEXT NOT NULL,
       access_token TEXT,
       shop_label TEXT,
-      token_expires_at TEXT,
+      token_expires_at TIMESTAMPTZ,
       is_active INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL,
-      last_used_at TEXT
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_used_at TIMESTAMPTZ
     );
     CREATE TABLE IF NOT EXISTS runs (
       run_id TEXT PRIMARY KEY,
       endpoint_id TEXT REFERENCES endpoints(id) ON DELETE SET NULL,
-      generated_at TEXT NOT NULL,
-      received_at TEXT NOT NULL,
+      generated_at TIMESTAMPTZ NOT NULL,
+      received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       heartbeat_ok INTEGER,
       run_quality TEXT,
       severity TEXT,
@@ -87,7 +87,7 @@ async function migrate() {
       response_ms REAL,
       fetch_errors INTEGER,
       customer_count INTEGER,
-      generated_at TEXT NOT NULL
+      generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS page_states_page_id_time ON page_states(page_id, generated_at DESC);
     CREATE INDEX IF NOT EXISTS page_states_run_id ON page_states(run_id);
@@ -102,8 +102,8 @@ async function migrate() {
       page_name TEXT NOT NULL,
       page_url TEXT,
       is_active INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS platform_pages_endpoint_idx ON platform_pages(endpoint_id);
     CREATE TABLE IF NOT EXISTS platform_connectors (
@@ -116,19 +116,45 @@ async function migrate() {
       json_path TEXT,
       interval_ms INTEGER NOT NULL DEFAULT 60000,
       is_active INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS platform_connectors_active ON platform_connectors(is_active);
     CREATE TABLE IF NOT EXISTS sessions (
       token TEXT PRIMARY KEY,
-      created_at TEXT NOT NULL,
-      expires_at TEXT NOT NULL
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL
     );
     CREATE INDEX IF NOT EXISTS sessions_expires_at ON sessions(expires_at);
   `);
   try { await pool.query(`ALTER TABLE page_states ADD COLUMN IF NOT EXISTS customer_count INTEGER`); } catch {
     // Column may already exist, safe to ignore
+  }
+  await migrateTimestampTypes();
+}
+
+async function migrateTimestampTypes() {
+  const conversions: { table: string; column: string }[] = [
+    { table: 'endpoints', column: 'token_expires_at' },
+    { table: 'endpoints', column: 'created_at' },
+    { table: 'endpoints', column: 'last_used_at' },
+    { table: 'runs', column: 'generated_at' },
+    { table: 'runs', column: 'received_at' },
+    { table: 'platform_pages', column: 'created_at' },
+    { table: 'platform_pages', column: 'updated_at' },
+    { table: 'platform_connectors', column: 'created_at' },
+    { table: 'platform_connectors', column: 'updated_at' },
+    { table: 'sessions', column: 'created_at' },
+    { table: 'sessions', column: 'expires_at' },
+  ];
+  for (const { table, column } of conversions) {
+    try {
+      await pool.query(
+        `ALTER TABLE ${table} ALTER COLUMN ${column} TYPE TIMESTAMPTZ USING ${column}::timestamptz`,
+      );
+    } catch {
+      // Column may already be TIMESTAMPTZ or not exist — skip
+    }
   }
 }
 
