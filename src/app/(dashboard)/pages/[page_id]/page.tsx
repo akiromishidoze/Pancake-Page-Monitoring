@@ -125,12 +125,12 @@ export default async function Page({
     if (isNaN(tPrev) || isNaN(tCur)) continue;
 
     // active -> inactive : incident start
-    if (prev.is_activated && cur!.is_activated) {
+    if (prev.is_activated && !cur.is_activated) {
       pendingStart = tCur;
     }
 
     // inactive -> active : incident end
-    if (prev!.is_activated && cur.is_activated) {
+    if (!prev.is_activated && cur.is_activated) {
       if (pendingStart === null) {
         // If we didn't record start, use prev timestamp as heuristic
         pendingStart = tPrev;
@@ -203,7 +203,7 @@ export default async function Page({
     kind: r.activity_kind ?? r.activity_kind,
     shop_label: r.shop_label ?? r.shop_label,
   }));
-  const inactivePages = rows.filter(r => r!.is_activated).map(r => ({
+  const inactivePages = rows.filter(r => !r.is_activated).map(r => ({
     name: r.page_name ?? '—',
     page_id: r.page_id,
     kind: r.activity_kind ?? r.activity_kind,

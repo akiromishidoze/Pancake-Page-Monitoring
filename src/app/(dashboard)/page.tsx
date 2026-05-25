@@ -72,7 +72,7 @@ async function PancakeSection({ endpointId, pancakeIds }: { endpointId?: string;
   if (allPages.length === 0) return null;
 
   const activeCount = allPages.filter((p) => p.is_activated).length;
-  const inactiveCount = allPages.filter((p) => p!.is_activated).length;
+  const inactiveCount = allPages.filter((p) => !p.is_activated).length;
 
   const shopBreakdown = pancakeEndpoints.map((ep) => {
     const shopPages = allPages.filter((p) => p.shop_label === ep.shop_label);
@@ -80,7 +80,7 @@ async function PancakeSection({ endpointId, pancakeIds }: { endpointId?: string;
       label: ep.shop_label ?? ep.name,
       total: shopPages.length,
       active: shopPages.filter((p) => p.is_activated).length,
-      inactive: shopPages.filter((p) => p!.is_activated).length,
+      inactive: shopPages.filter((p) => !p.is_activated).length,
     };
   });
 
@@ -169,13 +169,13 @@ async function BotCakeSection() {
   const apiHealthy = latestRun && latestRun.heartbeat_ok && !latestRun.outage_suspected;
 
   const activeCount = pages.filter(p => p.is_activated).length;
-  const inactiveCount = pages.filter(p => p!.is_activated).length;
+  const inactiveCount = pages.filter(p => !p.is_activated).length;
 
   const breakdown = [
     { label: 'Active (has orders)', count: pages.filter(p => p.is_activated && p.activation_reason === 'pancake-activity').length, color: 'text-green-400' },
     { label: 'Active (has conversations)', count: pages.filter(p => p.is_activated && p.activation_reason === 'has-conversations').length, color: 'text-emerald-400' },
     { label: 'Active (has tools/flows)', count: pages.filter(p => p.is_activated && p.activation_reason === 'has-tools').length, color: 'text-teal-400' },
-    { label: 'Inactive (no activity)', count: pages.filter(p => p!.is_activated && p.activation_reason === 'no-activity').length, color: 'text-slate-500' },
+    { label: 'Inactive (no activity)', count: pages.filter(p => !p.is_activated && p.activation_reason === 'no-activity').length, color: 'text-slate-500' },
   ].filter(b => b.count > 0);
 
   const botCakeHistory = await getRunHistory('botcake-platform', 200);

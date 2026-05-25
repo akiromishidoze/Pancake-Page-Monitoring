@@ -199,8 +199,29 @@ async function migratePageStatesPartitioning() {
   );
   if (check.rows.length > 0) return;
 
-  // Drop stale page_states_old from any prior failed migration attempt
-  await pool.query('DROP TABLE IF EXISTS page_states_old CASCADE');
+  // If page_states_old exists from a prior failed migration, it contains the real data.
+  // Recover it by dropping the empty page_states (created by CREATE TABLE IF NOT EXISTS in migrate())
+  // and renaming page_states_old back.
+  const oldExists = await pool.query(
+    `SELECT COUNT(*)::int AS cnt FROM pg_class WHERE relname = 'page_states_old'`,
+  );
+  if (oldExists.rows[0].cnt > 0) {
+    const dataCheck = await pool.query('SELECT COUNT(*)::int AS cnt FROM page_states_old');
+    if (dataCheck.rows[0].cnt > 0) {
+      // page_states_old has data — recover it
+      await pool.query('DROP TABLE IF EXISTS page_states CASCADE');
+      await pool.query('ALTER TABLE page_states_old RENAME TO page_states');
+      console.log('[db] recovered page_states data from page_states_old');
+      // Now check again if partitioning is needed
+      const checkAgain = await pool.query(
+        `SELECT relkind FROM pg_class WHERE relname = 'page_states' AND relkind = 'p'`,
+      );
+      if (checkAgain.rows.length > 0) return;
+    } else {
+      // page_states_old is empty, safe to drop
+      await pool.query('DROP TABLE IF EXISTS page_states_old CASCADE');
+    }
+  }
 
   await pool.query('BEGIN');
   try {
