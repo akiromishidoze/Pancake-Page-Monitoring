@@ -2,8 +2,27 @@
 // We use it to start the background poller worker and initialize auth.
 // Docs: https://nextjs.org/docs/app/api-reference/file-conventions/instrumentation
 
+const REQUIRED_ENV_VARS = ['DATABASE_URL'] as const;
+const OPTIONAL_ENV_VARS = ['FB_ACCESS_TOKEN'] as const;
+
+function validateEnvVars() {
+  for (const name of REQUIRED_ENV_VARS) {
+    if (!process.env[name]) {
+      console.error(`[env] MISSING REQUIRED ENV VAR: ${name}`);
+      process.exit(1);
+    }
+  }
+  for (const name of OPTIONAL_ENV_VARS) {
+    if (!process.env[name]) {
+      console.warn(`[env] Optional env var ${name} is not set — some features may be unavailable`);
+    }
+  }
+}
+
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    validateEnvVars();
+
     const { initHttpAgent } = await import('./lib/http');
     initHttpAgent();
 
