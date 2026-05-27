@@ -7,39 +7,53 @@ import { requireApiAuth } from '@/lib/auth';
 
 export async function GET() {
   const auth = await requireApiAuth(); if (auth) return auth;
-  const endpoints = await listEndpoints();
-  const safe = endpoints.map((e) => ({
-    ...e,
-    api_key: e.api_key ? `${e.api_key.slice(0, 8)}...${e.api_key.slice(-4)}` : null,
-  }));
-  return NextResponse.json({ ok: true, endpoints: safe });
+  try {
+    const endpoints = await listEndpoints();
+    const safe = endpoints.map((e) => ({
+      ...e,
+      api_key: e.api_key ? `${e.api_key.slice(0, 8)}...${e.api_key.slice(-4)}` : null,
+    }));
+    return NextResponse.json({ ok: true, endpoints: safe });
+  } catch (e) {
+    return NextResponse.json(
+      { ok: false, error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
+  }
 }
 
 export async function POST(req: Request) {
   const auth = await requireApiAuth(); if (auth) return auth;
-  let body: Record<string, unknown>;
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
+    }
+
+    if (!body.name || !body.api_key) {
+      return NextResponse.json({ ok: false, error: 'name and api_key are required' }, { status: 400 });
+    }
+
+    const endpoint = await upsertEndpoint({
+      id: (body.id as string) || undefined,
+      name: body.name as string,
+      api_key: body.api_key as string,
+      url: (body.url as string) || null,
+      access_token: (body.access_token as string) || null,
+      token_expires_at: (body.token_expires_at as string) || null,
+      is_active: (body.is_active as boolean) ?? true,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      endpoint: { ...endpoint, api_key: undefined },
+    });
+  } catch (e) {
+    return NextResponse.json(
+      { ok: false, error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
   }
-
-  if (!body.name || !body.api_key) {
-    return NextResponse.json({ ok: false, error: 'name and api_key are required' }, { status: 400 });
-  }
-
-  const endpoint = await upsertEndpoint({
-    id: (body.id as string) || undefined,
-    name: body.name as string,
-    api_key: body.api_key as string,
-    url: (body.url as string) || null,
-    access_token: (body.access_token as string) || null,
-    token_expires_at: (body.token_expires_at as string) || null,
-    is_active: (body.is_active as boolean) ?? true,
-  });
-
-  return NextResponse.json({
-    ok: true,
-    endpoint: { ...endpoint, api_key: undefined },
-  });
 }
