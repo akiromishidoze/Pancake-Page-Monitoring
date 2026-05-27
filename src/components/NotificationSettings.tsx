@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, FormEvent } from 'react';
+import { useToast } from './Toast';
 
 export function NotificationSettings() {
   const [slackWebhook, setSlackWebhook] = useState('');
@@ -9,6 +10,7 @@ export function NotificationSettings() {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
+  const { toast } = useToast();
 
   const [smtpHost, setSmtpHost] = useState('');
   const [smtpPort, setSmtpPort] = useState('587');
@@ -33,7 +35,7 @@ export function NotificationSettings() {
           setEmailConfigured(d.email_configured);
         }
       })
-      .catch(() => {});
+      .catch(() => toast('Failed to load notification settings'));
   }, []);
 
   async function handleSubmit(e: FormEvent) {

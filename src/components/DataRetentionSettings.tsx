@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useEffect, FormEvent } from 'react';
+import { useToast } from './Toast';
 
 export function DataRetentionSettings() {
   const [days, setDays] = useState('90');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     fetch('/api/settings')
@@ -16,7 +18,7 @@ export function DataRetentionSettings() {
           setDays(d.settings.retention_days);
         }
       })
-      .catch(() => {});
+      .catch(() => toast('Failed to load retention settings'));
   }, []);
 
   async function handleSubmit(e: FormEvent) {

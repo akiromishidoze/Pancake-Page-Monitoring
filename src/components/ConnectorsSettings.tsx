@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useToast } from './Toast';
 
 type Connector = {
   id: string;
@@ -25,11 +26,12 @@ export function ConnectorsSettings() {
   const [editing, setEditing] = useState<Partial<Connector> | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const { toast } = useToast();
 
   useEffect(() => {
     fetch('/api/connectors').then(r => r.json()).then(d => {
       if (d.ok) setConnectors(d.connectors);
-    }).catch(() => {});
+    }).catch(() => toast('Failed to load connectors'));
   }, []);
 
   async function save(data: Partial<Connector>) {

@@ -2,11 +2,13 @@ import { AutoRefresh } from '@/components/AutoRefresh';
 import { GlobalLoadingSequence } from '@/components/GlobalLoadingSequence';
 import { Sidebar } from '@/components/Sidebar';
 import { LogoutButton } from '@/components/LogoutButton';
+import { ToastProvider } from '@/components/Toast';
 
 export default function DashboardLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
+    <ToastProvider>
       <div className="flex h-screen overflow-hidden">
       <AutoRefresh />
       <GlobalLoadingSequence />
@@ -29,5 +31,6 @@ export default function DashboardLayout({
         </main>
       </div>
     </div>
+    </ToastProvider>
   );
 }
