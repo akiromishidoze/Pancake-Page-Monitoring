@@ -1,50 +1,58 @@
-// Next.js instrumentation hook — runs once when the server starts.
-// We use it to start the background poller worker and initialize auth.
-// Docs: https://nextjs.org/docs/app/api-reference/file-conventions/instrumentation
-
-const REQUIRED_ENV_VARS = ['DATABASE_URL'] as const;
-const OPTIONAL_ENV_VARS = ['FB_ACCESS_TOKEN'] as const;
-
 function validateEnvVars() {
-  for (const name of REQUIRED_ENV_VARS) {
+  const required = ['DATABASE_URL'] as const;
+  const optional = ['FB_ACCESS_TOKEN'] as const;
+
+  for (const name of required) {
     if (!process.env[name]) {
       console.error(`[env] MISSING REQUIRED ENV VAR: ${name}`);
       process.exit(1);
     }
   }
-  for (const name of OPTIONAL_ENV_VARS) {
+
+  for (const name of optional) {
     if (!process.env[name]) {
-      console.warn(`[env] Optional env var ${name} is not set — some features may be unavailable`);
+      console.warn(`[env] Optional env var ${name} is not set`);
     }
   }
 }
 
 export async function register() {
-  if (process.env.NEXT_RUNTIME === 'nodejs') {
-    validateEnvVars();
+  if (process.env.NEXT_RUNTIME !== 'nodejs') return;
 
-    const { initHttpAgent } = await import('./lib/http');
-    initHttpAgent();
+  validateEnvVars();
 
-    const { ensureCredentials } = await import('./lib/auth');
-    await ensureCredentials();
+  const { initHttpAgent } = await import('./lib/http');
+  initHttpAgent();
 
-    const { startPoller, stopPoller } = await import('./lib/poller');
-    const { startScheduler, stopScheduler } = await import('./lib/scheduler');
-    const { startConnectorPollers, stopConnectorPollers } = await import('./lib/connector-poller');
-    startPoller();
-    await startScheduler();
-    startConnectorPollers();
+  setTimeout(() => {
+    Promise.all([
+      import('./lib/auth'),
+      import('./lib/poller'),
+      import('./lib/scheduler'),
+      import('./lib/connector-poller'),
+    ]).then(async ([authMod, pollerMod, schedulerMod, connectorMod]) => {
+      try {
+        await authMod.ensureCredentials();
+      } catch (err) {
+        console.error('[instrumentation] ensureCredentials failed:', err);
+      }
 
-    function gracefulShutdown() {
-      console.log('[server] shutting down gracefully...');
-      stopPoller();
-      stopScheduler();
-      stopConnectorPollers();
-      process.exit(0);
-    }
+      pollerMod.startPoller();
+      await schedulerMod.startScheduler();
+      connectorMod.startConnectorPollers();
 
-    process.on('SIGINT', gracefulShutdown);
-    process.on('SIGTERM', gracefulShutdown);
-  }
+      const shutdown = () => {
+        console.log('[server] shutting down...');
+        pollerMod.stopPoller();
+        schedulerMod.stopScheduler();
+        connectorMod.stopConnectorPollers();
+        process.exit(0);
+      };
+
+      process.on('SIGINT', shutdown);
+      process.on('SIGTERM', shutdown);
+    }).catch(err => {
+      console.error('[instrumentation] background workers failed:', err);
+    });
+  }, 10_000);
 }

@@ -15,8 +15,9 @@ export function startPoller() {
   if (_pollerInterval) return;
   console.log('[poller] starting; interval =', POLL_INTERVAL_MS, 'ms');
 
-  void refreshAll();
-  _pollerInterval = setInterval(() => void refreshAll(), POLL_INTERVAL_MS);
+  const doRefresh = () => void refreshAll();
+  setTimeout(doRefresh, 30_000);
+  _pollerInterval = setInterval(doRefresh, POLL_INTERVAL_MS);
 }
 
 export function stopPoller() {
