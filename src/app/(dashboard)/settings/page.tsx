@@ -7,7 +7,12 @@ import { NotificationSettings } from '@/components/NotificationSettings';
 import { ConnectorsSettings } from '@/components/ConnectorsSettings';
 import { DataRetentionSettings } from '@/components/DataRetentionSettings';
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ change_password?: string }>;
+}) {
+  const resolvedSearch = searchParams ? await searchParams : undefined;
   const allEndpoints = await listEndpoints();
   const endpoints = allEndpoints.map((e) => ({
     id: e.id,
@@ -38,7 +43,7 @@ export default async function SettingsPage() {
 
       <DataRetentionSettings />
 
-      <ChangeCredentials />
+      <ChangeCredentials force={resolvedSearch?.change_password === '1'} />
     </div>
   );
 }

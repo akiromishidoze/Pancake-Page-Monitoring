@@ -65,6 +65,12 @@ export async function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, BCRYPT_ROUNDS);
 }
 
+export async function isDefaultPassword(): Promise<boolean> {
+  const storedPassword = await getSetting('auth_password');
+  if (!storedPassword || !isBcryptHash(storedPassword)) return false;
+  return bcrypt.compare(DEFAULT_PASSWORD, storedPassword);
+}
+
 export async function createSession(role?: string): Promise<string> {
   return createSessionToken(role);
 }

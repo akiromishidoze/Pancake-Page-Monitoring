@@ -2,7 +2,7 @@
 
 import { useState, FormEvent } from 'react';
 
-export function ChangeCredentials() {
+export function ChangeCredentials({ force }: { force?: boolean }) {
   const [currentEmail, setCurrentEmail] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newEmail, setNewEmail] = useState('');
@@ -46,8 +46,14 @@ export function ChangeCredentials() {
   }
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
+    <div className={`rounded-lg border p-6 ${force ? 'border-amber-700 bg-amber-900/10' : 'border-slate-800 bg-slate-900'}`}>
       <h3 className="text-sm font-medium text-slate-200 mb-4">Login Credentials</h3>
+
+      {force && (
+        <div className="mb-4 rounded border border-amber-700 bg-amber-900/20 p-3 text-sm text-amber-300">
+          You are using the default password. Please change it immediately.
+        </div>
+      )}
 
       {error && (
         <div className="mb-3 rounded border border-red-800 bg-red-900/20 p-2 text-sm text-red-300">{error}</div>

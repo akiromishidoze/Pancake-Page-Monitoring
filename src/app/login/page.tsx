@@ -28,7 +28,11 @@ export default function LoginPage() {
         return;
       }
 
-      router.push('/');
+      if (data.must_change_password) {
+        router.push('/settings?change_password=1');
+      } else {
+        router.push('/');
+      }
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Login failed');

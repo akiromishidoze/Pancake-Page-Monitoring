@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { validateCredentials, createSession } from '@/lib/auth';
+import { validateCredentials, createSession, isDefaultPassword } from '@/lib/auth';
 
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW = 60_000; // 1 minute
@@ -44,7 +44,9 @@ export async function POST(req: Request) {
       maxAge: 60 * 60 * 24 * 7,
     });
 
-    return NextResponse.json({ ok: true });
+    const mustChangePassword = await isDefaultPassword();
+
+    return NextResponse.json({ ok: true, must_change_password: mustChangePassword });
   } catch (e) {
     return NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : String(e) },
