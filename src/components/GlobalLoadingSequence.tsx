@@ -1,8 +1,11 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useToast } from './Toast';
 
 export function GlobalLoadingSequence() {
+  const { toast } = useToast();
+
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
     let stopped = false;
@@ -15,7 +18,7 @@ export function GlobalLoadingSequence() {
           document.body.classList.toggle('is-fetching-data', data.isRunning);
         }
       } catch (err) {
-        console.error('Failed to poll global status:', err);
+        toast('Failed to poll status');
       }
       if (!stopped) timeoutId = setTimeout(checkStatus, 3000);
     }

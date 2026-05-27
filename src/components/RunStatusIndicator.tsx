@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { useToast } from './Toast';
 
 export function RunStatusIndicator() {
   const [isRunning, setIsRunning] = useState(false);
@@ -9,6 +10,7 @@ export function RunStatusIndicator() {
   const [now, setNow] = useState(Date.now());
 
   const router = useRouter();
+  const { toast } = useToast();
   const wasRunningRef = useRef(false);
 
   useEffect(() => {
@@ -30,7 +32,7 @@ export function RunStatusIndicator() {
           wasRunningRef.current = data.isRunning;
         }
       } catch (err) {
-        console.error('Failed to fetch run status:', err);
+        toast('Failed to fetch run status');
       }
 
       timeoutId = setTimeout(checkStatus, 5000);

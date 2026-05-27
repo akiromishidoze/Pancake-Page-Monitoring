@@ -5,6 +5,7 @@
 
 import { useState, useTransition, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { useToast } from './Toast';
 
 type Status =
   | { phase: 'idle' }
@@ -30,6 +31,7 @@ export function RunNowButton() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+  const { toast } = useToast();
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -50,7 +52,7 @@ export function RunNowButton() {
           setSchedule(data.interval);
         }
       })
-      .catch(console.error);
+      .catch(() => {});
   }, []);
 
   async function handleScheduleChange(newInterval: string) {
@@ -64,7 +66,7 @@ export function RunNowButton() {
         body: JSON.stringify({ interval: newInterval }),
       });
     } catch (err) {
-      console.error('Failed to update schedule', err);
+      toast('Failed to update schedule');
     } finally {
       setIsUpdatingSchedule(false);
     }
