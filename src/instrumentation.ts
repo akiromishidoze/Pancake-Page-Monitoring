@@ -1,8 +1,17 @@
+import { registerOTel } from '@vercel/otel';
+import { PgInstrumentation } from '@opentelemetry/instrumentation-pg';
 import { createLogger } from '@/lib/logger';
 const log = createLogger('startup');
 
 export async function register() {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
+
+  registerOTel({
+    serviceName: 'page-monitor',
+    instrumentations: [
+      new PgInstrumentation(),
+    ],
+  });
 
   if (!process.env['DATABASE_URL']) {
     log.error('MISSING REQUIRED ENV VAR: DATABASE_URL');

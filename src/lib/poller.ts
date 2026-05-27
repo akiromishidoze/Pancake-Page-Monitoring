@@ -3,8 +3,10 @@ import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, fetchP
 import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, getPancakeActivePageIds, getPreviousRunActiveCount, pool, getBotCakeOverrides, type SlimPage } from './db';
 import { broadcastSSE } from './sse';
 import { createLogger } from './logger';
+import { trace } from '@opentelemetry/api';
 
 const log = createLogger('poller');
+const tracer = trace.getTracer('page-monitor');
 
 const POLL_INTERVAL_MS = 60_000;
 
@@ -32,26 +34,30 @@ export function stopPoller() {
 }
 
 export async function refreshAll() {
-  _lastPolledAt = new Date().toISOString();
-  await Promise.all([refreshBotCake(), refreshPancake()]);
-  await setSetting('last_scheduled_run', Date.now().toString());
+  return tracer.startActiveSpan('poller.refreshAll', async (span) => {
+    _lastPolledAt = new Date().toISOString();
+    await Promise.all([refreshBotCake(), refreshPancake()]);
+    await setSetting('last_scheduled_run', Date.now().toString());
+    span.end();
+  });
 }
 
 const ALERT_DROP_THRESHOLD_PCT = 0.50;
 
 export async function refreshBotCake() {
+  return tracer.startActiveSpan('poller.refreshBotCake', async (span) => {
   const now = Date.now();
-  if (now - _botcakeLastRefresh < POLL_INTERVAL_MS) return;
+  if (now - _botcakeLastRefresh < POLL_INTERVAL_MS) { span.end(); return; }
   _botcakeLastRefresh = now;
 
     const endpoint = await getEndpoint('botcake-platform');
-    if (!endpoint?.access_token) return;
+    if (!endpoint?.access_token) { span.end(); return; }
 
   try {
     const pages = await fetchBotCakePages(endpoint.access_token);
     if (pages.length === 0) {
       log.warn('botcake: API returned 0 pages — skipping insert to preserve previous data');
-      return;
+      span.end(); return;
     }
     const runId = `botcake_refresh_${now}`;
     const ts = new Date().toISOString();
@@ -207,9 +213,13 @@ export async function refreshBotCake() {
       log.info('botcake: %dA (%dorders+%dconv+%dtools) / %dI — %d total, run %s', activePages.length, pa, hc, ht, na, pages.length, runId);
       broadcastSSE('refresh', JSON.stringify({ source: 'botcake-poller', run_id: runId }));
     }
+    span.end();
   } catch (err) {
     log.error({ err }, 'botcake: refresh failed');
+    span.end();
   }
+  });
+
 }
 
 async function refreshPancake() {
