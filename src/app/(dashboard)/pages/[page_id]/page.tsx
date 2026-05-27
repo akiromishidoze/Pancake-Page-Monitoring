@@ -35,12 +35,7 @@ export default async function Page({
   const pageId = resolvedParams.page_id;
   const resolvedSearch = searchParams ? await searchParams : undefined;
   const shopFilter = resolvedSearch?.shop;
-  let rows = await getPageHistory(pageId, 5000);
-
-  if (!rows || rows.length === 0) {
-    // No history yet — data will appear once the poller or an external system
-    // pushes snapshots via /api/ingest.
-  }
+  let rows = await getPageHistory(pageId, 500);
 
   if (!rows || rows.length === 0) {
     return (

@@ -61,8 +61,8 @@ export async function refreshBotCake() {
     const noOrdersNoConv = pages.filter(p => !pancakeActive.has(p.page_id) && !convResult.has(p.page_id)).map(p => p.page_id);
     const toolsActive = await checkBotCakeToolsFlows(noOrdersNoConv, endpoint.access_token);
 
-    const activePages: SlimPage[] = [];
-    const inactivePages: SlimPage[] = [];
+    let activePages: SlimPage[] = [];
+    let inactivePages: SlimPage[] = [];
 
     for (const p of pages) {
       if (pancakeActive.has(p.page_id)) {
@@ -125,26 +125,28 @@ export async function refreshBotCake() {
     // Apply manual overrides (overrides signal-based decisions)
     const overrides = await getBotCakeOverrides();
     if (overrides.size > 0) {
-      const toActive: SlimPage[] = [];
-      const toInactive: SlimPage[] = [];
+      const remainingActive: SlimPage[] = [];
+      const remainingInactive: SlimPage[] = [];
       for (const p of activePages) {
         const ov = overrides.get(p.page_id ?? p.id ?? '');
-        if (ov && !ov.is_active) toInactive.push(p);
+        if (ov && !ov.is_active) {
+          p.activation_reason = 'manual-override';
+          remainingInactive.push(p);
+        } else {
+          remainingActive.push(p);
+        }
       }
       for (const p of inactivePages) {
         const ov = overrides.get(p.page_id ?? p.id ?? '');
-        if (ov && ov.is_active) toActive.push(p);
+        if (ov && ov.is_active) {
+          p.activation_reason = 'manual-override';
+          remainingActive.push(p);
+        } else {
+          remainingInactive.push(p);
+        }
       }
-      for (const p of toInactive) {
-        p.activation_reason = 'manual-override';
-        activePages.splice(activePages.indexOf(p), 1);
-        inactivePages.push(p);
-      }
-      for (const p of toActive) {
-        p.activation_reason = 'manual-override';
-        inactivePages.splice(inactivePages.indexOf(p), 1);
-        activePages.push(p);
-      }
+      activePages = remainingActive;
+      inactivePages = remainingInactive;
     }
 
     const prevActive = await getPreviousRunActiveCount('botcake-platform');

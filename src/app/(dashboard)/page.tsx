@@ -164,11 +164,13 @@ async function PancakeSection({ endpointId, pancakeIds }: { endpointId?: string;
 }
 
 async function BotCakeSection() {
-  const pages = await getLatestPageStates('botcake-platform');
+  const [pages, overrides, latestRun] = await Promise.all([
+    getLatestPageStates('botcake-platform'),
+    getBotCakeOverrides(),
+    getLatestRun('botcake-platform'),
+  ]);
   if (pages.length === 0) return null;
-  const overrides = await getBotCakeOverrides();
   const overrideIds = [...overrides.keys()];
-  const latestRun = await getLatestRun('botcake-platform');
   const apiHealthy = latestRun && latestRun.heartbeat_ok && !latestRun.outage_suspected;
 
   const activeCount = pages.filter(p => p.is_activated).length;
