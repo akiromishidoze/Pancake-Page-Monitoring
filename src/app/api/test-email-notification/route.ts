@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
 import { sendAlert } from '@/lib/notify';
-import { requireApiAuth } from '@/lib/auth';
 
 export async function POST() {
   try {
-    const auth = await requireApiAuth(); if (auth) return auth;
 
     await sendAlert({
       title: '🔔 Test Email Notification',

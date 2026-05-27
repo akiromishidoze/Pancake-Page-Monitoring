@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
 import { pool, type RunRow } from '@/lib/db';
-import { requireApiAuth } from '@/lib/auth';
 
 export async function GET(req: Request) {
-  const auth = await requireApiAuth(); if (auth) return auth;
   try {
     const url = new URL(req.url);
     const format = url.searchParams.get('format') || 'csv';

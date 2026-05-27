@@ -143,6 +143,7 @@ async function migrate() {
       ip_address TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    CREATE INDEX IF NOT EXISTS audit_log_created_at ON audit_log(created_at DESC);
     `);
   try { await pool.query(`ALTER TABLE page_states ADD COLUMN IF NOT EXISTS customer_count INTEGER`); } catch {
     // Column may already exist, safe to ignore

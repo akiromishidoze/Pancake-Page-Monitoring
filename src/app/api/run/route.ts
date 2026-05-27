@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
 import { refreshAll } from '@/lib/poller';
 import { setSetting } from '@/lib/db';
-import { requireApiAuth } from '@/lib/auth';
 
 export async function POST() {
-  const auth = await requireApiAuth(); if (auth) return auth;
   try {
     const nowStr = Date.now().toString();
     await setSetting('last_trigger_time', nowStr);

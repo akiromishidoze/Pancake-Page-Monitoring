@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
 import { pruneOldRuns } from '@/lib/db';
-import { requireApiAuth } from '@/lib/auth';
 
 export async function POST(req: Request) {
-  const auth = await requireApiAuth(); if (auth) return auth;
   try {
     const body = await req.json();
     const days = parseInt(body.retention_days, 10);

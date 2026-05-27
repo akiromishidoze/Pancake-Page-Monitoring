@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getPlatformConnector, deletePlatformConnector } from '@/lib/db';
-import { requireApiAuth } from '@/lib/auth';
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireApiAuth(); if (auth) return auth;
   try {
     const { id } = await params;
     const existing = await getPlatformConnector(id);

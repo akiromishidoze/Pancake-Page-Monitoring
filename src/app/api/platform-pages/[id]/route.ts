@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getPlatformPage, upsertPlatformPage, deletePlatformPage } from '@/lib/db';
-import { requireApiAuth } from '@/lib/auth';
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireApiAuth(); if (auth) return auth;
   try {
     const { id } = await params;
     const existing = await getPlatformPage(id);
@@ -36,7 +34,6 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireApiAuth(); if (auth) return auth;
   try {
     const { id } = await params;
     const existing = await getPlatformPage(id);

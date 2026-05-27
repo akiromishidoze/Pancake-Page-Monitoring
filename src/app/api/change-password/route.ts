@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { validateSession, validateCredentials, hashPassword } from '@/lib/auth';
+import { validateCredentials, hashPassword } from '@/lib/auth';
 import { setSetting, logAuditEntry } from '@/lib/db';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
@@ -9,11 +8,6 @@ export async function POST(req: Request) {
     const ip = getClientIp(req);
     const rateLimited = rateLimit(ip, { store: 'change-password', max: 5 });
     if (rateLimited) return rateLimited;
-    const cookieStore = await cookies();
-    const session = cookieStore.get('session')?.value;
-    if (!(await validateSession(session))) {
-      return NextResponse.json({ ok: false, error: 'Not authenticated' }, { status: 401 });
-    }
 
     const { current_email, current_password, new_email, new_password } = await req.json();
 

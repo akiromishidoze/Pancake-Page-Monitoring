@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { getLatestPageStates, getBotCakeOverrides } from '@/lib/db';
-import { requireApiAuth } from '@/lib/auth';
 import { cors, corsOptions } from '@/lib/cors';
 
 export async function OPTIONS() {
@@ -8,7 +7,6 @@ export async function OPTIONS() {
 }
 
 export async function GET() {
-  const auth = await requireApiAuth(); if (auth) return auth;
   try {
     const [pages, overrides] = await Promise.all([
     getLatestPageStates('botcake-platform'),

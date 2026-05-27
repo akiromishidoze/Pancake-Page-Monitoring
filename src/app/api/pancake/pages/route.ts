@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { listEndpoints } from '@/lib/db';
-import { requireApiAuth } from '@/lib/auth';
 import { fetchPancakeShops, TARGET_SHOP_IDS } from '@/lib/pancake';
 import { cors, corsOptions } from '@/lib/cors';
 
@@ -9,7 +8,6 @@ export async function OPTIONS() {
 }
 
 export async function GET(request: Request) {
-  const auth = await requireApiAuth(); if (auth) return auth;
   const { searchParams } = new URL(request.url);
   const rawShopId = searchParams.get('shop_id');
 

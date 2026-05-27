@@ -1,4 +1,3 @@
-import { AuthGuard } from '@/components/AuthGuard';
 import { AutoRefresh } from '@/components/AutoRefresh';
 import { GlobalLoadingSequence } from '@/components/GlobalLoadingSequence';
 import { Sidebar } from '@/components/Sidebar';
@@ -8,7 +7,6 @@ export default function DashboardLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <AuthGuard>
       <div className="flex h-screen overflow-hidden">
       <AutoRefresh />
       <GlobalLoadingSequence />
@@ -31,6 +29,5 @@ export default function DashboardLayout({
         </main>
       </div>
     </div>
-    </AuthGuard>
   );
 }

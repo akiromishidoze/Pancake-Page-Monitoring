@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSetting, setSetting, logAuditEntry } from '@/lib/db';
-import { requireApiAuth } from '@/lib/auth';
 
 export async function GET() {
-  const auth = await requireApiAuth(); if (auth) return auth;
   const retentionDays = (await getSetting('retention_days')) || '90';
   return NextResponse.json({
     ok: true,
@@ -12,7 +10,6 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const auth = await requireApiAuth(); if (auth) return auth;
   try {
     const body = await req.json();
     const { retention_days } = body;

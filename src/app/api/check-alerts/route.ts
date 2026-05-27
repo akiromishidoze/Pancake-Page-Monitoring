@@ -1,11 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getLatestRun } from '@/lib/db';
 import { checkAlertsForRun } from '@/lib/notify';
-import { requireApiAuth } from '@/lib/auth';
 
 export async function POST() {
   try {
-    const auth = await requireApiAuth(); if (auth) return auth;
     const run = await getLatestRun();
     if (!run) {
       return NextResponse.json({ ok: false, error: 'No runs in database' }, { status: 400 });
