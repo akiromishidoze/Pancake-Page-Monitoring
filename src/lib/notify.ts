@@ -1,6 +1,9 @@
 import nodemailer from 'nodemailer';
 import { getSetting, setSetting, pool, type RunRow } from './db';
 import { decrypt, encrypt } from './crypto';
+import { createLogger } from './logger';
+
+const log = createLogger('notify');
 
 type AlertLevel = 'info' | 'warning' | 'critical';
 
@@ -156,15 +159,15 @@ export async function sendAlert(event: AlertEvent): Promise<void> {
   if (slackUrl) {
     const ok = await sendSlack(slackUrl, event);
     if (ok) {
-      console.log('[notify] slack alert sent:', event.title);
+      log.info({ title: event.title }, 'slack alert sent');
     } else {
-      console.warn('[notify] slack send failed:', event.title);
+      log.warn({ title: event.title }, 'slack send failed');
     }
   }
 
   const emailOk = await sendEmail(event);
   if (emailOk) {
-    console.log('[notify] email alert sent:', event.title);
+    log.info({ title: event.title }, 'email alert sent');
   }
 }
 

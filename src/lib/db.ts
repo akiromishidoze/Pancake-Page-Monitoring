@@ -1,5 +1,8 @@
 import { Pool } from 'pg';
 import { parse } from 'pg-connection-string';
+import { createLogger } from './logger';
+
+const log = createLogger('db');
 
 const connectionString = process.env.DATABASE_URL || '';
 const parsed = parse(connectionString);
@@ -15,7 +18,7 @@ const pool = new Pool({
 
 // Log connection errors without crashing
 pool.on('error', (err) => {
-  console.error('[db] unexpected pool error:', err.message);
+  log.error({ err: err.message }, 'unexpected pool error');
 });
 export { pool };
 
@@ -233,7 +236,7 @@ async function migratePageStatesPartitioning() {
       // page_states_old has data — recover it
       await pool.query('DROP TABLE IF EXISTS page_states CASCADE');
       await pool.query('ALTER TABLE page_states_old RENAME TO page_states');
-      console.log('[db] recovered page_states data from page_states_old');
+      log.info('recovered page_states data from page_states_old');
       // Now check again if partitioning is needed
       const checkAgain = await pool.query(
         `SELECT relkind FROM pg_class WHERE relname = 'page_states' AND relkind = 'p'`,
@@ -295,10 +298,10 @@ async function migratePageStatesPartitioning() {
     await pool.query(`SELECT setval(pg_get_serial_sequence('page_states', 'id'), COALESCE((SELECT MAX(id) FROM page_states), 1))`);
 
     await pool.query('COMMIT');
-    console.log('[db] page_states migrated to partitioned table');
+    log.info('page_states migrated to partitioned table');
   } catch (e) {
     await pool.query('ROLLBACK');
-    console.error('[db] partitioning migration failed, reverting:', e);
+    log.error({ err: e }, 'partitioning migration failed, reverting:');
     throw e;
   }
 }
@@ -1009,7 +1012,7 @@ async function migrateBotCakeOverrides() {
     }
     // Clear the old JSON blob from settings
     await setSetting('botcake_overrides', '');
-    console.log(`[db] migrated ${arr.length} botcake overrides from settings to botcake_overrides table`);
+    log.info(`migrated ${arr.length} botcake overrides from settings to botcake_overrides table`);
   } catch {
     // If migration fails, leave old data in settings for manual recovery
   }
@@ -1067,7 +1070,7 @@ export async function logAuditEntry(action: string, entityType?: string, entityI
       VALUES (@action, @entityType, @entityId, @detail, @ipAddress)
     `, { action, entityType: entityType ?? null, entityId: entityId ?? null, detail: detail ?? null, ipAddress: ipAddress ?? null }));
   } catch (e) {
-    console.error('[audit] failed to log entry:', e);
+    log.error({ err: e }, 'failed to log audit entry');
   }
 }
 

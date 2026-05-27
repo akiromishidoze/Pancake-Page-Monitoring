@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcrypt';
 import { getSetting, setSetting, createSessionToken, validateSessionToken, clearSessionToken } from './db';
+import { createLogger } from './logger';
+
+const log = createLogger('auth');
 
 const BCRYPT_ROUNDS = 12;
 const DEFAULT_EMAIL = 'admin';
@@ -30,16 +33,16 @@ export async function ensureCredentials(): Promise<void> {
     const hashed = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_ROUNDS);
     await setSetting('auth_email', DEFAULT_EMAIL);
     await setSetting('auth_password', hashed);
-    console.warn('[auth] Default credentials initialized (hashed). Change them in Settings > Change Password.');
+    log.warn('Default credentials initialized (hashed). Change them in Settings > Change Password.');
     return;
   }
 
   // Silently upgrade plain-text password to bcrypt hash
   if (!isBcryptHash(existingPassword)) {
-    console.warn('[auth] Upgrading plain-text password to bcrypt hash...');
+    log.warn('Upgrading plain-text password to bcrypt hash...');
     const hashed = await bcrypt.hash(existingPassword, BCRYPT_ROUNDS);
     await setSetting('auth_password', hashed);
-    console.log('[auth] Password upgraded successfully.');
+    log.info('Password upgraded successfully.');
   }
 }
 

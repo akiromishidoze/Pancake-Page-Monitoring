@@ -2,6 +2,9 @@ import { fetchBotCakePages, checkBotCakeConversations, checkBotCakeToolsFlows } 
 import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, fetchPancakeActivePageIdsFromCustomers, fetchCachedPancakeShops, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop, type PancakePage } from './pancake';
 import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, getPancakeActivePageIds, getPreviousRunActiveCount, pool, getBotCakeOverrides, type SlimPage } from './db';
 import { broadcastSSE } from './sse';
+import { createLogger } from './logger';
+
+const log = createLogger('poller');
 
 const POLL_INTERVAL_MS = 60_000;
 
@@ -13,7 +16,7 @@ let _pancakeLastRefresh = 0;
 
 export function startPoller() {
   if (_pollerInterval) return;
-  console.log('[poller] starting; interval =', POLL_INTERVAL_MS, 'ms');
+  log.info('starting; interval = %d ms', POLL_INTERVAL_MS);
 
   const doRefresh = () => void refreshAll();
   setTimeout(doRefresh, 30_000);
@@ -24,7 +27,7 @@ export function stopPoller() {
   if (_pollerInterval) {
     clearInterval(_pollerInterval);
     _pollerInterval = null;
-    console.log('[poller] stopped');
+    log.info('stopped');
   }
 }
 
@@ -47,7 +50,7 @@ export async function refreshBotCake() {
   try {
     const pages = await fetchBotCakePages(endpoint.access_token);
     if (pages.length === 0) {
-      console.warn('[poller] botcake: API returned 0 pages — skipping insert to preserve previous data');
+      log.warn('botcake: API returned 0 pages — skipping insert to preserve previous data');
       return;
     }
     const runId = `botcake_refresh_${now}`;
@@ -157,7 +160,7 @@ export async function refreshBotCake() {
       if (dropRatio >= ALERT_DROP_THRESHOLD_PCT) {
         alertCount = activePages.length === 0 ? 2 : 1;
         outageSuspected = true;
-        console.warn(`[poller] ALERT BotCake: active pages dropped ${Math.round(dropRatio * 100)}% (${prevActive} → ${activePages.length})`);
+        log.warn({ dropPct: Math.round(dropRatio * 100), prevActive, current: activePages.length }, 'ALERT BotCake: active pages dropped %d%% (%d → %d)', Math.round(dropRatio * 100), prevActive, activePages.length);
         broadcastSSE('alert', JSON.stringify({
           endpoint_id: 'botcake-platform', shop: 'BotCake',
           previous: prevActive, current: activePages.length,
@@ -201,11 +204,11 @@ export async function refreshBotCake() {
       const hc = activePages.filter(p => p.activation_reason === 'has-conversations').length;
       const ht = activePages.filter(p => p.activation_reason === 'has-tools').length;
       const na = inactivePages.length;
-      console.log(`[poller] botcake: ${activePages.length}A (${pa}orders+${hc}conv+${ht}tools) / ${na}I — ${pages.length} total, run ${runId}`);
+      log.info('botcake: %dA (%dorders+%dconv+%dtools) / %dI — %d total, run %s', activePages.length, pa, hc, ht, na, pages.length, runId);
       broadcastSSE('refresh', JSON.stringify({ source: 'botcake-poller', run_id: runId }));
     }
   } catch (err) {
-    console.error('[poller] botcake: refresh failed:', err);
+    log.error({ err }, 'botcake: refresh failed');
   }
 }
 
@@ -228,13 +231,13 @@ async function refreshPancake() {
       fetchPancakePages(token).catch(() => [] as PancakePage[]),
     ]);
   } catch (err) {
-    console.warn('[poller] pancake: live shops fetch failed, trying cache:', err);
+    log.warn({ err }, 'pancake: live shops fetch failed, trying cache');
     shops = await fetchCachedPancakeShops();
     if (shops.length === 0) {
-      console.error('[poller] pancake: no cached shops data available either, skipping');
+      log.error('pancake: no cached shops data available either, skipping');
       return;
     }
-    console.log('[poller] pancake: using cached shops data (' + shops.length + ' shops)');
+    log.info('pancake: using cached shops data (%d shops)', shops.length);
   }
 
   shops = mergePagesActivation(shops, pagesApi);
@@ -249,20 +252,20 @@ async function refreshPancake() {
       const orderIds = await fetchPancakeActivePageIds(token, sid);
       for (const id of orderIds) combined.add(id);
     } catch (err) {
-      console.error(`[poller] pancake: orders failed for shop ${sid}:`, err);
+      log.error({ err, shopId: sid }, 'pancake: orders failed for shop %d', sid);
     }
     try {
       const customerIds = await fetchPancakeActivePageIdsFromCustomers(token, sid);
       for (const id of customerIds) combined.add(id);
     } catch (err) {
-      console.error(`[poller] pancake: customers failed for shop ${sid}:`, err);
+      log.error({ err, shopId: sid }, 'pancake: customers failed for shop %d', sid);
     }
     if (combined.size > 0) anyShopHadData = true;
     activePageIdsByShop.set(sid, combined);
   }));
 
   if (!anyShopHadData) {
-    console.warn('[poller] pancake: all shops returned 0 active pages — likely network/DNS issue, falling back to previous good run data');
+    log.warn('pancake: all shops returned 0 active pages — likely network/DNS issue, falling back to previous good run data');
       for (const sid of TARGET_SHOP_IDS) {
         const prevRun = (await pool.query(`
           SELECT run_id FROM runs
@@ -274,7 +277,7 @@ async function refreshPancake() {
       const ids = new Set(prevActive.map(p => p.page_id));
       if (ids.size > 0) {
         activePageIdsByShop.set(sid, ids);
-        console.log(`[poller] pancake: restored ${ids.size} active pages from previous run for shop ${sid}`);
+        log.info('pancake: restored %d active pages from previous run for shop %d', ids.size, sid);
       }
     }
   }
@@ -317,7 +320,7 @@ async function refreshPancake() {
       if (dropRatio >= ALERT_DROP_THRESHOLD_PCT) {
         alertCount = activePages.length === 0 ? 2 : 1;
         outageSuspected = true;
-        console.warn(`[poller] ALERT ${ep.name}: active pages dropped ${Math.round(dropRatio * 100)}% (${prevActive} → ${activePages.length})`);
+        log.warn({ dropPct: Math.round(dropRatio * 100), prevActive, current: activePages.length, epName: ep.name }, 'ALERT %s: active pages dropped %d%% (%d → %d)', ep.name, Math.round(dropRatio * 100), prevActive, activePages.length);
         broadcastSSE('alert', JSON.stringify({
           endpoint_id: ep.id, shop: ep.name,
           previous: prevActive, current: activePages.length,
@@ -341,12 +344,12 @@ async function refreshPancake() {
 
     if (result.inserted) {
       await setSetting(`poller_ok_${ep.id}`, Date.now().toString());
-      console.log(`[poller] pancake ${ep.name}: ${activePages.length} active / ${inactivePages.length} inactive (${shop.pages.length} total), run ${runId}`);
+      log.info('pancake %s: %d active / %d inactive (%d total), run %s', ep.name, activePages.length, inactivePages.length, shop.pages.length, runId);
       broadcastSSE('refresh', JSON.stringify({ source: 'pancake-poller', run_id: runId, endpoint_id: ep.id }));
     }
   }
   } catch (err) {
-    console.error('[poller] pancake: refresh failed:', err);
+    log.error({ err }, 'pancake: refresh failed');
   }
 }
 

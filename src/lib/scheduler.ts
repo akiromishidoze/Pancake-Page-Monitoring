@@ -1,5 +1,8 @@
 import { getSetting, setSetting, pruneOldRuns, listEndpoints } from './db';
 import { refreshAll } from './poller';
+import { createLogger } from './logger';
+
+const log = createLogger('scheduler');
 
 const SCHEDULER_POLL_MS = 5_000;
 const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -43,28 +46,28 @@ function invalidateCache() {
 export async function startScheduler() {
   if (_started) return;
   _started = true;
-  console.log('[scheduler] starting; polling interval =', SCHEDULER_POLL_MS, 'ms');
+  log.info('starting; polling interval = %d ms', SCHEDULER_POLL_MS);
 
   // Ensure a retention policy is set by default
   if (!(await getSetting('retention_days'))) {
     await setSetting('retention_days', '90');
-    console.log('[scheduler] default retention_days set to 90');
+    log.info('default retention_days set to 90');
   }
 
   _intervals.push(setInterval(() => {
-    checkAndRun().catch(err => console.error('[scheduler] Error in checkAndRun:', err));
+    checkAndRun().catch(err => log.error({ err }, 'Error in checkAndRun'));
   }, SCHEDULER_POLL_MS));
 
   _intervals.push(setInterval(() => {
-    checkBackup().catch(err => console.error('[scheduler] Backup error:', err));
+    checkBackup().catch(err => log.error({ err }, 'Backup error'));
   }, 60_000));
 
   _intervals.push(setInterval(() => {
-    checkPrune().catch(err => console.error('[scheduler] Prune error:', err));
+    checkPrune().catch(err => log.error({ err }, 'Prune error'));
   }, 60_000));
 
   _intervals.push(setInterval(() => {
-    checkPollerHealth().catch(err => console.error('[scheduler] Poller health check error:', err));
+    checkPollerHealth().catch(err => log.error({ err }, 'Poller health check error'));
   }, POLLER_HEALTH_INTERVAL_MS));
 }
 
@@ -73,7 +76,7 @@ export function stopScheduler() {
     for (const id of _intervals) clearInterval(id);
     _intervals.length = 0;
     _started = false;
-    console.log('[scheduler] stopped');
+    log.info('stopped');
   }
 }
 
@@ -87,9 +90,9 @@ async function checkBackup() {
     const { backup } = await import('./backup');
     const file = await backup();
     await setSetting('last_backup_time', now.toString());
-    console.log('[scheduler] backup created:', file);
+    log.info('backup created: %s', file);
   } catch (err) {
-    console.error('[scheduler] backup failed:', err);
+    log.error({ err }, 'backup failed');
   }
 }
 
@@ -107,10 +110,10 @@ async function checkPrune() {
     const deleted = await pruneOldRuns(retentionDays);
     await setSetting('last_prune_time', now.toString());
     if (deleted > 0) {
-      console.log(`[scheduler] pruned ${deleted} runs older than ${retentionDays} days`);
+      log.info('pruned %d runs older than %d days', deleted, retentionDays);
     }
   } catch (err) {
-    console.error('[scheduler] prune failed:', err);
+    log.error({ err }, 'prune failed');
   }
 }
 
@@ -138,7 +141,7 @@ async function checkPollerHealth() {
 
   // Poller is stale — send alert
   const elapsedMin = Math.round(elapsed / 60000);
-  console.warn(`[scheduler] Poller stale — no refresh for ${elapsedMin} min`);
+  log.warn('Poller stale — no refresh for %d min', elapsedMin);
 
   try {
     const { sendAlert } = await import('./notify');
@@ -150,7 +153,7 @@ async function checkPollerHealth() {
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
-    console.error('[scheduler] Failed to send poller health alert:', err);
+    log.error({ err }, 'Failed to send poller health alert');
   }
 }
 
@@ -162,7 +165,7 @@ export async function checkAndRun() {
   const now = Date.now();
 
   if (now - lastRunMs >= intervalMs) {
-    console.log('[scheduler] Triggering platform refresh... interval:', intervalMs, 'ms');
+    log.info('Triggering platform refresh... interval: %d ms', intervalMs);
     await setSetting('last_scheduled_run', now.toString());
     await setSetting('last_trigger_time', now.toString());
     invalidateCache();

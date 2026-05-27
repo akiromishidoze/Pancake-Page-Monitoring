@@ -1,5 +1,8 @@
 import { listPlatformConnectors, getPlatformConnector, getEndpoint, insertSnapshot } from './db';
 import { broadcastSSE } from './sse';
+import { createLogger } from './logger';
+
+const log = createLogger('connector-poller');
 
 const timers = new Map<string, ReturnType<typeof setInterval>>();
 const lastRuns = new Map<string, number>();
@@ -28,7 +31,7 @@ async function pollConnector(connectorId: string) {
 
     const res = await fetch(connector.api_url, { headers });
     if (!res.ok) {
-      console.warn(`[connector-poller] ${connector.name}: HTTP ${res.status}`);
+      log.warn({ name: connector.name, status: res.status }, '%s: HTTP %d', connector.name, res.status);
       return;
     }
 
@@ -41,7 +44,7 @@ async function pollConnector(connectorId: string) {
     }
 
     if (!Array.isArray(items)) {
-      console.warn(`[connector-poller] ${connector.name}: response is not an array`);
+      log.warn({ name: connector.name }, '%s: response is not an array', connector.name);
       return;
     }
 
@@ -94,11 +97,11 @@ async function pollConnector(connectorId: string) {
     });
 
     if (result.inserted) {
-      console.log(`[connector-poller] ${connector.name}: inserted ${activePages.length} pages, run ${runId}`);
+      log.info('%s: inserted %d pages, run %s', connector.name, activePages.length, runId);
       broadcastSSE('refresh', JSON.stringify({ source: `connector:${connector.name}`, run_id: runId }));
     }
   } catch (err) {
-    console.error(`[connector-poller] ${connector.name}: error:`, err);
+    log.error({ err, name: connector.name }, '%s: error', connector.name);
   }
 }
 
@@ -111,7 +114,7 @@ export async function startConnectorPollers() {
     pollConnector(c.id);
     const interval = setInterval(() => pollConnector(c.id), Math.max(10000, c.interval_ms));
     timers.set(c.id, interval);
-    console.log(`[connector-poller] started: ${c.name} (every ${c.interval_ms / 1000}s)`);
+    log.info('started: %s (every %ds)', c.name, c.interval_ms / 1000);
   }
 }
 
@@ -121,5 +124,5 @@ export function stopConnectorPollers() {
   }
   timers.clear();
   lastRuns.clear();
-  console.log('[connector-poller] all pollers stopped');
+  log.info('all pollers stopped');
 }

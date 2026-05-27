@@ -8,6 +8,9 @@ import { checkAlertsForRun } from '@/lib/notify';
 import { broadcastSSE } from '@/lib/sse';
 import { cors, corsOptions } from '@/lib/cors';
 import { IngestBodySchema } from '@/lib/schemas';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('ingest');
 
 export async function POST(req: Request) {
   const apiKey = req.headers.get('x-api-key') || req.headers.get('X-Api-Key');
@@ -92,7 +95,7 @@ export async function POST(req: Request) {
       await touchEndpoint(endpoint.id);
       broadcastSSE('refresh', JSON.stringify({ source: 'ingest', run_id, endpoint_id: endpoint.id }));
       // Fire-and-forget alert check for the new run
-      checkAlertsForRun(run_id).catch(e => console.error('[ingest] alert check error:', e));
+      checkAlertsForRun(run_id).catch(e => log.error({ err: e }, 'alert check error'));
     }
 
     return cors(NextResponse.json({

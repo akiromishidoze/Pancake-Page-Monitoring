@@ -2,11 +2,14 @@ import { NextResponse } from 'next/server';
 import { getSetting } from '@/lib/db';
 import { checkAndRun } from '@/lib/scheduler';
 import { pollIfNeeded } from '@/lib/poller';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('status');
 
 export async function GET() {
   try {
-    void checkAndRun().catch(e => console.error('[lazy-cron] scheduler err:', e));
-    void pollIfNeeded().catch(e => console.error('[lazy-cron] poller err:', e));
+    void checkAndRun().catch(e => log.error({ err: e }, 'lazy-cron scheduler err'));
+    void pollIfNeeded().catch(e => log.error({ err: e }, 'lazy-cron poller err'));
 
     const lastTriggerTimeStr = await getSetting('last_trigger_time');
     const lastTriggerTime = lastTriggerTimeStr ? parseInt(lastTriggerTimeStr, 10) : 0;
