@@ -1,25 +1,14 @@
-function validateEnvVars() {
-  const required = ['DATABASE_URL'] as const;
-  const optional = ['FB_ACCESS_TOKEN'] as const;
-
-  for (const name of required) {
-    if (!process.env[name]) {
-      console.error(`[env] MISSING REQUIRED ENV VAR: ${name}`);
-      process.exit(1);
-    }
-  }
-
-  for (const name of optional) {
-    if (!process.env[name]) {
-      console.warn(`[env] Optional env var ${name} is not set`);
-    }
-  }
-}
-
 export async function register() {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
 
-  validateEnvVars();
+  if (!process.env['DATABASE_URL']) {
+    console.error('[env] MISSING REQUIRED ENV VAR: DATABASE_URL');
+    process.exit(1);
+  }
+
+  if (!process.env['FB_ACCESS_TOKEN']) {
+    console.warn('[env] Optional env var FB_ACCESS_TOKEN is not set');
+  }
 
   const { initHttpAgent } = await import('./lib/http');
   initHttpAgent();

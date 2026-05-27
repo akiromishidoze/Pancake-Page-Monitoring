@@ -10,8 +10,7 @@ const pool = new Pool({
   user: parsed.user || process.env.USER || undefined,
   password: parsed.password || undefined,
   ssl: parsed.ssl === true || parsed.ssl === 'true' ? { rejectUnauthorized: false } : (parsed.ssl ? { rejectUnauthorized: false } : undefined),
-  max: 80,
-  idleTimeoutMillis: 30_000,
+  max: 20,
 });
 
 // Log connection errors without crashing
@@ -205,17 +204,11 @@ async function migrateBooleanTypes() {
 }
 
 let _migrated = false;
-let _migrating: Promise<void> | null = null;
 async function ensureMigrated() {
   if (_migrated) return;
-  if (_migrating) return _migrating;
-  _migrating = (async () => {
-    await migrate();
-    await migratePageStatesPartitioning();
-    _migrated = true;
-    _migrating = null;
-  })();
-  return _migrating;
+  _migrated = true;
+  await migrate();
+  await migratePageStatesPartitioning();
 }
 
 // ──── Partitioning ──────────────────────────────────────────────────────
