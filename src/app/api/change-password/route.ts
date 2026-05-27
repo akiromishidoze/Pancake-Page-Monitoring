@@ -2,9 +2,13 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { validateSession, validateCredentials, hashPassword } from '@/lib/auth';
 import { setSetting, logAuditEntry } from '@/lib/db';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
 export async function POST(req: Request) {
   try {
+    const ip = getClientIp(req);
+    const rateLimited = rateLimit(ip, { store: 'change-password', max: 5 });
+    if (rateLimited) return rateLimited;
     const cookieStore = await cookies();
     const session = cookieStore.get('session')?.value;
     if (!(await validateSession(session))) {

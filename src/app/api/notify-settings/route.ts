@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireApiAuth } from '@/lib/auth';
 import { getSetting, setSetting, logAuditEntry } from '@/lib/db';
 import { encrypt } from '@/lib/crypto';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
 export async function GET() {
   const auth = await requireApiAuth(); if (auth) return auth;
@@ -27,6 +28,10 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const auth = await requireApiAuth(); if (auth) return auth;
+
+  const ip = getClientIp(req);
+  const rateLimited = rateLimit(ip, { store: 'notify-settings', max: 20 });
+  if (rateLimited) return rateLimited;
 
   try {
     const body = await req.json();
