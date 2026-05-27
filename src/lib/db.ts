@@ -6,6 +6,8 @@ const log = createLogger('db');
 
 const connectionString = process.env.DATABASE_URL || '';
 const parsed = parse(connectionString);
+const isPgBouncer = process.env.PGBOUNCER === 'true';
+if (isPgBouncer) log.info('PgBouncer mode enabled');
 const pool = new Pool({
   host: parsed.host || '/var/run/postgresql',
   port: parsed.port ? parseInt(String(parsed.port), 10) : undefined,
@@ -13,8 +15,9 @@ const pool = new Pool({
   user: parsed.user || process.env.USER || undefined,
   password: parsed.password || undefined,
   ssl: parsed.ssl === true || parsed.ssl === 'true' ? { rejectUnauthorized: false } : (parsed.ssl ? { rejectUnauthorized: false } : undefined),
-  max: 20,
-});
+  max: isPgBouncer ? 5 : 20,
+  pgbouncer: isPgBouncer || undefined,
+} as any);
 
 // Log connection errors without crashing
 pool.on('error', (err) => {
