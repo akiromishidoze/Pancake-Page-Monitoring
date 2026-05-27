@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { setBotCakeOverride, removeBotCakeOverride } from '@/lib/db';
+import { requireApiAuth } from '@/lib/auth';
 import { refreshAll } from '@/lib/poller';
 import { cors, corsOptions } from '@/lib/cors';
 
@@ -11,6 +12,7 @@ type Body = {
 };
 
 export async function POST(req: Request) {
+  const auth = await requireApiAuth(); if (auth) return auth;
   try {
     const body: Body = await req.json();
     if (!body.page_id) {
