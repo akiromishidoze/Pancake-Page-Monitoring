@@ -31,10 +31,9 @@ export function ActiveTrendChart({ series }: { series: Series[] }) {
     const merged = new Map<string, Record<string, number>>();
     const timestamps = new Set<string>();
 
-    for (const s of series) {
-      const cutoff = Date.now() - RANGES[range].ms;
+    // Use the already-filtered series so chart respects the selected range
+    for (const s of filtered) {
       for (const d of s.data) {
-        if (new Date(d.time).getTime() < cutoff) continue;
         const key = d.time.slice(0, 16);
         timestamps.add(key);
         if (!merged.has(key)) merged.set(key, {});
@@ -43,17 +42,19 @@ export function ActiveTrendChart({ series }: { series: Series[] }) {
       }
     }
 
-    return Array.from(timestamps).sort().map(t => {
-      const row: Record<string, string | number> = { time: t };
-      const values = merged.get(t);
-      if (values) {
-        for (const key of Object.keys(values)) {
-          row[key] = values[key];
+    return Array.from(timestamps)
+      .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
+      .map(t => {
+        const row: Record<string, string | number> = { time: t };
+        const values = merged.get(t);
+        if (values) {
+          for (const key of Object.keys(values)) {
+            row[key] = values[key];
+          }
         }
-      }
-      return row;
-    });
-  }, [series, range]);
+        return row;
+      });
+  }, [filtered, range]);
 
   if (series.length === 0) return null;
 
@@ -93,7 +94,7 @@ export function ActiveTrendChart({ series }: { series: Series[] }) {
                 itemStyle={{ color: '#f8fafc' }}
               />
               <Legend wrapperStyle={{ color: '#94a3b8' }} />
-              {series.map((s, i) => (
+              {filtered.map((s, i) => (
                 <Line
                   key={s.label}
                   type="monotone"
