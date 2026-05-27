@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireApiAuth } from '@/lib/auth';
 import { getSetting, setSetting, logAuditEntry } from '@/lib/db';
+import { encrypt } from '@/lib/crypto';
 
 export async function GET() {
   const auth = await requireApiAuth(); if (auth) return auth;
@@ -50,7 +51,7 @@ export async function POST(req: Request) {
       changes.push('smtp_user');
     }
     if (smtp_pass !== undefined) {
-      await setSetting('notify_smtp_pass', smtp_pass);
+      await setSetting('notify_smtp_pass', encrypt(smtp_pass));
       changes.push('smtp_pass');
     }
     if (email_from !== undefined) {

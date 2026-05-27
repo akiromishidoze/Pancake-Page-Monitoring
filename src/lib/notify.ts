@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { getSetting, setSetting, pool, type RunRow } from './db';
+import { decrypt, encrypt } from './crypto';
 
 type AlertLevel = 'info' | 'warning' | 'critical';
 
@@ -49,7 +50,7 @@ async function sendSlack(webhookUrl: string, event: AlertEvent): Promise<boolean
 // ─── Email ────────────────────────────────────────────────────────────
 
 async function sendEmail(event: AlertEvent): Promise<boolean> {
-  const [host, portStr, user, pass, from, to] = await Promise.all([
+  const [host, portStr, user, rawPass, from, to] = await Promise.all([
     getSetting('notify_smtp_host'),
     getSetting('notify_smtp_port'),
     getSetting('notify_smtp_user'),
@@ -58,7 +59,14 @@ async function sendEmail(event: AlertEvent): Promise<boolean> {
     getSetting('notify_email_to'),
   ]);
 
-  if (!host || !user || !pass || !to) return false;
+  if (!host || !user || !rawPass || !to) return false;
+
+  let pass: string;
+  try {
+    pass = rawPass.includes(':') ? decrypt(rawPass) : rawPass;
+  } catch {
+    pass = rawPass;
+  }
 
   const port = portStr ? parseInt(portStr, 10) : 587;
 
