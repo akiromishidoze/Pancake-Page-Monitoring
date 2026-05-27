@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getLatestRun, getRunCount, getSetting, listEndpoints, getEndpoint, getLatestPageStates, getLatestPageStatesForEndpoints, getRecentRuns, getRunHistory, getRunHistories, getBotCakeOverrides, type PageStateRow, type RunRow, type EndpointRow } from '@/lib/db';
+import { getLatestRun, getRunCount, getSetting, listEndpoints, getEndpoint, getLatestPageStates, getLatestPageStatesForEndpoints, getRecentRuns, getRunHistory, getRunHistories, getBotCakeOverrides, type PageStateRow, type RunRow } from '@/lib/db';
 import { StatusCard } from '@/components/StatusCard';
 import { RunNowButton } from '@/components/RunNowButton';
 import { formatWithTz } from '@/lib/format';

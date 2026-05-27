@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { requireApiAuth, validateSession } from '@/lib/auth';
+import { requireApiAuth } from '@/lib/auth';
 import { getSetting, setSetting, logAuditEntry } from '@/lib/db';
 
 export async function GET() {
@@ -26,11 +25,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const cookieStore = await cookies();
-  const session = cookieStore.get('session')?.value;
-  if (!(await validateSession(session))) {
-    return NextResponse.json({ ok: false, error: 'Not authenticated' }, { status: 401 });
-  }
+  const auth = await requireApiAuth(); if (auth) return auth;
 
   try {
     const body = await req.json();
