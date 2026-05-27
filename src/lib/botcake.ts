@@ -1,4 +1,5 @@
 import { pool } from '@/lib/db';
+import { BotCakePageTokenSchema, BotCakeCustomerDataSchema, BotCakeToolsResponseSchema, BotCakeFlowsResponseSchema, FbPageInfoSchema, PageStateRowSchema } from './schemas';
 
 const API_BASE = 'https://botcake.io/api/public_api/v1';
 const FB_ID = '104533988952572';
@@ -66,8 +67,7 @@ async function getBotCakePageTokens(userToken: string): Promise<Map<string, stri
   const url = `${API_BASE}/integration_page/list_access_token/${FB_ID}`;
   const res = await fetchPostWithRetry(url, userToken, 1);
   if (!res) return new Map();
-  const data = await res.json() as { page_id: string; public_token: string }[];
-  if (!Array.isArray(data)) return new Map();
+  const data = BotCakePageTokenSchema.array().parse(await res.json());
   const tokens = new Map(data.map(d => [d.page_id, d.public_token]));
   _pageTokenCache = { tokens, fetchedAt: Date.now() };
   return tokens;
@@ -112,13 +112,13 @@ export async function checkBotCakeConversations(pageIds: string[], userToken: st
           timeout: 10_000,
         });
         if (r.ok) {
-          const data = await r.json() as Record<string, unknown>[];
-          const customerCount = Array.isArray(data) ? data.length : 0;
+          const data = BotCakeCustomerDataSchema.parse(await r.json());
+          const customerCount = data.length;
           const hasConversations = customerCount > 0;
           let lastActivityAt: string | null = null;
           if (hasConversations) {
             for (const item of data) {
-              const ts = (item as Record<string, unknown>).created_at ?? (item as Record<string, unknown>).updated_at ?? null;
+              const ts = item.created_at ?? item.updated_at ?? null;
               if (typeof ts === 'string' && (!lastActivityAt || ts > lastActivityAt)) lastActivityAt = ts;
             }
           }
@@ -182,24 +182,24 @@ export async function checkBotCakeToolsFlows(pageIds: string[], userToken: strin
         let lastActivityAt: string | null = null;
 
         if (toolsRes.ok) {
-          const tData = await toolsRes.json() as { success?: boolean; data?: Record<string, unknown>[] };
-          if (tData.success && Array.isArray(tData.data)) {
+          const tData = BotCakeToolsResponseSchema.parse(await toolsRes.json());
+          if (tData.success && tData.data) {
             for (const tool of tData.data) {
               if (tool.is_published === true) {
                 hasToolsOrFlows = true;
-                const ts = (tool as Record<string, unknown>).updated_at ?? null;
+                const ts = tool.updated_at ?? null;
                 if (typeof ts === 'string' && (!lastActivityAt || ts > lastActivityAt)) lastActivityAt = ts;
               }
             }
           }
         }
         if (!hasToolsOrFlows && flowsRes.ok) {
-          const fData = await flowsRes.json() as { success?: boolean; data?: { flows?: Record<string, unknown>[] } };
+          const fData = BotCakeFlowsResponseSchema.parse(await flowsRes.json());
           if (fData.success && fData.data?.flows) {
             for (const flow of fData.data.flows) {
               if (flow.is_removed === false) {
                 hasToolsOrFlows = true;
-                const ts = (flow as Record<string, unknown>).updated_at ?? null;
+                const ts = flow.updated_at ?? null;
                 if (typeof ts === 'string' && (!lastActivityAt || ts > lastActivityAt)) lastActivityAt = ts;
               }
             }
@@ -247,7 +247,7 @@ async function resolveFbPages(pageIds: string[]): Promise<Map<string, { status: 
           timeout: 8_000,
         });
         if (r.ok) {
-          const d = await r.json() as { id?: string; name?: string; error?: Record<string, unknown> };
+          const d = FbPageInfoSchema.parse(await r.json());
           if (d.name) {
             const entry = { status: 'valid' as const, name: d.name };
             _fbPageInfoCache.set(pageId, entry);
@@ -289,7 +289,7 @@ export async function fetchBotCakePages(token: string): Promise<BotCakePage[]> {
   }
 
   const placeholders = ids.map((_, i) => `$${i + 1}`).join(',');
-  const known = (await pool.query(`SELECT DISTINCT page_id, page_name FROM page_states WHERE page_id IN (${placeholders})`, ids)).rows as { page_id: string; page_name: string }[];
+  const known = PageStateRowSchema.array().parse((await pool.query(`SELECT DISTINCT page_id, page_name FROM page_states WHERE page_id IN (${placeholders})`, ids)).rows);
   for (const r of known) {
     if (!nameMap.has(r.page_id) && r.page_name) {
       nameMap.set(r.page_id, r.page_name);
