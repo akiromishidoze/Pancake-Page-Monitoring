@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 type Endpoint = {
@@ -10,7 +11,11 @@ type Endpoint = {
 export function EndpointFilter({ endpoints }: { endpoints: Endpoint[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const current = searchParams?.get('endpoint_id') ?? '';
+  const [current, setCurrent] = useState('');
+
+  useEffect(() => {
+    setCurrent(searchParams?.get('endpoint_id') ?? '');
+  }, [searchParams]);
 
   function onChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const val = e.target.value;
@@ -26,7 +31,7 @@ export function EndpointFilter({ endpoints }: { endpoints: Endpoint[] }) {
 
   return (
     <select
-      value={current}
+      value={current || ''}
       onChange={onChange}
       className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-200"
     >
