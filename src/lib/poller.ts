@@ -38,6 +38,7 @@ export async function refreshAll() {
     _lastPolledAt = new Date().toISOString();
     await Promise.all([refreshBotCake(), refreshPancake()]);
     await setSetting('last_scheduled_run', Date.now().toString());
+    broadcastSSE('refresh', JSON.stringify({ source: 'refresh-all', all_endpoints: true }));
     span.end();
   });
 }
@@ -209,7 +210,6 @@ export async function refreshBotCake() {
       const ht = activePages.filter(p => p.activation_reason === 'has-tools').length;
       const na = inactivePages.length;
       log.info('botcake: %dA (%dorders+%dconv+%dtools) / %dI — %d total, run %s', activePages.length, pa, hc, ht, na, pages.length, runId);
-      broadcastSSE('refresh', JSON.stringify({ source: 'botcake-poller', run_id: runId, endpoint_id: 'botcake-platform' }));
     }
     span.end();
   } catch (err) {
@@ -353,7 +353,6 @@ async function refreshPancake() {
     if (result.inserted) {
       await setSetting(`poller_ok_${ep.id}`, Date.now().toString());
       log.info('pancake %s: %d active / %d inactive (%d total), run %s', ep.name, activePages.length, inactivePages.length, shop.pages.length, runId);
-      broadcastSSE('refresh', JSON.stringify({ source: 'pancake-poller', run_id: runId, endpoint_id: ep.id }));
     }
   }
   } catch (err) {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getEndpointByApiKey, getLatestRun } from '@/lib/db';
 import { refreshBotCake } from '@/lib/poller';
+import { broadcastSSE } from '@/lib/sse';
 import { cors, corsOptions } from '@/lib/cors';
 
 async function handler(apiKey: string | null) {
@@ -15,6 +16,7 @@ async function handler(apiKey: string | null) {
     }
 
     await refreshBotCake();
+    broadcastSSE('refresh', JSON.stringify({ source: 'botcake-refresh', endpoint_id: 'botcake-platform' }));
 
     const latest = await getLatestRun('botcake-platform');
     return cors(NextResponse.json({
