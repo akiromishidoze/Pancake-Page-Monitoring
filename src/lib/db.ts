@@ -323,24 +323,30 @@ async function migratePartitionColumnTypes() {
   }
 }
 
+let _partitionCache: Set<string> | null = null;
+
 export async function ensureMonthlyPartitions(): Promise<void> {
   await ensureMigrated();
-  const partitions = await pool.query(
-    `SELECT inhrelid::regclass::text AS name FROM pg_inherits
-     WHERE inhparent = 'page_states'::regclass`,
-  );
-  const existing = new Set(partitions.rows.map((r: { name: string }) => r.name));
+
+  if (!_partitionCache) {
+    const partitions = await pool.query(
+      `SELECT inhrelid::regclass::text AS name FROM pg_inherits
+       WHERE inhparent = 'page_states'::regclass`,
+    );
+    _partitionCache = new Set(partitions.rows.map((r: { name: string }) => r.name));
+  }
 
   const now = new Date();
   for (let offset = -3; offset <= 6; offset++) {
     const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
     const dNext = new Date(d.getFullYear(), d.getMonth() + 1, 1);
     const name = `page_states_${d.getFullYear()}_${String(d.getMonth() + 1).padStart(2, '0')}`;
-    if (existing.has(name)) continue;
+    if (_partitionCache.has(name)) continue;
     await pool.query(`
       CREATE TABLE IF NOT EXISTS ${name} PARTITION OF page_states
       FOR VALUES FROM ('${d.toISOString().slice(0, 10)}') TO ('${dNext.toISOString().slice(0, 10)}')
     `);
+    _partitionCache.add(name);
   }
 }
 
