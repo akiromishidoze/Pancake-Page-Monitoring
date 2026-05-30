@@ -38,9 +38,13 @@ export function AutoRefresh({ scope }: Props) {
 
     connect();
 
+    // Fallback: poll every 60s so the timer resets even if SSE fails
+    const pollId = setInterval(() => router.refresh(), 60_000);
+
     return () => {
       if (esRef.current) esRef.current.close();
       if (timerRef.current) clearTimeout(timerRef.current);
+      clearInterval(pollId);
     };
   }, [router, scope]);
 
