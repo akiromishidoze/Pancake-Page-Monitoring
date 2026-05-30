@@ -363,7 +363,7 @@ export default async function OverviewPage({
             </div>
 
             <SectionErrorBoundary title="Database Stats">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
                   <h3 className="text-sm font-medium text-slate-400 uppercase">Database</h3>
                   <dl className="mt-3 space-y-2 text-sm">
@@ -383,14 +383,27 @@ export default async function OverviewPage({
                       <dt className="text-slate-400">Ingest endpoint</dt>
                       <dd className="font-mono text-xs">POST /api/ingest</dd>
                     </div>
+                  </dl>
+                </div>
+
+                <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
+                  <h3 className="text-sm font-medium text-slate-400 uppercase">Token Expiry</h3>
+                  <dl className="mt-3 space-y-2 text-sm">
+                    {allEndpoints.filter(e => e.token_expires_at).length === 0 && (
+                      <div className="text-xs text-slate-500">No token expiry dates set</div>
+                    )}
                     {allEndpoints.filter(e => e.token_expires_at).map(ep => {
                       const diffMs = new Date(ep.token_expires_at!).getTime() - Date.now();
                       const diffDays = Math.round(diffMs / 86400000);
                       const tone = diffMs < 0 ? 'text-red-400' : diffDays <= 7 ? 'text-yellow-400' : 'text-green-400';
+                      const dot = diffMs < 0 ? 'bg-red-500' : diffDays <= 7 ? 'bg-yellow-500' : 'bg-green-500';
                       return (
-                        <div key={ep.id} className="flex justify-between">
-                          <dt className="text-slate-400">{ep.name} token</dt>
-                          <dd className={`font-mono ${tone}`}>{diffMs < 0 ? `expired` : `${diffDays}d`}</dd>
+                        <div key={ep.id} className="flex justify-between items-center">
+                          <dt className="text-slate-400">{ep.name}</dt>
+                          <dd className={`font-mono ${tone} flex items-center gap-1.5`}>
+                            <span className={`inline-block w-2 h-2 rounded-full ${dot}`} />
+                            {diffMs < 0 ? `expired` : `${diffDays}d`}
+                          </dd>
                         </div>
                       );
                     })}
