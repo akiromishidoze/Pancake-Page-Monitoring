@@ -1,4 +1,5 @@
 import { AutoRefresh } from '@/components/AutoRefresh';
+import { ChunkReload } from '@/components/ChunkReload';
 import { GlobalLoadingSequence } from '@/components/GlobalLoadingSequence';
 import { Sidebar } from '@/components/Sidebar';
 import { LogoutButton } from '@/components/LogoutButton';
@@ -10,8 +11,9 @@ export default function DashboardLayout({
   return (
     <ToastProvider>
       <div className="flex h-screen overflow-hidden">
-      <AutoRefresh />
-      <GlobalLoadingSequence />
+<ChunkReload />
+<AutoRefresh />
+<GlobalLoadingSequence />
       <Sidebar />
 
       <div className="flex-1 flex flex-col overflow-hidden">
