@@ -76,18 +76,37 @@ export function SettingsForm({ initialEndpoints }: { initialEndpoints: Endpoint[
   }
 
   function renderEndpointRow(ep: Endpoint) {
+    let expiresLabel: string | null = null;
+    let expiresTone: string = 'text-slate-500';
+    if (ep.token_expires_at) {
+      const diffMs = new Date(ep.token_expires_at).getTime() - Date.now();
+      const diffDays = Math.round(diffMs / 86400000);
+      if (diffMs < 0) {
+        expiresLabel = `Expired ${Math.abs(diffDays)}d ago`;
+        expiresTone = 'text-red-400';
+      } else if (diffDays <= 7) {
+        expiresLabel = `Expires in ${diffDays}d`;
+        expiresTone = 'text-yellow-400';
+      } else {
+        expiresLabel = `Expires in ${diffDays}d`;
+        expiresTone = 'text-green-400';
+      }
+    }
+
     return (
       <div key={ep.id} className="px-4 py-3 border-b border-slate-800 last:border-0 flex items-center justify-between">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className={`inline-block w-2 h-2 rounded-full ${ep.is_active ? 'bg-green-500' : 'bg-red-500'}`} />
             <span className="text-sm font-medium text-slate-200">{ep.name}</span>
+            {ep.token_expires_at && (
+              <span className={`text-xs font-mono ${expiresTone}`}>{expiresLabel}</span>
+            )}
           </div>
           <div className="mt-1 text-xs text-slate-500 space-y-0.5">
             {ep.url && <div>URL: {ep.url}</div>}
             <div>Key: <span className="font-mono text-slate-400">{mask(ep.api_key)}</span></div>
             {ep.access_token && <div>Token: <span className="font-mono text-slate-400">{mask(ep.access_token)}</span></div>}
-            {ep.token_expires_at && <div>Expires: {formatWithTz(ep.token_expires_at)}</div>}
             {ep.last_used_at && <div>Last used: {formatWithTz(ep.last_used_at)}</div>}
           </div>
         </div>
