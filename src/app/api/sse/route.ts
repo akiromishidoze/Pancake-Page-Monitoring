@@ -4,11 +4,13 @@ import { addClient, removeClient, getClientCount } from '@/lib/sse';
 
 export async function GET(req: Request) {
   let id: string | null = null;
+  const url = new URL(req.url);
+  const scope = url.searchParams.get('scope') || undefined;
 
   const stream = new ReadableStream({
     start(controller) {
       id = crypto.randomUUID();
-      addClient(id, controller);
+      addClient(id, controller, scope);
 
       controller.enqueue(new TextEncoder().encode(`event: connected\ndata: {"client_count": ${getClientCount()}}\n\n`));
 

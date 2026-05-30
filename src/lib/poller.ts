@@ -209,7 +209,7 @@ export async function refreshBotCake() {
       const ht = activePages.filter(p => p.activation_reason === 'has-tools').length;
       const na = inactivePages.length;
       log.info('botcake: %dA (%dorders+%dconv+%dtools) / %dI — %d total, run %s', activePages.length, pa, hc, ht, na, pages.length, runId);
-      broadcastSSE('refresh', JSON.stringify({ source: 'botcake-poller', run_id: runId }));
+      broadcastSSE('refresh', JSON.stringify({ source: 'botcake-poller', run_id: runId, endpoint_id: 'botcake-platform' }));
     }
     span.end();
   } catch (err) {

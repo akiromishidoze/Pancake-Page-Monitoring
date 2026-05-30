@@ -3,13 +3,18 @@
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
-export function AutoRefresh() {
+type Props = {
+  scope?: string;
+};
+
+export function AutoRefresh({ scope }: Props) {
   const router = useRouter();
   const esRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
     function connect() {
-      const es = new EventSource('/api/sse');
+      const url = scope ? `/api/sse?scope=${encodeURIComponent(scope)}` : '/api/sse';
+      const es = new EventSource(url);
       esRef.current = es;
 
       es.addEventListener('refresh', () => {
@@ -27,7 +32,7 @@ export function AutoRefresh() {
     return () => {
       if (esRef.current) esRef.current.close();
     };
-  }, [router]);
+  }, [router, scope]);
 
   return null;
 }

@@ -98,7 +98,7 @@ async function pollConnector(connectorId: string) {
 
     if (result.inserted) {
       log.info('%s: inserted %d pages, run %s', connector.name, activePages.length, runId);
-      broadcastSSE('refresh', JSON.stringify({ source: `connector:${connector.name}`, run_id: runId }));
+      broadcastSSE('refresh', JSON.stringify({ source: `connector:${connector.name}`, run_id: runId, endpoint_id: connector.id }));
     }
   } catch (err) {
     log.error({ err, name: connector.name }, '%s: error', connector.name);
