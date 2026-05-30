@@ -13,8 +13,8 @@ const POLL_INTERVAL_MS = 60_000;
 let _pollerInterval: ReturnType<typeof setInterval> | null = null;
 let _lastPolledAt: string | null = null;
 
-let _botcakeLastRefresh = 0;
-let _pancakeLastRefresh = 0;
+let _refreshingBotCake = false;
+let _refreshingPancake = false;
 
 export function startPoller() {
   if (_pollerInterval) return;
@@ -46,20 +46,18 @@ const ALERT_DROP_THRESHOLD_PCT = 0.50;
 
 export async function refreshBotCake() {
   return tracer.startActiveSpan('poller.refreshBotCake', async (span) => {
-  const now = Date.now();
-  if (now - _botcakeLastRefresh < POLL_INTERVAL_MS) { span.end(); return; }
-  _botcakeLastRefresh = now;
-
+  if (_refreshingBotCake) { span.end(); return; }
+  _refreshingBotCake = true;
+  try {
     const endpoint = await getEndpoint('botcake-platform');
     if (!endpoint?.access_token) { span.end(); return; }
 
-  try {
     const pages = await fetchBotCakePages(endpoint.access_token);
     if (pages.length === 0) {
       log.warn('botcake: API returned 0 pages — skipping insert to preserve previous data');
       span.end(); return;
     }
-    const runId = `botcake_refresh_${now}`;
+    const runId = `botcake_refresh_${Date.now()}`;
     const ts = new Date().toISOString();
 
     const pancakeActive = await getPancakeActivePageIds();
@@ -217,17 +215,17 @@ export async function refreshBotCake() {
   } catch (err) {
     log.error({ err }, 'botcake: refresh failed');
     span.end();
+  } finally {
+    _refreshingBotCake = false;
   }
   });
 
 }
 
 async function refreshPancake() {
+  if (_refreshingPancake) return;
+  _refreshingPancake = true;
   try {
-  const now = Date.now();
-  if (now - _pancakeLastRefresh < POLL_INTERVAL_MS) return;
-  _pancakeLastRefresh = now;
-
   const allEndpoints = await listEndpoints();
   const endpoints = allEndpoints.filter(ep => ep.id !== 'botcake-platform' && ep.url && ep.access_token && ep.is_active);
   if (endpoints.length === 0) return;
@@ -300,7 +298,7 @@ async function refreshPancake() {
     const orderPageIds = activePageIdsByShop.get(shopId) ?? new Set<string>();
 
     const ts = new Date().toISOString();
-    const runId = `pancake_refresh_${now}_${ep.id}`;
+    const runId = `pancake_refresh_${Date.now()}_${ep.id}`;
 
     const activePages: SlimPage[] = [];
     const inactivePages: SlimPage[] = [];
@@ -360,6 +358,8 @@ async function refreshPancake() {
   }
   } catch (err) {
     log.error({ err }, 'pancake: refresh failed');
+  } finally {
+    _refreshingPancake = false;
   }
 }
 
