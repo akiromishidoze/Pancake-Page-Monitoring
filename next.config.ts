@@ -13,6 +13,10 @@ const csp = [
 ].join('; ');
 
 const nextConfig: NextConfig = {
+  outputFileTracingRoot: __dirname,
+  turbopack: {
+    root: __dirname,
+  },
   async headers() {
     return [
       {
