@@ -66,9 +66,6 @@ export async function startScheduler() {
     checkPrune().catch(err => log.error({ err }, 'Prune error'));
   }, 60_000));
 
-  _intervals.push(setInterval(() => {
-    checkPollerHealth().catch(err => log.error({ err }, 'Poller health check error'));
-  }, POLLER_HEALTH_INTERVAL_MS));
 }
 
 export function stopScheduler() {

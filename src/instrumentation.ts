@@ -27,10 +27,14 @@ export async function register() {
 
   setTimeout(async () => {
     try {
-      const { ensureCredentials } = await import('./lib/auth');
+      const [{ ensureCredentials }, { startScheduler }] = await Promise.all([
+        import('./lib/auth'),
+        import('./lib/scheduler'),
+      ]);
       await ensureCredentials();
+      startScheduler();
     } catch (err) {
-      log.error({ err }, 'ensureCredentials failed');
+      log.error({ err }, 'background workers failed');
     }
   }, 10_000);
 }
