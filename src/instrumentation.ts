@@ -25,35 +25,12 @@ export async function register() {
   const { initHttpAgent } = await import('./lib/http');
   initHttpAgent();
 
-  setTimeout(() => {
-    Promise.all([
-      import('./lib/auth'),
-      import('./lib/poller'),
-      import('./lib/scheduler'),
-      import('./lib/connector-poller'),
-    ]).then(async ([authMod, pollerMod, schedulerMod, connectorMod]) => {
-      try {
-        await authMod.ensureCredentials();
-      } catch (err) {
-        log.error({ err }, 'ensureCredentials failed');
-      }
-
-      pollerMod.startPoller();
-      await schedulerMod.startScheduler();
-      connectorMod.startConnectorPollers();
-
-      const shutdown = () => {
-        log.info('shutting down...');
-        pollerMod.stopPoller();
-        schedulerMod.stopScheduler();
-        connectorMod.stopConnectorPollers();
-        process.exit(0);
-      };
-
-      process.on('SIGINT', shutdown);
-      process.on('SIGTERM', shutdown);
-    }).catch(err => {
-      log.error({ err }, 'background workers failed');
-    });
+  setTimeout(async () => {
+    try {
+      const { ensureCredentials } = await import('./lib/auth');
+      await ensureCredentials();
+    } catch (err) {
+      log.error({ err }, 'ensureCredentials failed');
+    }
   }, 10_000);
 }

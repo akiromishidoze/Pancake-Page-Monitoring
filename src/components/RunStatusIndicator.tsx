@@ -1,17 +1,11 @@
 'use client';
 
-import { useEffect, useState, useRef, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { useToast } from './Toast';
 
 export function RunStatusIndicator() {
   const [isRunning, setIsRunning] = useState(false);
-  const [nextRunTime, setNextRunTime] = useState<number | null>(null);
-  const [now, setNow] = useState(Date.now());
-
-  const router = useRouter();
   const { toast } = useToast();
-  const wasRunningRef = useRef(false);
 
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
@@ -23,13 +17,6 @@ export function RunStatusIndicator() {
 
         if (data.ok) {
           setIsRunning(data.isRunning);
-          setNextRunTime(data.nextRunTime);
-
-          if (wasRunningRef.current && !data.isRunning) {
-            router.refresh();
-          }
-
-          wasRunningRef.current = data.isRunning;
         }
       } catch (err) {
         toast('Failed to fetch run status');
@@ -41,23 +28,7 @@ export function RunStatusIndicator() {
     checkStatus();
 
     return () => clearTimeout(timeoutId);
-  }, [router]);
-
-  useEffect(() => {
-    const intervalId = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(intervalId);
   }, []);
-
-  const timeRemaining = useMemo(() => {
-    if (isRunning || !nextRunTime) return null;
-
-    const diffMs = nextRunTime - now;
-    if (diffMs <= 0) return 'Pending...';
-
-    const m = Math.floor(diffMs / 60000);
-    const s = Math.floor((diffMs % 60000) / 1000);
-    return `${m}m ${s.toString().padStart(2, '0')}s`;
-  }, [nextRunTime, isRunning, now]);
 
   if (isRunning) {
     return (
@@ -83,14 +54,6 @@ export function RunStatusIndicator() {
           ></path>
         </svg>
         <span>Fetching latest data...</span>
-      </div>
-    );
-  }
-
-  if (timeRemaining) {
-    return (
-      <div className="mt-2 text-sm text-slate-400">
-        Next fetch in: <span className="font-mono text-slate-300">{timeRemaining}</span>
       </div>
     );
   }
