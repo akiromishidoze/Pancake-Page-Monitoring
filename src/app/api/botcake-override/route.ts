@@ -18,9 +18,9 @@ export async function POST(req: Request) {
     }
 
     if (body.remove) {
-      removeBotCakeOverride(body.page_id);
+      await removeBotCakeOverride(body.page_id);
     } else {
-      setBotCakeOverride(body.page_id, body.is_active, body.reason ?? 'manual-override');
+      await setBotCakeOverride(body.page_id, body.is_active, body.reason ?? 'manual-override');
     }
 
     await refreshAll();
