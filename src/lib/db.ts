@@ -216,6 +216,7 @@ async function ensureMigrated() {
   _migrated = true;
   await migrate();
   await migratePageStatesPartitioning();
+  await migratePartitionColumnTypes();
 }
 
 // ──── Partitioning ──────────────────────────────────────────────────────
@@ -263,8 +264,8 @@ async function migratePageStatesPartitioning() {
         shop_label TEXT,
         page_name TEXT,
         activity_kind TEXT,
-        is_activated INTEGER,
-        is_canary INTEGER,
+        is_activated BOOLEAN,
+        is_canary BOOLEAN,
         activation_reason TEXT,
         state_change TEXT,
         activity_kind_change TEXT,
@@ -306,6 +307,19 @@ async function migratePageStatesPartitioning() {
     await pool.query('ROLLBACK');
     log.error({ err: e }, 'partitioning migration failed, reverting:');
     throw e;
+  }
+}
+
+async function migratePartitionColumnTypes() {
+  try {
+    await pool.query(`ALTER TABLE page_states ALTER COLUMN is_activated TYPE BOOLEAN USING is_activated::boolean`);
+  } catch {
+    // Already BOOLEAN or column doesn't exist
+  }
+  try {
+    await pool.query(`ALTER TABLE page_states ALTER COLUMN is_canary TYPE BOOLEAN USING is_canary::boolean`);
+  } catch {
+    // Already BOOLEAN or column doesn't exist
   }
 }
 
