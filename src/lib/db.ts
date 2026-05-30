@@ -631,7 +631,7 @@ export async function getLatestPageStatesForEndpoints(endpointIds: string[]): Pr
     JOIN runs r ON r.run_id = ps.run_id
     JOIN latest ON r.endpoint_id = latest.endpoint_id
       AND r.generated_at = latest.max_gen
-      AND ps.generated_at >= latest.max_gen
+      AND ps.generated_at::timestamptz >= latest.max_gen
     ORDER BY ps.shop_label, ps.page_name
   `, endpointIds);
   return r.rows as PageStateRow[];
@@ -646,7 +646,7 @@ export async function getLatestPageStates(endpointId?: string): Promise<PageStat
       JOIN runs r ON r.run_id = ps.run_id
       WHERE r.endpoint_id = $1
       AND r.run_id = (SELECT run_id FROM runs WHERE endpoint_id = $2 ORDER BY generated_at DESC LIMIT 1)
-      AND ps.generated_at >= (SELECT generated_at FROM runs WHERE endpoint_id = $2 ORDER BY generated_at DESC LIMIT 1)
+      AND ps.generated_at::timestamptz >= (SELECT generated_at FROM runs WHERE endpoint_id = $2 ORDER BY generated_at DESC LIMIT 1)
       ORDER BY ps.shop_label, ps.page_name
     `, [endpointId, endpointId]);
     if (r.rows.length > 0) return r.rows as PageStateRow[];
@@ -658,7 +658,7 @@ export async function getLatestPageStates(endpointId?: string): Promise<PageStat
         WHERE r.endpoint_id IS NULL
         AND ps.shop_label = $1
         AND r.run_id = (SELECT run_id FROM runs WHERE endpoint_id IS NULL ORDER BY generated_at DESC LIMIT 1)
-        AND ps.generated_at >= (SELECT generated_at FROM runs WHERE endpoint_id IS NULL ORDER BY generated_at DESC LIMIT 1)
+        AND ps.generated_at::timestamptz >= (SELECT generated_at FROM runs WHERE endpoint_id IS NULL ORDER BY generated_at DESC LIMIT 1)
         ORDER BY ps.page_name
       `, [ep.shop_label]);
       return r2.rows as PageStateRow[];
@@ -672,7 +672,7 @@ export async function getLatestPageStates(endpointId?: string): Promise<PageStat
       ORDER BY generated_at DESC LIMIT 1
     )
     SELECT ps.* FROM page_states ps
-    JOIN latest ON ps.run_id = latest.run_id AND ps.generated_at >= latest.generated_at
+    JOIN latest ON ps.run_id = latest.run_id AND ps.generated_at::timestamptz >= latest.generated_at
     ORDER BY ps.shop_label, ps.page_name
   `);
   return r.rows as PageStateRow[];
