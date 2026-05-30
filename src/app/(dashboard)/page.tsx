@@ -172,7 +172,12 @@ async function BotCakeSection() {
     getRunHistory('botcake-platform', 200),
   ]);
   if (pages.length === 0) return null;
-  const overrideIds = [...overrides.keys()];
+
+  // Build override map: page_id → is_active
+  const overrideMap = new Map<string, boolean>();
+  for (const [pid, ov] of overrides) {
+    overrideMap.set(pid, ov.is_active);
+  }
   const apiHealthy = latestRun && latestRun.heartbeat_ok && !latestRun.outage_suspected;
 
   const activeCount = pages.filter(p => p.is_activated).length;
@@ -249,7 +254,7 @@ async function BotCakeSection() {
                     activation_reason: p.activation_reason,
                     hours_since_last_customer_activity: p.hours_since_last_customer_activity,
                     customer_count: p.customer_count,
-                  }))} overrideIds={overrideIds} />
+                  }))} overrides={overrideMap} />
                 </div>
               </div>
             </div>

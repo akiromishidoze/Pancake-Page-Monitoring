@@ -26,13 +26,13 @@ function formatRelativeTime(hours: number): string {
 
 const PAGE_SIZE = 20;
 
-export function BotCakePageList({ pages, overrideIds = [] }: { pages: BotCakePage[]; overrideIds?: string[] }) {
+export function BotCakePageList({ pages, overrides = new Map() }: { pages: BotCakePage[]; overrides?: Map<string, boolean> }) {
   const [rawQuery, setRawQuery] = useState('');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
   const [overriding, setOverriding] = useState<string | null>(null);
-  const [overrides, setOverrides] = useState<Set<string>>(new Set(overrideIds));
+  const [localOverrides, setLocalOverrides] = useState<Map<string, boolean>>(new Map(overrides));
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -42,16 +42,23 @@ export function BotCakePageList({ pages, overrideIds = [] }: { pages: BotCakePag
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [rawQuery]);
 
+  function getEffectiveActive(p: BotCakePage): boolean {
+    if (localOverrides.has(p.page_id)) return localOverrides.get(p.page_id)!;
+    return p.is_activated ?? false;
+  }
+
   const handleOverride = useCallback(async (pageId: string, isActive: boolean) => {
     setOverriding(pageId);
+    const newActive = !isActive;
+    setLocalOverrides(prev => new Map(prev).set(pageId, newActive));
     try {
       const res = await fetch('/api/botcake-override', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ page_id: pageId, is_active: !isActive, reason: 'manual-override' }),
+        body: JSON.stringify({ page_id: pageId, is_active: newActive, reason: 'manual-override' }),
       });
-      if (res.ok) {
-        setOverrides(prev => new Set(prev).add(pageId));
+      if (!res.ok) {
+        setLocalOverrides(prev => { const next = new Map(prev); next.set(pageId, isActive); return next; });
       }
     } finally {
       setOverriding(null);
@@ -60,25 +67,27 @@ export function BotCakePageList({ pages, overrideIds = [] }: { pages: BotCakePag
 
   const handleClear = useCallback(async (pageId: string) => {
     setOverriding(pageId);
+    const prev = localOverrides.get(pageId);
+    setLocalOverrides(prev => { const next = new Map(prev); next.delete(pageId); return next; });
     try {
       const res = await fetch('/api/botcake-override', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ page_id: pageId, remove: true }),
       });
-      if (res.ok) {
-        setOverrides(prev => { const next = new Set(prev); next.delete(pageId); return next; });
+      if (!res.ok && prev !== undefined) {
+        setLocalOverrides(prevMap => new Map(prevMap).set(pageId, prev));
       }
     } finally {
       setOverriding(null);
     }
-  }, []);
+  }, [localOverrides]);
 
   const sorted = useMemo(() => {
-    const active = pages.filter(p => p.is_activated).sort((a, b) => (a.page_name ?? a.page_id).localeCompare(b.page_name ?? b.page_id));
-    const inactive = pages.filter(p => !p.is_activated).sort((a, b) => (a.page_name ?? a.page_id).localeCompare(b.page_name ?? b.page_id));
+    const active = pages.filter(p => getEffectiveActive(p)).sort((a, b) => (a.page_name ?? a.page_id).localeCompare(b.page_name ?? b.page_id));
+    const inactive = pages.filter(p => !getEffectiveActive(p)).sort((a, b) => (a.page_name ?? a.page_id).localeCompare(b.page_name ?? b.page_id));
     return [...active, ...inactive];
-  }, [pages]);
+  }, [pages, localOverrides]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return sorted;
@@ -119,23 +128,25 @@ export function BotCakePageList({ pages, overrideIds = [] }: { pages: BotCakePag
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800">
-            {paged.map(p => {
+              {paged.map(p => {
               const hours = p.hours_since_last_customer_activity;
               const lastActivity = hours !== null && hours !== undefined
                 ? formatRelativeTime(hours)
                 : '—';
+              const effectiveActive = getEffectiveActive(p);
+              const hasOverride = localOverrides.has(p.page_id);
               return (
                 <tr key={p.page_id} className="hover:bg-slate-800/30">
                   <td className="px-2 py-1 text-slate-100">
                     <Link href={`/pages/${p.page_id}`} className="hover:underline">{p.page_name ?? p.page_id}</Link>
                   </td>
                   <td className="px-2 py-1 text-slate-500 font-mono">{p.page_id}</td>
-                  <td className={`px-2 py-1 font-mono ${p.is_activated ? 'text-green-400' : 'text-red-400'}`}>
-                    {p.is_activated ? 'active' : p.activation_reason ?? 'inactive'}
-                    {overrides.has(p.page_id) && <span className="ml-1 text-yellow-400">*</span>}
+                  <td className={`px-2 py-1 font-mono ${effectiveActive ? 'text-green-400' : 'text-red-400'}`}>
+                    {effectiveActive ? 'active' : p.activation_reason ?? 'inactive'}
+                    {hasOverride && <span className="ml-1 text-yellow-400">*</span>}
                   </td>
                   <td className="px-2 py-1">
-                    {overrides.has(p.page_id) ? (
+                    {hasOverride ? (
                       <button
                         onClick={() => handleClear(p.page_id)}
                         disabled={overriding === p.page_id}
@@ -145,15 +156,15 @@ export function BotCakePageList({ pages, overrideIds = [] }: { pages: BotCakePag
                       </button>
                     ) : (
                       <button
-                        onClick={() => handleOverride(p.page_id, p.is_activated ?? false)}
+                        onClick={() => handleOverride(p.page_id, effectiveActive)}
                         disabled={overriding === p.page_id}
                         className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${
-                          p.is_activated
+                          effectiveActive
                             ? 'bg-red-900/50 text-red-300 hover:bg-red-800/50'
                             : 'bg-green-900/50 text-green-300 hover:bg-green-800/50'
                         } disabled:opacity-50`}
                       >
-                        {overriding === p.page_id ? '...' : p.is_activated ? 'Deactivate' : 'Activate'}
+                        {overriding === p.page_id ? '...' : effectiveActive ? 'Deactivate' : 'Activate'}
                       </button>
                     )}
                   </td>
