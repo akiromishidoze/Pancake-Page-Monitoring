@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import { getLatestRun, getRunCount, getSetting, listEndpoints, getEndpoint, getLatestPageStates, getLatestPageStatesForEndpoints, getRecentRuns, getRunHistory, getRunHistories, getBotCakeOverrides, type PageStateRow, type RunRow } from '@/lib/db';
 import { StatusCard } from '@/components/StatusCard';
+import { SectionErrorBoundary } from '@/components/SectionErrorBoundary';
 import { RunNowButton } from '@/components/RunNowButton';
 import { formatWithTz } from '@/lib/format';
 
@@ -329,88 +330,106 @@ export default async function OverviewPage({
       <div className="dashboard-data space-y-6">
         {!isFiltered && (
           <>
-            <StatusCardGrid data={cardData} />
+            <SectionErrorBoundary title="Status Cards">
+              <StatusCardGrid data={cardData} />
+            </SectionErrorBoundary>
 
             {recentRuns.length > 1 && (
-              <div className="rounded-lg border border-slate-800 bg-slate-900 p-4 flex items-center gap-4">
-                <div className="text-xs text-slate-400 uppercase shrink-0">Alert Trend (last {recentRuns.length} runs)</div>
-                <AlertSparkline runs={recentRuns.map(r => ({ alert_count: r.alert_count ?? 0, generated_at: r.generated_at }))} />
-                <div className="text-xs text-slate-500">Red dots = alerts</div>
-              </div>
+              <SectionErrorBoundary title="Alert Trend">
+                <div className="rounded-lg border border-slate-800 bg-slate-900 p-4 flex items-center gap-4">
+                  <div className="text-xs text-slate-400 uppercase shrink-0">Alert Trend (last {recentRuns.length} runs)</div>
+                  <AlertSparkline runs={recentRuns.map(r => ({ alert_count: r.alert_count ?? 0, generated_at: r.generated_at }))} />
+                  <div className="text-xs text-slate-500">Red dots = alerts</div>
+                </div>
+              </SectionErrorBoundary>
             )}
 
             <div className="space-y-8">
-              <Suspense fallback={<div className="rounded-lg border border-slate-800 bg-slate-900 p-6 animate-pulse"><div className="h-5 w-40 rounded bg-slate-800" /><div className="mt-4 h-48 rounded bg-slate-800" /></div>}>
-                <PancakeSection pancakeIds={pancakeIds} allEndpoints={allEndpoints} />
-              </Suspense>
-              <Suspense fallback={<div className="rounded-lg border border-slate-800 bg-slate-900 p-6 animate-pulse"><div className="h-5 w-40 rounded bg-slate-800" /><div className="mt-4 h-48 rounded bg-slate-800" /></div>}>
-                <BotCakeSection />
-              </Suspense>
+              <SectionErrorBoundary title="Pancake Section">
+                <Suspense fallback={<div className="rounded-lg border border-slate-800 bg-slate-900 p-6 animate-pulse"><div className="h-5 w-40 rounded bg-slate-800" /><div className="mt-4 h-48 rounded bg-slate-800" /></div>}>
+                  <PancakeSection pancakeIds={pancakeIds} allEndpoints={allEndpoints} />
+                </Suspense>
+              </SectionErrorBoundary>
+              <SectionErrorBoundary title="BotCake Section">
+                <Suspense fallback={<div className="rounded-lg border border-slate-800 bg-slate-900 p-6 animate-pulse"><div className="h-5 w-40 rounded bg-slate-800" /><div className="mt-4 h-48 rounded bg-slate-800" /></div>}>
+                  <BotCakeSection />
+                </Suspense>
+              </SectionErrorBoundary>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
-                <h3 className="text-sm font-medium text-slate-400 uppercase">Database</h3>
-                <dl className="mt-3 space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <dt className="text-slate-400">Total runs</dt>
-                    <dd className="font-mono">{totalRunCount}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-slate-400">Platforms</dt>
-                    <dd className="font-mono">{endpoints.length}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-slate-400">Last run ID</dt>
-                    <dd className="font-mono text-xs">{runId ?? '—'}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-slate-400">Ingest endpoint</dt>
-                    <dd className="font-mono text-xs">POST /api/ingest</dd>
-                  </div>
-                </dl>
-              </div>
+            <SectionErrorBoundary title="Database Stats">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
+                  <h3 className="text-sm font-medium text-slate-400 uppercase">Database</h3>
+                  <dl className="mt-3 space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <dt className="text-slate-400">Total runs</dt>
+                      <dd className="font-mono">{totalRunCount}</dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-slate-400">Platforms</dt>
+                      <dd className="font-mono">{endpoints.length}</dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-slate-400">Last run ID</dt>
+                      <dd className="font-mono text-xs">{runId ?? '—'}</dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-slate-400">Ingest endpoint</dt>
+                      <dd className="font-mono text-xs">POST /api/ingest</dd>
+                    </div>
+                  </dl>
+                </div>
 
-              <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
-                <h3 className="text-sm font-medium text-slate-400 uppercase">Run details</h3>
-                <dl className="mt-3 space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <dt className="text-slate-400">Run ID</dt>
-                    <dd className="font-mono text-xs">{runId ?? '—'}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-slate-400">Rule version</dt>
-                    <dd className="font-mono">v{ruleVersion ?? '—'}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-slate-400">In maintenance</dt>
-                    <dd className="font-mono">{inMaintenance ? 'YES' : 'no'}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-slate-400">Data source</dt>
-                    <dd className="font-mono text-xs">{localRun ? (localRun.endpoint_id === 'botcake-platform' ? 'BotCake API' : 'Pancake / Ingest') : '—'}</dd>
-                  </div>
-                </dl>
+                <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
+                  <h3 className="text-sm font-medium text-slate-400 uppercase">Run details</h3>
+                  <dl className="mt-3 space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <dt className="text-slate-400">Run ID</dt>
+                      <dd className="font-mono text-xs">{runId ?? '—'}</dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-slate-400">Rule version</dt>
+                      <dd className="font-mono">v{ruleVersion ?? '—'}</dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-slate-400">In maintenance</dt>
+                      <dd className="font-mono">{inMaintenance ? 'YES' : 'no'}</dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-slate-400">Data source</dt>
+                      <dd className="font-mono text-xs">{localRun ? (localRun.endpoint_id === 'botcake-platform' ? 'BotCake API' : 'Pancake / Ingest') : '—'}</dd>
+                    </div>
+                  </dl>
+                </div>
               </div>
-            </div>
+            </SectionErrorBoundary>
           </>
         )}
 
         {isPancakeShop && (
           <>
-            <StatusCardGrid data={cardData} />
-            <Suspense fallback={<div className="rounded-lg border border-slate-800 bg-slate-900 p-6 animate-pulse"><div className="h-5 w-40 rounded bg-slate-800" /><div className="mt-4 h-48 rounded bg-slate-800" /></div>}>
-              <PancakeSection endpointId={endpointId} pancakeIds={pancakeIds} allEndpoints={allEndpoints} />
-            </Suspense>
+            <SectionErrorBoundary title="Status Cards">
+              <StatusCardGrid data={cardData} />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary title="Pancake Section">
+              <Suspense fallback={<div className="rounded-lg border border-slate-800 bg-slate-900 p-6 animate-pulse"><div className="h-5 w-40 rounded bg-slate-800" /><div className="mt-4 h-48 rounded bg-slate-800" /></div>}>
+                <PancakeSection endpointId={endpointId} pancakeIds={pancakeIds} allEndpoints={allEndpoints} />
+              </Suspense>
+            </SectionErrorBoundary>
           </>
         )}
 
         {isBotCake && (
           <>
-            <StatusCardGrid data={cardData} />
-            <Suspense fallback={<div className="rounded-lg border border-slate-800 bg-slate-900 p-6 animate-pulse"><div className="h-5 w-40 rounded bg-slate-800" /><div className="mt-4 h-48 rounded bg-slate-800" /></div>}>
-              <BotCakeSection />
-            </Suspense>
+            <SectionErrorBoundary title="Status Cards">
+              <StatusCardGrid data={cardData} />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary title="BotCake Section">
+              <Suspense fallback={<div className="rounded-lg border border-slate-800 bg-slate-900 p-6 animate-pulse"><div className="h-5 w-40 rounded bg-slate-800" /><div className="mt-4 h-48 rounded bg-slate-800" /></div>}>
+                <BotCakeSection />
+              </Suspense>
+            </SectionErrorBoundary>
           </>
         )}
       </div>
