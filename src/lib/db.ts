@@ -500,39 +500,43 @@ export async function insertSnapshot(input: InsertSnapshotInput): Promise<{ inse
       raw_summary: JSON.stringify(input.raw_summary),
     }));
 
-    for (const p of allPages) {
-      await client.query(q(`
-        INSERT INTO page_states (
-          run_id, page_id, shop_label, page_name, activity_kind, is_activated,
-          is_canary, activation_reason, state_change, activity_kind_change,
-          hours_since_last_order, hours_since_last_customer_activity, response_ms, fetch_errors, generated_at, customer_count
-        ) VALUES (
-          @run_id, @page_id, @shop_label, @page_name, @activity_kind, @is_activated,
-          @is_canary, @activation_reason, @state_change, @activity_kind_change,
-          @hours_since_last_order, @hours_since_last_customer_activity, @response_ms, @fetch_errors, @generated_at, @customer_count
-        )
-      `, {
-        run_id: input.run_id,
-        page_id: p.page_id ?? p.id ?? '',
-        shop_label: p.shop_label ?? p.shop ?? null,
-        page_name: p.name ?? null,
-        activity_kind: p.activity_kind ?? p.kind ?? null,
-        is_activated: p._is_active,
-        is_canary: p.is_canary ?? false,
-        activation_reason: p.activation_reason ?? p.reason ?? null,
-        state_change: p.state_change ?? null,
-        activity_kind_change: p.activity_kind_change ?? null,
-        hours_since_last_order: p.last_order_at
-          ? (new Date(input.generated_at).getTime() - new Date(p.last_order_at).getTime()) / (1000 * 60 * 60)
-          : null,
-        hours_since_last_customer_activity: p.last_customer_activity_at
-          ? (new Date(input.generated_at).getTime() - new Date(p.last_customer_activity_at).getTime()) / (1000 * 60 * 60)
-          : null,
-        response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
-        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : null),
-        generated_at: input.generated_at,
-        customer_count: p.customer_count ?? null,
-      }));
+    if (allPages.length > 0) {
+      const cols = ['run_id', 'page_id', 'shop_label', 'page_name', 'activity_kind', 'is_activated',
+        'is_canary', 'activation_reason', 'state_change', 'activity_kind_change',
+        'hours_since_last_order', 'hours_since_last_customer_activity', 'response_ms', 'fetch_errors', 'generated_at', 'customer_count'];
+      const values: unknown[] = [];
+      const rows: string[] = [];
+      let idx = 1;
+      for (const p of allPages) {
+        const placeholders = cols.map(() => `$${idx++}`).join(', ');
+        rows.push(`(${placeholders})`);
+        values.push(
+          input.run_id,
+          p.page_id ?? p.id ?? '',
+          p.shop_label ?? p.shop ?? null,
+          p.name ?? null,
+          p.activity_kind ?? p.kind ?? null,
+          p._is_active,
+          p.is_canary ?? false,
+          p.activation_reason ?? p.reason ?? null,
+          p.state_change ?? null,
+          p.activity_kind_change ?? null,
+          p.last_order_at
+            ? (new Date(input.generated_at).getTime() - new Date(p.last_order_at).getTime()) / (1000 * 60 * 60)
+            : null,
+          p.last_customer_activity_at
+            ? (new Date(input.generated_at).getTime() - new Date(p.last_customer_activity_at).getTime()) / (1000 * 60 * 60)
+            : null,
+          p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
+          typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : null),
+          input.generated_at,
+          p.customer_count ?? null,
+        );
+      }
+      await client.query(
+        `INSERT INTO page_states (${cols.join(', ')}) VALUES ${rows.join(', ')}`,
+        values,
+      );
     }
     await client.query('COMMIT');
     return { inserted: true };
