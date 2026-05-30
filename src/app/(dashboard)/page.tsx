@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { getLatestRun, getRunCount, getSetting, listEndpoints, getEndpoint, getLatestPageStates, getLatestPageStatesForEndpoints, getRecentRuns, getRunHistory, getRunHistories, getBotCakeOverrides, type PageStateRow, type RunRow } from '@/lib/db';
 import { StatusCard } from '@/components/StatusCard';
 import { RunNowButton } from '@/components/RunNowButton';
@@ -339,8 +340,12 @@ export default async function OverviewPage({
             )}
 
             <div className="space-y-8">
-              <PancakeSection pancakeIds={pancakeIds} allEndpoints={allEndpoints} />
-              <BotCakeSection />
+              <Suspense fallback={<div className="rounded-lg border border-slate-800 bg-slate-900 p-6 animate-pulse"><div className="h-5 w-40 rounded bg-slate-800" /><div className="mt-4 h-48 rounded bg-slate-800" /></div>}>
+                <PancakeSection pancakeIds={pancakeIds} allEndpoints={allEndpoints} />
+              </Suspense>
+              <Suspense fallback={<div className="rounded-lg border border-slate-800 bg-slate-900 p-6 animate-pulse"><div className="h-5 w-40 rounded bg-slate-800" /><div className="mt-4 h-48 rounded bg-slate-800" /></div>}>
+                <BotCakeSection />
+              </Suspense>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -394,14 +399,18 @@ export default async function OverviewPage({
         {isPancakeShop && (
           <>
             <StatusCardGrid data={cardData} />
-            <PancakeSection endpointId={endpointId} pancakeIds={pancakeIds} allEndpoints={allEndpoints} />
+            <Suspense fallback={<div className="rounded-lg border border-slate-800 bg-slate-900 p-6 animate-pulse"><div className="h-5 w-40 rounded bg-slate-800" /><div className="mt-4 h-48 rounded bg-slate-800" /></div>}>
+              <PancakeSection endpointId={endpointId} pancakeIds={pancakeIds} allEndpoints={allEndpoints} />
+            </Suspense>
           </>
         )}
 
         {isBotCake && (
           <>
             <StatusCardGrid data={cardData} />
-            <BotCakeSection />
+            <Suspense fallback={<div className="rounded-lg border border-slate-800 bg-slate-900 p-6 animate-pulse"><div className="h-5 w-40 rounded bg-slate-800" /><div className="mt-4 h-48 rounded bg-slate-800" /></div>}>
+              <BotCakeSection />
+            </Suspense>
           </>
         )}
       </div>
