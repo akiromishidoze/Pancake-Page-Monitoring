@@ -60,10 +60,9 @@ function StatusCardGrid({ data }: { data: StatusCardData }) {
   );
 }
 
-async function PancakeSection({ endpointId, pancakeIds }: { endpointId?: string; pancakeIds: string[] }) {
+async function PancakeSection({ endpointId, pancakeIds, allEndpoints }: { endpointId?: string; pancakeIds: string[]; allEndpoints: { id: string; shop_label?: string | null; name: string }[] }) {
   let allPages: PageStateRow[] = [];
-  let endpoints = await listEndpoints();
-  let pancakeEndpoints = endpoints.filter(e => e.id !== 'botcake-platform' && pancakeIds.includes(e.id));
+  let pancakeEndpoints = allEndpoints.filter(e => e.id !== 'botcake-platform' && pancakeIds.includes(e.id));
 
   if (endpointId) {
     allPages = await getLatestPageStates(endpointId);
@@ -164,10 +163,11 @@ async function PancakeSection({ endpointId, pancakeIds }: { endpointId?: string;
 }
 
 async function BotCakeSection() {
-  const [pages, overrides, latestRun] = await Promise.all([
+  const [pages, overrides, latestRun, botCakeHistory] = await Promise.all([
     getLatestPageStates('botcake-platform'),
     getBotCakeOverrides(),
     getLatestRun('botcake-platform'),
+    getRunHistory('botcake-platform', 200),
   ]);
   if (pages.length === 0) return null;
   const overrideIds = [...overrides.keys()];
@@ -183,7 +183,6 @@ async function BotCakeSection() {
     { label: 'Inactive (no activity)', count: pages.filter(p => !p.is_activated && p.activation_reason === 'no-activity').length, color: 'text-slate-500' },
   ].filter(b => b.count > 0);
 
-  const botCakeHistory = await getRunHistory('botcake-platform', 200);
   const botCakeTrend = botCakeHistory.length >= 2
     ? [{
         label: 'BotCake Active',
@@ -340,7 +339,7 @@ export default async function OverviewPage({
             )}
 
             <div className="space-y-8">
-              <PancakeSection pancakeIds={pancakeIds} />
+              <PancakeSection pancakeIds={pancakeIds} allEndpoints={allEndpoints} />
               <BotCakeSection />
             </div>
 
@@ -395,7 +394,7 @@ export default async function OverviewPage({
         {isPancakeShop && (
           <>
             <StatusCardGrid data={cardData} />
-            <PancakeSection endpointId={endpointId} pancakeIds={pancakeIds} />
+            <PancakeSection endpointId={endpointId} pancakeIds={pancakeIds} allEndpoints={allEndpoints} />
           </>
         )}
 
