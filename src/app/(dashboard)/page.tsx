@@ -383,6 +383,17 @@ export default async function OverviewPage({
                       <dt className="text-slate-400">Ingest endpoint</dt>
                       <dd className="font-mono text-xs">POST /api/ingest</dd>
                     </div>
+                    {allEndpoints.filter(e => e.token_expires_at).map(ep => {
+                      const diffMs = new Date(ep.token_expires_at!).getTime() - Date.now();
+                      const diffDays = Math.round(diffMs / 86400000);
+                      const tone = diffMs < 0 ? 'text-red-400' : diffDays <= 7 ? 'text-yellow-400' : 'text-green-400';
+                      return (
+                        <div key={ep.id} className="flex justify-between">
+                          <dt className="text-slate-400">{ep.name} token</dt>
+                          <dd className={`font-mono ${tone}`}>{diffMs < 0 ? `expired` : `${diffDays}d`}</dd>
+                        </div>
+                      );
+                    })}
                   </dl>
                 </div>
 
