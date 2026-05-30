@@ -570,7 +570,7 @@ export async function getLatestRun(endpointId?: string): Promise<RunRow | undefi
 
 export async function getRunHistory(endpointId: string, limit = 100): Promise<RunRow[]> {
   await ensureMigrated();
-  const r = await pool.query('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at ASC LIMIT $2', [endpointId, limit]);
+  const r = await pool.query('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT $2', [endpointId, limit]);
   return r.rows as RunRow[];
 }
 
@@ -580,7 +580,7 @@ export async function getRunHistories(endpointIds: string[], limit = 100): Promi
   const placeholders = endpointIds.map((_, i) => `$${i + 1}`).join(',');
   const r = await pool.query(`
     SELECT * FROM runs WHERE endpoint_id IN (${placeholders})
-    ORDER BY endpoint_id, generated_at ASC
+    ORDER BY endpoint_id, generated_at DESC
   `, endpointIds);
   const map = new Map<string, RunRow[]>();
   for (const row of r.rows as RunRow[]) {
