@@ -16,6 +16,8 @@ const pool = new Pool({
   password: parsed.password || undefined,
   ssl: parsed.ssl === true || parsed.ssl === 'true' ? { rejectUnauthorized: false } : (parsed.ssl ? { rejectUnauthorized: false } : undefined),
   max: isPgBouncer ? 5 : 20,
+  connectionTimeoutMillis: 10_000,
+  idleTimeoutMillis: 30_000,
   pgbouncer: isPgBouncer || undefined,
 } as any);
 
