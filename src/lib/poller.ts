@@ -37,8 +37,8 @@ export async function refreshAll() {
   return tracer.startActiveSpan('poller.refreshAll', async (span) => {
     _lastPolledAt = new Date().toISOString();
     await Promise.all([refreshBotCake(), refreshPancake()]);
-    await setSetting('last_scheduled_run', Date.now().toString());
     broadcastSSE('refresh', JSON.stringify({ source: 'refresh-all', all_endpoints: true }));
+    await setSetting('last_scheduled_run', Date.now().toString()).catch(e => log.error({ err: e }, 'Failed to update last_scheduled_run'));
     span.end();
   });
 }
