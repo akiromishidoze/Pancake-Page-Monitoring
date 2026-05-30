@@ -34,7 +34,8 @@ export function ActiveTrendChart({ series }: { series: Series[] }) {
     // Use the already-filtered series so chart respects the selected range
     for (const s of filtered) {
       for (const d of s.data) {
-        const key = d.time.slice(0, 16);
+        const timeStr = typeof d.time === 'string' ? d.time : new Date(d.time).toISOString();
+        const key = timeStr.slice(0, 16);
         timestamps.add(key);
         if (!merged.has(key)) merged.set(key, {});
         merged.get(key)![`${s.label}_active`] = d.active;
