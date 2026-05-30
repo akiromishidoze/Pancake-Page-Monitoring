@@ -970,7 +970,9 @@ export async function pruneOldRuns(retentionDays: number): Promise<number> {
   const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
   const cutoffStr = cutoff.toISOString();
 
-  // Drop old page_states partitions (much faster than DELETE CASCADE)
+  const r = await pool.query('DELETE FROM runs WHERE generated_at < $1', [cutoffStr]);
+
+  // Drop now-empty old partitions (space reclamation — cascade already cleaned data)
   const partitions = await pool.query(
     `SELECT inhrelid::regclass::text AS name FROM pg_inherits
      WHERE inhparent = 'page_states'::regclass`,
@@ -985,8 +987,6 @@ export async function pruneOldRuns(retentionDays: number): Promise<number> {
       }
     }
   }
-
-  const r = await pool.query('DELETE FROM runs WHERE generated_at < $1', [cutoffStr]);
   return r.rowCount ?? 0;
 }
 
