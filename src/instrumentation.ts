@@ -22,6 +22,10 @@ export async function register() {
     log.warn('Optional env var FB_ACCESS_TOKEN is not set');
   }
 
+  if (process.env['INGEST_IP_ALLOWLIST']) {
+    log.info('INGEST_IP_ALLOWLIST is set — ingest restricted to allowed IPs');
+  }
+
   const { initHttpAgent } = await import('./lib/http');
   initHttpAgent();
 

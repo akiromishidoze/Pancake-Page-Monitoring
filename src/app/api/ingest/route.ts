@@ -6,37 +6,56 @@ import { NextResponse } from 'next/server';
 import { getEndpointByApiKey, insertSnapshot, touchEndpoint, type SlimPage } from '@/lib/db';
 import { checkAlertsForRun } from '@/lib/notify';
 import { broadcastSSE } from '@/lib/sse';
-import { cors, corsOptions } from '@/lib/cors';
+import { corsReflectOrigin, corsOptions } from '@/lib/cors';
 import { IngestBodySchema } from '@/lib/schemas';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('ingest');
 
+function isAllowedIp(ip: string): boolean {
+  const allowed = process.env['INGEST_IP_ALLOWLIST'];
+  if (!allowed) return true;
+  return allowed.split(',').map(s => s.trim()).some(a => a === ip || a === '0.0.0.0/0');
+}
+
+function respond(res: NextResponse, req: Request): NextResponse {
+  return corsReflectOrigin(res, req.headers.get('origin'));
+}
+
 export async function POST(req: Request) {
+  const ip = getClientIp(req);
+  if (!isAllowedIp(ip)) {
+    return respond(NextResponse.json({ ok: false, error: 'IP not allowed' }, { status: 403 }), req);
+  }
+
+  const rateLimited = rateLimit(ip, { store: 'ingest', max: 60 });
+  if (rateLimited) return respond(rateLimited, req);
+
   const apiKey = req.headers.get('x-api-key') || req.headers.get('X-Api-Key');
   if (!apiKey) {
-    return cors(NextResponse.json({ ok: false, error: 'Missing X-Api-Key header' }, { status: 401 }));
+    return respond(NextResponse.json({ ok: false, error: 'Missing X-Api-Key header' }, { status: 401 }), req);
   }
 
   const endpoint = await getEndpointByApiKey(apiKey);
   if (!endpoint) {
-    return cors(NextResponse.json({ ok: false, error: 'Invalid or inactive API key' }, { status: 401 }));
+    return respond(NextResponse.json({ ok: false, error: 'Invalid or inactive API key' }, { status: 401 }), req);
   }
 
   if (endpoint.token_expires_at && new Date(endpoint.token_expires_at) < new Date()) {
-    return cors(NextResponse.json({ ok: false, error: 'API key has expired' }, { status: 401 }));
+    return respond(NextResponse.json({ ok: false, error: 'API key has expired' }, { status: 401 }), req);
   }
 
   let raw: unknown;
   try {
     raw = await req.json();
   } catch {
-    return cors(NextResponse.json({ ok: false, error: 'Invalid JSON body' }, { status: 400 }));
+    return respond(NextResponse.json({ ok: false, error: 'Invalid JSON body' }, { status: 400 }), req);
   }
 
   const parsed = IngestBodySchema.safeParse(raw);
   if (!parsed.success) {
-    return cors(NextResponse.json({ ok: false, error: 'Invalid request body', details: parsed.error.flatten() }, { status: 400 }));
+    return respond(NextResponse.json({ ok: false, error: 'Invalid request body', details: parsed.error.flatten() }, { status: 400 }), req);
   }
 
   const body = parsed.data;
@@ -98,17 +117,17 @@ export async function POST(req: Request) {
       checkAlertsForRun(run_id).catch(e => log.error({ err: e }, 'alert check error'));
     }
 
-    return cors(NextResponse.json({
+    return respond(NextResponse.json({
       ok: true,
       inserted: result.inserted,
       endpoint: endpoint.name,
       run_id,
-    }));
+    }), req);
   } catch (e) {
-    return cors(NextResponse.json(
+    return respond(NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : String(e) },
       { status: 500 },
-    ));
+    ), req);
   }
 }
 
