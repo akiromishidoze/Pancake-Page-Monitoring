@@ -45,4 +45,59 @@ export async function register() {
       log.error({ err }, 'background workers failed');
     }
   }, 10_000);
+
+  // ── Graceful shutdown on SIGTERM/SIGINT ──────────────────────────────
+  let _shuttingDown = false;
+
+  async function gracefulShutdown(signal: string) {
+    if (_shuttingDown) return;
+    _shuttingDown = true;
+    log.info('received %s — shutting down gracefully…', signal);
+
+    // Safety timeout: force exit if cleanup takes too long
+    // PM2 kill_timeout is 10s, so we use 8s to stay under that
+    const forceTimer = setTimeout(() => {
+      log.warn('graceful shutdown timed out after 8s — forcing exit');
+      process.exit(1);
+    }, 8_000);
+    forceTimer.unref();
+
+    try {
+      const { stopPoller } = await import('./lib/poller');
+      stopPoller();
+      log.info('poller stopped');
+    } catch (err) {
+      log.error({ err }, 'error stopping poller');
+    }
+
+    try {
+      const { stopScheduler } = await import('./lib/scheduler');
+      stopScheduler();
+      log.info('scheduler stopped');
+    } catch (err) {
+      log.error({ err }, 'error stopping scheduler');
+    }
+
+    try {
+      const { stopEviction } = await import('./lib/sse');
+      stopEviction();
+      log.info('SSE eviction stopped');
+    } catch (err) {
+      log.error({ err }, 'error stopping SSE eviction');
+    }
+
+    try {
+      const { pool } = await import('./lib/db');
+      await pool.end();
+      log.info('DB pool closed');
+    } catch (err) {
+      log.error({ err }, 'error closing DB pool');
+    }
+
+    log.info('graceful shutdown complete');
+    process.exit(0);
+  }
+
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }

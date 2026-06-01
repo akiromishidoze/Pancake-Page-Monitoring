@@ -44,6 +44,13 @@ export function broadcastSSE(event: string, data: string) {
   }
 }
 
+export function stopEviction() {
+  if (_evictionTimer) {
+    clearInterval(_evictionTimer);
+    _evictionTimer = null;
+  }
+}
+
 export function getClientCount() {
   return clients.size;
 }
