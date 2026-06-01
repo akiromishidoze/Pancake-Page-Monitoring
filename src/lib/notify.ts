@@ -122,13 +122,20 @@ async function loadDedupCache(): Promise<Map<string, number>> {
   return dedupCache;
 }
 
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
 async function persistDedupCache(): Promise<void> {
   if (dedupCache === null) return;
-  const obj: Record<string, number> = {};
-  for (const [key, expiry] of dedupCache.entries()) {
-    obj[key] = expiry;
-  }
-  await setSetting(SETTINGS_KEY, JSON.stringify(obj));
+  if (persistTimer) return; // debounce: already scheduled
+  const snapshot = dedupCache;
+  persistTimer = setTimeout(async () => {
+    persistTimer = null;
+    const obj: Record<string, number> = {};
+    for (const [key, expiry] of snapshot.entries()) {
+      obj[key] = expiry;
+    }
+    await setSetting(SETTINGS_KEY, JSON.stringify(obj));
+  }, 30_000);
 }
 
 async function isDuplicate(dedupKey: string): Promise<boolean> {

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { apiCatch } from '@/lib/errors';
-import { getSetting, listEndpoints } from '@/lib/db';
+import { getSetting, listEndpoints, pool } from '@/lib/db';
 import { cors, corsOptions } from '@/lib/cors';
 
 const POLL_INTERVAL_MS = 60_000;
@@ -12,6 +12,7 @@ export async function OPTIONS() {
 
 export async function GET() {
   try {
+    await pool.query('SELECT 1');
     const allEndpoints = await listEndpoints();
     const endpoints = allEndpoints.filter(ep => ep.is_active);
   const now = Date.now();
@@ -36,6 +37,7 @@ export async function GET() {
 
   return cors(NextResponse.json({
     ok: allOk && anyData,
+    db: 'connected',
     poll_interval_ms: POLL_INTERVAL_MS,
     stale_threshold_ms: STALE_THRESHOLD_MS,
     endpoints: checks,
