@@ -3,6 +3,7 @@
 
 import { NextResponse } from 'next/server';
 import { listEndpoints, upsertEndpoint } from '@/lib/db';
+import { EndpointCreateSchema } from '@/lib/schemas';
 
 export async function GET() {
   try {
@@ -22,25 +23,27 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    let body: Record<string, unknown>;
+    let raw: unknown;
     try {
-      body = await req.json();
+      raw = await req.json();
     } catch {
       return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
     }
 
-    if (!body.name || !body.api_key) {
-      return NextResponse.json({ ok: false, error: 'name and api_key are required' }, { status: 400 });
+    const parsed = EndpointCreateSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json({ ok: false, error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
     }
 
+    const body = parsed.data;
     const endpoint = await upsertEndpoint({
-      id: (body.id as string) || undefined,
-      name: body.name as string,
-      api_key: body.api_key as string,
-      url: (body.url as string) || null,
-      access_token: (body.access_token as string) || null,
-      token_expires_at: (body.token_expires_at as string) || null,
-      is_active: (body.is_active as boolean) ?? true,
+      id: body.id,
+      name: body.name,
+      api_key: body.api_key,
+      url: body.url ?? null,
+      access_token: body.access_token ?? null,
+      token_expires_at: body.token_expires_at ?? null,
+      is_active: body.is_active,
     });
 
     return NextResponse.json({

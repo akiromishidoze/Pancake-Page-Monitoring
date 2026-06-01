@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { listPlatformConnectors, upsertPlatformConnector, deletePlatformConnector, getPlatformConnector } from '@/lib/db';
+import { ConnectorCreateSchema } from '@/lib/schemas';
 
 export async function GET() {
   try {
@@ -15,27 +16,29 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    let body: Record<string, unknown>;
+    let raw: unknown;
     try {
-      body = await req.json();
+      raw = await req.json();
     } catch {
       return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
     }
 
-    if (!body.name || !body.platform_type || !body.api_url) {
-      return NextResponse.json({ ok: false, error: 'name, platform_type, and api_url are required' }, { status: 400 });
+    const parsed = ConnectorCreateSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json({ ok: false, error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
     }
 
+    const body = parsed.data;
     const connector = await upsertPlatformConnector({
-      id: (body.id as string) || undefined,
-      name: body.name as string,
-      platform_type: body.platform_type as string,
-      api_url: body.api_url as string,
-      auth_header: (body.auth_header as string) || null,
-      auth_token: (body.auth_token as string) || null,
-      json_path: (body.json_path as string) || null,
-      interval_ms: (body.interval_ms as number) || 60000,
-      is_active: (body.is_active as boolean) ?? true,
+      id: body.id,
+      name: body.name,
+      platform_type: body.platform_type,
+      api_url: body.api_url,
+      auth_header: body.auth_header ?? null,
+      auth_token: body.auth_token ?? null,
+      json_path: body.json_path ?? null,
+      interval_ms: body.interval_ms,
+      is_active: body.is_active,
     });
 
     return NextResponse.json({ ok: true, connector });

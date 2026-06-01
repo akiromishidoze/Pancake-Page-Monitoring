@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { validateCredentials, hashPassword } from '@/lib/auth';
 import { setSetting, logAuditEntry } from '@/lib/db';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { ChangePasswordSchema } from '@/lib/schemas';
 
 export async function POST(req: Request) {
   try {
@@ -9,14 +10,22 @@ export async function POST(req: Request) {
     const rateLimited = rateLimit(ip, { store: 'change-password', max: 5 });
     if (rateLimited) return rateLimited;
 
-    const { current_email, current_password, new_email, new_password } = await req.json();
-
-    if (!current_password) {
-      return NextResponse.json({ ok: false, error: 'Current password is required' }, { status: 400 });
+    let raw: unknown;
+    try {
+      raw = await req.json();
+    } catch {
+      return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
     }
 
+    const parsed = ChangePasswordSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json({ ok: false, error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+    }
+
+    const { current_email, current_password, new_email, new_password } = parsed.data;
+
     // Validate current credentials using bcrypt-aware comparison
-    if (!(await validateCredentials(current_email || 'admin', current_password))) {
+    if (!(await validateCredentials(current_email, current_password))) {
       return NextResponse.json({ ok: false, error: 'Current credentials are incorrect' }, { status: 403 });
     }
 
@@ -27,9 +36,6 @@ export async function POST(req: Request) {
     const changes: string[] = [];
 
     if (new_password) {
-      if (new_password.length < 8) {
-        return NextResponse.json({ ok: false, error: 'Password must be at least 8 characters' }, { status: 400 });
-      }
       // Hash before storing — never save plain text
       const hashed = await hashPassword(new_password);
       await setSetting('auth_password', hashed);

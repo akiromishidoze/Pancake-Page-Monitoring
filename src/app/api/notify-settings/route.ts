@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSetting, setSetting, logAuditEntry } from '@/lib/db';
 import { encrypt } from '@/lib/crypto';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { NotifySettingsSchema } from '@/lib/schemas';
 
 export async function GET() {
   const slackWebhook = (await getSetting('notify_slack_webhook')) || '';
@@ -31,8 +32,19 @@ export async function POST(req: Request) {
   if (rateLimited) return rateLimited;
 
   try {
-    const body = await req.json();
-    const { slack_webhook, smtp_host, smtp_port, smtp_user, smtp_pass, email_from, email_to } = body;
+    let raw: unknown;
+    try {
+      raw = await req.json();
+    } catch {
+      return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
+    }
+
+    const parsed = NotifySettingsSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json({ ok: false, error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+    }
+
+    const { slack_webhook, smtp_host, smtp_port, smtp_user, smtp_pass, email_from, email_to } = parsed.data;
 
     const changes: string[] = [];
 

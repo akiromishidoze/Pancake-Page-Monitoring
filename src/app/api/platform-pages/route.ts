@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { listPlatformPages, upsertPlatformPage } from '@/lib/db';
+import { PlatformPageCreateSchema } from '@/lib/schemas';
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -9,22 +10,24 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  let body: Record<string, unknown>;
+  let raw: unknown;
   try {
-    body = await req.json();
+    raw = await req.json();
   } catch {
     return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
   }
 
-  if (!body.endpoint_id || !body.page_name) {
-    return NextResponse.json({ ok: false, error: 'endpoint_id and page_name are required' }, { status: 400 });
+  const parsed = PlatformPageCreateSchema.safeParse(raw);
+  if (!parsed.success) {
+    return NextResponse.json({ ok: false, error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
   }
 
+  const body = parsed.data;
   const page = await upsertPlatformPage({
-    endpoint_id: body.endpoint_id as string,
-    page_name: body.page_name as string,
-    page_url: (body.page_url as string) || null,
-    is_active: (body.is_active as boolean) ?? true,
+    endpoint_id: body.endpoint_id,
+    page_name: body.page_name,
+    page_url: body.page_url ?? null,
+    is_active: body.is_active,
   });
 
   return NextResponse.json({ ok: true, page });

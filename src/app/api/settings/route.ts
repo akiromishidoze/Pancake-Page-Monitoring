@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSetting, setSetting, logAuditEntry } from '@/lib/db';
+import { RetentionSettingsSchema } from '@/lib/schemas';
 
 export async function GET() {
   const retentionDays = (await getSetting('retention_days')) || '90';
@@ -11,11 +12,22 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const { retention_days } = body;
+    let raw: unknown;
+    try {
+      raw = await req.json();
+    } catch {
+      return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
+    }
+
+    const parsed = RetentionSettingsSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json({ ok: false, error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+    }
+
+    const { retention_days } = parsed.data;
 
     if (retention_days !== undefined) {
-      const days = parseInt(retention_days, 10);
+      const days = typeof retention_days === 'string' ? parseInt(retention_days, 10) : retention_days;
       if (isNaN(days) || days < 0) {
         return NextResponse.json({ ok: false, error: 'Invalid retention_days' }, { status: 400 });
       }
