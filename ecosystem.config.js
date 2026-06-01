@@ -7,8 +7,9 @@ module.exports = {
     env: {
       NODE_ENV: 'production',
     },
-    out_file: '/var/log/page-monitor/out.log',
-    error_file: '/var/log/page-monitor/err.log',
+    out_file: './logs/out.log',
+    error_file: './logs/err.log',
+    log_date_format: 'YYYY-MM-DD HH:mm:ss.SSS',
     merge_logs: true,
     max_restarts: 10,
     min_uptime: 10000,
