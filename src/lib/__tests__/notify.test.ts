@@ -1,19 +1,16 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import nodemailer from 'nodemailer';
-import { sendAlert, checkAlertsForRun } from '../notify';
 
 // -- Mocks --
 
 const mockSettings = new Map<string, string>();
 const mockRuns = new Map<string, any>();
-let dedupPersisted = '';
 
 vi.mock('../db', () => {
   return {
     getSetting: vi.fn(async (key: string) => mockSettings.get(key) ?? null),
     setSetting: vi.fn(async (key: string, value: string) => {
       mockSettings.set(key, value);
-      if (key === 'notify_dedup') dedupPersisted = value;
     }),
     pool: {
       query: vi.fn(async (sql: string, params: any[]) => {
@@ -50,7 +47,6 @@ describe('notify module', () => {
     vi.clearAllMocks();
     mockSettings.clear();
     mockRuns.clear();
-    dedupPersisted = '';
     
     // Clear the internal dedup cache in notify.ts by forcing a reload with empty settings
     // Since dedupCache is a module-level variable, we can reset it by clearing the DB setting

@@ -43,12 +43,19 @@
 ### Tier 7 — Testing
 - T7#30 — Zero tests for API routes
 - T7#31 — Zero tests for poller
-- T7#32 — Zero tests for DB
-- T7#33 — Zero tests for alerts
+- [x] T7#32 — Zero tests for DB
+- [x] T7#33 — Zero tests for alerts
 
 ### Tier 8 — Infrastructure
-- T8#34 — Docker healthcheck missing
-- T8#35 — pg_dump missing `--no-owner`/`--no-privileges`
-- T8#36 — DB migrations not versioned
-- T8#37 — PM2 log dir not auto-created
-- T8#38–45 — Various infrastructure items
+- [ ] T8#34 — Docker healthcheck (replace curl with pg_isready or node script)
+- [ ] T8#35 — pg_dump flag audit (fix --clean --if-exists deprecation)
+- [ ] T8#36 — PM2 log directory config
+- [x] T8#37 — Graceful shutdown on SIGTERM/SIGINT
+- [ ] T8#38 — CORS audit (verify allowed origins match production)
+- [ ] T8#39 — Rate-limit tuning (adjust per-route limits)
+- [ ] T8#40 — Env var validation (warn on missing optional vars at startup)
+- [ ] T8#41 — Cache-Control headers on API responses
+- [ ] T8#42 — Session cleanup cron job
+- [ ] T8#43 — Request size limits
+- [ ] T8#44 — Version endpoint (GET /api/version)
+- [x] T8#45 — Asset fingerprinting for static files (Handled by Next.js)
