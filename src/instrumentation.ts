@@ -27,8 +27,7 @@ export async function register() {
   }
 
   if (!process.env['ENCRYPTION_KEY']) {
-    log.error('ENCRYPTION_KEY is not set — SMTP passwords cannot be encrypted/decrypted. Set it to a random 32+ character string.');
-    process.exit(1);
+    log.warn('ENCRYPTION_KEY is not set — SMTP passwords will not be encryptable. Set it if you use email notifications.');
   }
 
   const { initHttpAgent } = await import('./lib/http');
