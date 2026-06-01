@@ -38,6 +38,7 @@ const ICONS = {
   chevron: 'M9 18l6-6-6-6',
   collapse: 'M15 18l-6-6 6-6',
   settings: 'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z',
+  audit: 'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2M9 5h6m-6 4h6m-6 4h6m-6 4h4',
 };
 
 type NavItem = {
@@ -57,6 +58,7 @@ export function Sidebar() {
   const isPagesActive = pathname === '/pages' || pathname?.startsWith('/pages/platform');
   const isBotCakeActive = pathname === '/pages/platform/botcake-platform';
   const isSettingsActive = pathname === '/settings';
+  const isAuditActive = pathname === '/audit-log';
 
   const navItems: NavItem[] = [
     { href: '/', icon: ICONS.overview, label: 'Overview', active: pathname === '/' },
@@ -71,6 +73,7 @@ export function Sidebar() {
         { href: '/pages/platform/botcake-platform', label: 'BotCake Platform', active: isBotCakeActive },
       ],
     },
+    { href: '/audit-log', icon: ICONS.audit, label: 'Audit Log', active: isAuditActive },
     { href: '/settings', icon: ICONS.settings, label: 'Settings', active: isSettingsActive },
   ];
 
@@ -170,6 +173,7 @@ export function Sidebar() {
             </button>
           </div>
           <NavLink {...navItems[3]} label={navItems[3].label} />
+          <NavLink {...navItems[4]} label={navItems[4].label} />
         </div>
       </aside>
 
@@ -195,7 +199,17 @@ export function Sidebar() {
               ))}
               <NavGroup item={navItems[2]} isMobile />
             </nav>
-            <div className="border-t border-slate-800 px-3 py-3">
+            <div className="border-t border-slate-800 px-3 py-3 space-y-1">
+              <Link
+                href="/audit-log"
+                onClick={closeMobile}
+                className={`flex items-center px-3 py-2 gap-3 text-sm font-medium rounded-md transition-colors ${
+                  isAuditActive ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-800/50 hover:text-slate-300'
+                }`}
+              >
+                <SvgIcon d={ICONS.audit} size={16} />
+                <span>Audit Log</span>
+              </Link>
               <Link
                 href="/settings"
                 onClick={closeMobile}
