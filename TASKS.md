@@ -47,7 +47,7 @@
 - [x] T7#33 — Zero tests for alerts
 
 ### Tier 8 — Infrastructure
-- [ ] T8#34 — Docker healthcheck (replace curl with pg_isready or node script)
+- [x] T8#34 — Docker healthcheck (replace curl with pg_isready or node script)
 - [ ] T8#35 — pg_dump flag audit (fix --clean --if-exists deprecation)
 - [ ] T8#36 — PM2 log directory config
 - [x] T8#37 — Graceful shutdown on SIGTERM/SIGINT
