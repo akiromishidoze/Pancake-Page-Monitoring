@@ -15,7 +15,7 @@ export async function register() {
 
   if (!process.env['DATABASE_URL']) {
     log.error('MISSING REQUIRED ENV VAR: DATABASE_URL');
-    process.exit(1);
+    throw new Error('DATABASE_URL is required');
   }
 
   if (!process.env['FB_ACCESS_TOKEN']) {

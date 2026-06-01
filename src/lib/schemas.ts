@@ -87,8 +87,11 @@ export const ConnectorCreateSchema = z.object({
 });
 
 export const LoginSchema = z.object({
-  email: z.string().min(1, 'email is required'),
+  email: z.string().min(1, 'email is required').optional(),
+  username: z.string().min(1, 'username is required').optional(),
   password: z.string().min(1, 'password is required'),
+}).refine(data => data.email || data.username, {
+  message: 'Either email or username is required',
 });
 
 export const ChangePasswordSchema = z.object({

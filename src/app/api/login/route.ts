@@ -23,9 +23,10 @@ export async function POST(req: Request) {
       return apiError(ErrorCodes.VALIDATION_ERROR, 'Validation failed', 400, parsed.error.flatten());
     }
 
-    const { email, password } = parsed.data;
+    const { email, username, password } = parsed.data;
+    const identifier = email || username || 'admin';
 
-    if (!(await validateCredentials(email, password))) {
+    if (!(await validateCredentials(identifier, password))) {
       return apiError(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'Invalid credentials', 401);
     }
 
