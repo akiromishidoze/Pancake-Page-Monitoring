@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiCatch } from '@/lib/errors';
 import { getSetting } from '@/lib/db';
 
 export async function GET() {
@@ -11,9 +12,6 @@ export async function GET() {
 
     return NextResponse.json({ ok: true, isRunning });
   } catch (e) {
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e), isRunning: false },
-      { status: 500 }
-    );
+    return apiCatch(e);
   }
 }

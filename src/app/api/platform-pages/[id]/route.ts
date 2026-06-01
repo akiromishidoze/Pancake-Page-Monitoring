@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { getPlatformPage, upsertPlatformPage, deletePlatformPage } from '@/lib/db';
 import { PlatformPageUpdateSchema } from '@/lib/schemas';
 
@@ -7,19 +8,19 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const { id } = await params;
     const existing = await getPlatformPage(id);
     if (!existing) {
-      return NextResponse.json({ ok: false, error: 'Platform page not found' }, { status: 404 });
+      return apiError(ErrorCodes.NOT_FOUND, 'Platform page not found', 404);
     }
 
     let raw: unknown;
     try {
       raw = await req.json();
     } catch {
-      return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
+      return apiError(ErrorCodes.VALIDATION_INVALID_JSON, 'Invalid JSON', 400);
     }
 
     const parsed = PlatformPageUpdateSchema.safeParse(raw);
     if (!parsed.success) {
-      return NextResponse.json({ ok: false, error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+      return apiError(ErrorCodes.VALIDATION_ERROR, 'Validation failed', 400, parsed.error.flatten());
     }
 
     const body = parsed.data;
@@ -33,10 +34,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     return NextResponse.json({ ok: true, page });
   } catch (e) {
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    );
+    return apiCatch(e);
   }
 }
 
@@ -45,15 +43,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     const { id } = await params;
     const existing = await getPlatformPage(id);
     if (!existing) {
-      return NextResponse.json({ ok: false, error: 'Platform page not found' }, { status: 404 });
-    }
+    return apiError(ErrorCodes.NOT_FOUND, 'Platform page not found', 404);
+  }
 
-    await deletePlatformPage(id);
+  await deletePlatformPage(id);
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    );
+    return apiCatch(e);
   }
 }

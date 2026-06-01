@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { ErrorCodes } from '@/lib/errors';
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -12,7 +13,7 @@ export async function proxy(request: NextRequest) {
   const session = request.cookies.get('session')?.value;
   if (!session) {
     if (pathname.startsWith('/api/')) {
-      return NextResponse.json({ ok: false, error: 'Not authenticated' }, { status: 401 });
+      return NextResponse.json({ ok: false, error: 'Not authenticated', code: ErrorCodes.AUTH_REQUIRED }, { status: 401 });
     }
     return NextResponse.redirect(new URL('/login', request.url));
   }
@@ -21,7 +22,7 @@ export async function proxy(request: NextRequest) {
   const valid = await validateSession(session);
   if (!valid) {
     if (pathname.startsWith('/api/')) {
-      return NextResponse.json({ ok: false, error: 'Not authenticated' }, { status: 401 });
+      return NextResponse.json({ ok: false, error: 'Not authenticated', code: ErrorCodes.AUTH_SESSION_EXPIRED }, { status: 401 });
     }
     return NextResponse.redirect(new URL('/login', request.url));
   }
@@ -29,7 +30,7 @@ export async function proxy(request: NextRequest) {
   const { isStateChangingRequest, checkCsrf } = await import('@/lib/csrf');
   if (isStateChangingRequest(request.method) && !checkCsrf(request)) {
     if (pathname.startsWith('/api/')) {
-      return NextResponse.json({ ok: false, error: 'CSRF validation failed' }, { status: 403 });
+      return NextResponse.json({ ok: false, error: 'CSRF validation failed', code: ErrorCodes.CSRF_FAILED }, { status: 403 });
     }
     return NextResponse.redirect(new URL('/login', request.url));
   }

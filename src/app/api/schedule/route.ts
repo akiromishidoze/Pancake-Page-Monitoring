@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { getSetting, setSetting } from '@/lib/db';
 import { ScheduleSchema } from '@/lib/schemas';
 
@@ -7,10 +8,7 @@ export async function GET() {
     const interval = (await getSetting('schedule_interval')) || 'off';
     return NextResponse.json({ ok: true, interval });
   } catch (e) {
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 }
-    );
+    return apiCatch(e);
   }
 }
 
@@ -20,12 +18,12 @@ export async function POST(req: Request) {
     try {
       raw = await req.json();
     } catch {
-      return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
+      return apiError(ErrorCodes.VALIDATION_INVALID_JSON, 'Invalid JSON', 400);
     }
 
     const parsed = ScheduleSchema.safeParse(raw);
     if (!parsed.success) {
-      return NextResponse.json({ ok: false, error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+      return apiError(ErrorCodes.VALIDATION_ERROR, 'Validation failed', 400, parsed.error.flatten());
     }
 
     const { interval } = parsed.data;
@@ -34,9 +32,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, interval });
   } catch (e) {
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 }
-    );
+    return apiCatch(e);
   }
 }

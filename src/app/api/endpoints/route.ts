@@ -2,6 +2,7 @@
 // POST /api/endpoints — create or update an endpoint
 
 import { NextResponse } from 'next/server';
+import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { listEndpoints, upsertEndpoint } from '@/lib/db';
 import { EndpointCreateSchema } from '@/lib/schemas';
 
@@ -14,10 +15,7 @@ export async function GET() {
     }));
     return NextResponse.json({ ok: true, endpoints: safe });
   } catch (e) {
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    );
+    return apiCatch(e);
   }
 }
 
@@ -27,12 +25,12 @@ export async function POST(req: Request) {
     try {
       raw = await req.json();
     } catch {
-      return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
+      return apiError(ErrorCodes.VALIDATION_INVALID_JSON, 'Invalid JSON', 400);
     }
 
     const parsed = EndpointCreateSchema.safeParse(raw);
     if (!parsed.success) {
-      return NextResponse.json({ ok: false, error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+      return apiError(ErrorCodes.VALIDATION_ERROR, 'Validation failed', 400, parsed.error.flatten());
     }
 
     const body = parsed.data;
@@ -51,9 +49,6 @@ export async function POST(req: Request) {
       endpoint: { ...endpoint, api_key: undefined },
     });
   } catch (e) {
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    );
+    return apiCatch(e);
   }
 }

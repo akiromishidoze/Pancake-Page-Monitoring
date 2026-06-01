@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ErrorCodes } from './errors';
 
 const _stores = new Map<string, Map<string, { count: number; resetAt: number }>>();
 
@@ -23,7 +24,7 @@ export function rateLimit(
   }
   entry.count++;
   if (entry.count > max) {
-    return NextResponse.json({ ok: false, error: 'Too many requests' }, { status: 429 });
+    return NextResponse.json({ ok: false, error: 'Too many requests', code: ErrorCodes.RATE_LIMITED }, { status: 429 });
   }
   return null;
 }

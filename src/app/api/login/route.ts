@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { cookies } from 'next/headers';
 import { validateCredentials, createSession, isDefaultPassword } from '@/lib/auth';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
@@ -14,18 +15,18 @@ export async function POST(req: Request) {
     try {
       raw = await req.json();
     } catch {
-      return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
+      return apiError(ErrorCodes.VALIDATION_INVALID_JSON, 'Invalid JSON', 400);
     }
 
     const parsed = LoginSchema.safeParse(raw);
     if (!parsed.success) {
-      return NextResponse.json({ ok: false, error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+      return apiError(ErrorCodes.VALIDATION_ERROR, 'Validation failed', 400, parsed.error.flatten());
     }
 
     const { email, password } = parsed.data;
 
     if (!(await validateCredentials(email, password))) {
-      return NextResponse.json({ ok: false, error: 'Invalid credentials' }, { status: 401 });
+      return apiError(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'Invalid credentials', 401);
     }
 
     const token = await createSession();
@@ -42,9 +43,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, must_change_password: mustChangePassword });
   } catch (e) {
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    );
+    return apiCatch(e);
   }
 }

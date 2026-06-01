@@ -2,6 +2,7 @@
 // GET  /api/backup — list recent backups
 
 import { NextResponse } from 'next/server';
+import { apiCatch } from '@/lib/errors';
 import { pool } from '@/lib/db';
 
 export async function POST() {
@@ -35,10 +36,7 @@ export async function POST() {
 
     return NextResponse.json({ ok: true, file: backupFile, size_kb: sizeKb });
   } catch (e) {
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    );
+    return apiCatch(e);
   }
 }
 

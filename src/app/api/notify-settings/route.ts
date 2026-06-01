@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { getSetting, setSetting, logAuditEntry } from '@/lib/db';
 import { encrypt } from '@/lib/crypto';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
@@ -36,12 +37,12 @@ export async function POST(req: Request) {
     try {
       raw = await req.json();
     } catch {
-      return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
+      return apiError(ErrorCodes.VALIDATION_INVALID_JSON, 'Invalid JSON', 400);
     }
 
     const parsed = NotifySettingsSchema.safeParse(raw);
     if (!parsed.success) {
-      return NextResponse.json({ ok: false, error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+      return apiError(ErrorCodes.VALIDATION_ERROR, 'Validation failed', 400, parsed.error.flatten());
     }
 
     const { slack_webhook, smtp_host, smtp_port, smtp_user, smtp_pass, email_from, email_to } = parsed.data;
@@ -84,9 +85,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, message: 'Notification settings updated' });
   } catch (e) {
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    );
+    return apiCatch(e);
   }
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { getEndpointByApiKey, getLatestRun } from '@/lib/db';
 import { refreshBotCake } from '@/lib/poller';
 import { broadcastSSE } from '@/lib/sse';
@@ -7,12 +8,12 @@ import { cors, corsOptions } from '@/lib/cors';
 async function handler(apiKey: string | null) {
   try {
     if (!apiKey) {
-      return cors(NextResponse.json({ ok: false, error: 'Missing X-Api-Key header or ?key=' }, { status: 401 }));
+      return cors(apiError(ErrorCodes.AUTH_REQUIRED, 'Missing X-Api-Key header or ?key=', 401));
     }
 
     const endpoint = await getEndpointByApiKey(apiKey);
     if (!endpoint || endpoint.id !== 'botcake-platform') {
-      return cors(NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 }));
+      return cors(apiError(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'Unauthorized', 401));
     }
 
     await refreshBotCake();
@@ -28,10 +29,7 @@ async function handler(apiKey: string | null) {
       summary: latest?.raw_summary ? JSON.parse(latest.raw_summary) : null,
     }));
   } catch (e) {
-    return cors(NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    ));
+    return cors(apiCatch(e));
   }
 }
 

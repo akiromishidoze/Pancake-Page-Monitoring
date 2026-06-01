@@ -2,6 +2,7 @@
 // DELETE /api/endpoints/:id — delete an endpoint
 
 import { NextResponse } from 'next/server';
+import { ErrorCodes, apiError } from '@/lib/errors';
 import { getEndpoint, upsertEndpoint, deleteEndpoint } from '@/lib/db';
 import { EndpointUpdateSchema } from '@/lib/schemas';
 
@@ -9,19 +10,19 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const { id } = await params;
   const existing = await getEndpoint(id);
   if (!existing) {
-    return NextResponse.json({ ok: false, error: 'Endpoint not found' }, { status: 404 });
+    return apiError(ErrorCodes.NOT_FOUND, 'Endpoint not found', 404);
   }
 
   let raw: unknown;
   try {
     raw = await req.json();
   } catch {
-    return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
+    return apiError(ErrorCodes.VALIDATION_INVALID_JSON, 'Invalid JSON', 400);
   }
 
   const parsed = EndpointUpdateSchema.safeParse(raw);
   if (!parsed.success) {
-    return NextResponse.json({ ok: false, error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+    return apiError(ErrorCodes.VALIDATION_ERROR, 'Validation failed', 400, parsed.error.flatten());
   }
 
   const body = parsed.data;
@@ -42,7 +43,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const existing = await getEndpoint(id);
   if (!existing) {
-    return NextResponse.json({ ok: false, error: 'Endpoint not found' }, { status: 404 });
+    return apiError(ErrorCodes.NOT_FOUND, 'Endpoint not found', 404);
   }
 
   await deleteEndpoint(id);

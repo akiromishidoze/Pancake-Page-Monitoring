@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { getSetting } from '@/lib/db';
 import { sendAlert } from '@/lib/notify';
 
@@ -6,7 +7,7 @@ export async function POST() {
   try {
     const webhook = await getSetting('notify_slack_webhook');
     if (!webhook) {
-      return NextResponse.json({ ok: false, error: 'No Slack webhook configured' }, { status: 400 });
+      return apiError(ErrorCodes.MISSING_FIELD, 'No Slack webhook configured', 400);
     }
 
     await sendAlert({
@@ -19,9 +20,6 @@ export async function POST() {
 
     return NextResponse.json({ ok: true, message: 'Test notification sent' });
   } catch (e) {
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    );
+    return apiCatch(e);
   }
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiCatch } from '@/lib/errors';
 import { getLatestPageStates, getBotCakeOverrides } from '@/lib/db';
 import { cors, corsOptions } from '@/lib/cors';
 
@@ -39,9 +40,6 @@ export async function GET() {
     },
   }));
   } catch (e) {
-    return cors(NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    ));
+    return cors(apiCatch(e));
   }
 }

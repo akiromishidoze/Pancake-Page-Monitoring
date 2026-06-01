@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { getSetting, setSetting, logAuditEntry } from '@/lib/db';
 import { RetentionSettingsSchema } from '@/lib/schemas';
 
@@ -16,12 +17,12 @@ export async function POST(req: Request) {
     try {
       raw = await req.json();
     } catch {
-      return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
+      return apiError(ErrorCodes.VALIDATION_INVALID_JSON, 'Invalid JSON', 400);
     }
 
     const parsed = RetentionSettingsSchema.safeParse(raw);
     if (!parsed.success) {
-      return NextResponse.json({ ok: false, error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+      return apiError(ErrorCodes.VALIDATION_ERROR, 'Validation failed', 400, parsed.error.flatten());
     }
 
     const { retention_days } = parsed.data;
@@ -29,7 +30,7 @@ export async function POST(req: Request) {
     if (retention_days !== undefined) {
       const days = typeof retention_days === 'string' ? parseInt(retention_days, 10) : retention_days;
       if (isNaN(days) || days < 0) {
-        return NextResponse.json({ ok: false, error: 'Invalid retention_days' }, { status: 400 });
+        return apiError(ErrorCodes.INVALID_VALUE, 'Invalid retention_days', 400);
       }
       await setSetting('retention_days', String(days));
       const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '';
@@ -38,9 +39,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, message: 'Settings updated' });
   } catch (e) {
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    );
+    return apiCatch(e);
   }
 }

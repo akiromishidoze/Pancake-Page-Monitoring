@@ -3,6 +3,7 @@
 // Authenticated via X-Api-Key header matched against the endpoints table.
 
 import { NextResponse } from 'next/server';
+import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { getEndpointByApiKey, insertSnapshot, touchEndpoint, type SlimPage } from '@/lib/db';
 import { checkAlertsForRun } from '@/lib/notify';
 import { broadcastSSE } from '@/lib/sse';
@@ -26,7 +27,7 @@ function respond(res: NextResponse, req: Request): NextResponse {
 export async function POST(req: Request) {
   const ip = getClientIp(req);
   if (!isAllowedIp(ip)) {
-    return respond(NextResponse.json({ ok: false, error: 'IP not allowed' }, { status: 403 }), req);
+    return respond(apiError(ErrorCodes.FORBIDDEN_IP, 'IP not allowed', 403), req);
   }
 
   const rateLimited = rateLimit(ip, { store: 'ingest', max: 60 });
@@ -34,28 +35,28 @@ export async function POST(req: Request) {
 
   const apiKey = req.headers.get('x-api-key') || req.headers.get('X-Api-Key');
   if (!apiKey) {
-    return respond(NextResponse.json({ ok: false, error: 'Missing X-Api-Key header' }, { status: 401 }), req);
+    return respond(apiError(ErrorCodes.AUTH_REQUIRED, 'Missing X-Api-Key header', 401), req);
   }
 
   const endpoint = await getEndpointByApiKey(apiKey);
   if (!endpoint) {
-    return respond(NextResponse.json({ ok: false, error: 'Invalid or inactive API key' }, { status: 401 }), req);
+    return respond(apiError(ErrorCodes.AUTH_KEY_INVALID, 'Invalid or inactive API key', 401), req);
   }
 
   if (endpoint.token_expires_at && new Date(endpoint.token_expires_at) < new Date()) {
-    return respond(NextResponse.json({ ok: false, error: 'API key has expired' }, { status: 401 }), req);
+    return respond(apiError(ErrorCodes.AUTH_KEY_EXPIRED, 'API key has expired', 401), req);
   }
 
   let raw: unknown;
   try {
     raw = await req.json();
   } catch {
-    return respond(NextResponse.json({ ok: false, error: 'Invalid JSON body' }, { status: 400 }), req);
+    return respond(apiError(ErrorCodes.VALIDATION_INVALID_JSON, 'Invalid JSON body', 400), req);
   }
 
   const parsed = IngestBodySchema.safeParse(raw);
   if (!parsed.success) {
-    return respond(NextResponse.json({ ok: false, error: 'Invalid request body', details: parsed.error.flatten() }, { status: 400 }), req);
+    return respond(apiError(ErrorCodes.VALIDATION_ERROR, 'Invalid request body', 400, parsed.error.flatten()), req);
   }
 
   const body = parsed.data;
@@ -124,10 +125,7 @@ export async function POST(req: Request) {
       run_id,
     }), req);
   } catch (e) {
-    return respond(NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    ), req);
+    return respond(apiCatch(e), req);
   }
 }
 

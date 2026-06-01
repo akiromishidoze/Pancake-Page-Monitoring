@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiCatch } from '@/lib/errors';
 import { cookies } from 'next/headers';
 import { clearSession } from '@/lib/auth';
 
@@ -11,9 +12,6 @@ export async function POST() {
 
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    );
+    return apiCatch(e);
   }
 }

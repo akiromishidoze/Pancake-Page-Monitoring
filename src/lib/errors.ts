@@ -1,0 +1,35 @@
+import { NextResponse } from 'next/server';
+
+export const ErrorCodes = {
+  AUTH_REQUIRED: 'AUTH_REQUIRED',
+  AUTH_INVALID_CREDENTIALS: 'AUTH_INVALID_CREDENTIALS',
+  AUTH_SESSION_EXPIRED: 'AUTH_SESSION_EXPIRED',
+  AUTH_KEY_INVALID: 'AUTH_KEY_INVALID',
+  AUTH_KEY_EXPIRED: 'AUTH_KEY_EXPIRED',
+  AUTH_DEFAULT_CREDENTIALS: 'AUTH_DEFAULT_CREDENTIALS',
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
+  VALIDATION_INVALID_JSON: 'VALIDATION_INVALID_JSON',
+  NOT_FOUND: 'NOT_FOUND',
+  FORBIDDEN: 'FORBIDDEN',
+  FORBIDDEN_IP: 'FORBIDDEN_IP',
+  CSRF_FAILED: 'CSRF_FAILED',
+  RATE_LIMITED: 'RATE_LIMITED',
+  INTERNAL_ERROR: 'INTERNAL_ERROR',
+  MISSING_FIELD: 'MISSING_FIELD',
+  INVALID_VALUE: 'INVALID_VALUE',
+} as const;
+
+export type ErrorCode = string;
+
+export function apiError(code: ErrorCode, message: string, status: number = 400, details?: unknown): NextResponse {
+  const body: Record<string, unknown> = { ok: false, error: message, code };
+  if (details !== undefined) body.details = details;
+  return NextResponse.json(body, { status });
+}
+
+export function apiCatch(e: unknown, status: number = 500): NextResponse {
+  return NextResponse.json(
+    { ok: false, error: e instanceof Error ? e.message : String(e), code: ErrorCodes.INTERNAL_ERROR },
+    { status },
+  );
+}

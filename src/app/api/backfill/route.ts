@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiCatch } from '@/lib/errors';
 import { getRunCount, getSetting } from '@/lib/db';
 
 export async function GET() {
@@ -15,10 +16,7 @@ export async function GET() {
       note: 'Backfill is managed automatically by the platform poller. External systems can POST historical data to /api/ingest.',
     });
   } catch (e) {
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    );
+    return apiCatch(e);
   }
 }
 
@@ -30,9 +28,6 @@ export async function POST() {
       message: 'Backfill is automatic. Platform data is refreshed by the built-in poller every 60s. Push historical snapshots to /api/ingest if needed.',
     });
   } catch (e) {
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    );
+    return apiCatch(e);
   }
 }

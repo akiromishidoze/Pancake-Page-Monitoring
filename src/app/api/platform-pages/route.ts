@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ErrorCodes, apiError } from '@/lib/errors';
 import { listPlatformPages, upsertPlatformPage } from '@/lib/db';
 import { PlatformPageCreateSchema } from '@/lib/schemas';
 
@@ -14,12 +15,12 @@ export async function POST(req: Request) {
   try {
     raw = await req.json();
   } catch {
-    return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
+    return apiError(ErrorCodes.VALIDATION_INVALID_JSON, 'Invalid JSON', 400);
   }
 
   const parsed = PlatformPageCreateSchema.safeParse(raw);
   if (!parsed.success) {
-    return NextResponse.json({ ok: false, error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+    return apiError(ErrorCodes.VALIDATION_ERROR, 'Validation failed', 400, parsed.error.flatten());
   }
 
   const body = parsed.data;

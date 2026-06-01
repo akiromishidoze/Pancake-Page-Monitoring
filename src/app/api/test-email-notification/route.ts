@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiCatch } from '@/lib/errors';
 import { sendAlert } from '@/lib/notify';
 
 export async function POST() {
@@ -14,9 +15,6 @@ export async function POST() {
 
     return NextResponse.json({ ok: true, message: 'Test notification sent' });
   } catch (e) {
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    );
+    return apiCatch(e);
   }
 }

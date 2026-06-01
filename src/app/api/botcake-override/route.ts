@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { setBotCakeOverride, removeBotCakeOverride } from '@/lib/db';
 import { refreshAll } from '@/lib/poller';
 import { cors, corsOptions } from '@/lib/cors';
@@ -10,12 +11,12 @@ export async function POST(req: Request) {
     try {
       raw = await req.json();
     } catch {
-      return cors(NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }));
+      return cors(apiError(ErrorCodes.VALIDATION_INVALID_JSON, 'Invalid JSON', 400));
     }
 
     const parsed = BotCakeOverrideSchema.safeParse(raw);
     if (!parsed.success) {
-      return cors(NextResponse.json({ ok: false, error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 }));
+      return cors(apiError(ErrorCodes.VALIDATION_ERROR, 'Validation failed', 400, parsed.error.flatten()));
     }
 
     const body = parsed.data;
@@ -29,10 +30,7 @@ export async function POST(req: Request) {
 
     return cors(NextResponse.json({ ok: true }));
   } catch (e) {
-    return cors(NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    ));
+    return cors(apiCatch(e));
   }
 }
 

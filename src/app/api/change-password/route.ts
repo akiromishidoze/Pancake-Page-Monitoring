@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { validateCredentials, hashPassword } from '@/lib/auth';
 import { setSetting, logAuditEntry } from '@/lib/db';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
@@ -14,19 +15,19 @@ export async function POST(req: Request) {
     try {
       raw = await req.json();
     } catch {
-      return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
+      return apiError(ErrorCodes.VALIDATION_INVALID_JSON, 'Invalid JSON', 400);
     }
 
     const parsed = ChangePasswordSchema.safeParse(raw);
     if (!parsed.success) {
-      return NextResponse.json({ ok: false, error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+      return apiError(ErrorCodes.VALIDATION_ERROR, 'Validation failed', 400, parsed.error.flatten());
     }
 
     const { current_email, current_password, new_email, new_password } = parsed.data;
 
     // Validate current credentials using bcrypt-aware comparison
     if (!(await validateCredentials(current_email, current_password))) {
-      return NextResponse.json({ ok: false, error: 'Current credentials are incorrect' }, { status: 403 });
+      return apiError(ErrorCodes.FORBIDDEN, 'Current credentials are incorrect', 403);
     }
 
     if (new_email) {
@@ -53,9 +54,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, message: 'Credentials updated' });
   } catch (e) {
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    );
+    return apiCatch(e);
   }
 }
