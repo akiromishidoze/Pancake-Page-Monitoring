@@ -26,6 +26,11 @@ export async function register() {
     log.info('INGEST_IP_ALLOWLIST is set — ingest restricted to allowed IPs');
   }
 
+  if (!process.env['ENCRYPTION_KEY']) {
+    log.error('ENCRYPTION_KEY is not set — SMTP passwords cannot be encrypted/decrypted. Set it to a random 32+ character string.');
+    process.exit(1);
+  }
+
   const { initHttpAgent } = await import('./lib/http');
   initHttpAgent();
 
