@@ -18,7 +18,7 @@
     "@opentelemetry/instrumentation-pg": "^0.70.0",
     "@opentelemetry/sdk-logs": "^0.218.0",
     "@vercel/otel": "^2.1.2",
-    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.3",
     "next": "16.2.6",
     "nodemailer": "^8.0.8",
     "pg": "^8.20.0",
@@ -34,7 +34,6 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/bcrypt": "^6.0.0",
     "@types/node": "^20.19.41",
     "@types/nodemailer": "^8.0.0",
     "@types/pg": "^8.20.0",

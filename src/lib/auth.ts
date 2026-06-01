@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { getSetting, setSetting, createSessionToken, validateSessionToken, clearSessionToken } from './db';
 import { createLogger } from './logger';
 
