@@ -7,7 +7,7 @@ export async function POST() {
     const cookieStore = await cookies();
     const session = cookieStore.get('session')?.value;
     await clearSession(session);
-    cookieStore.set('session', '', { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 0 });
+    cookieStore.set('session', '', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 0 });
 
     return NextResponse.json({ ok: true });
   } catch (e) {
