@@ -26,6 +26,14 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
+  const { isStateChangingRequest, checkCsrf } = await import('@/lib/csrf');
+  if (isStateChangingRequest(request.method) && !checkCsrf(request)) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ ok: false, error: 'CSRF validation failed' }, { status: 403 });
+    }
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
   return NextResponse.next();
 }
 
