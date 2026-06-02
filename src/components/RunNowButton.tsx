@@ -21,6 +21,7 @@ const SCHEDULE_OPTIONS = [
   { value: '1800000', label: 'Every 30 minutes' },
   { value: '3600000', label: 'Every 1 hour' },
   { value: '14400000', label: 'Every 4 hours' },
+  { value: '28800000', label: 'Every 8 hours' },
 ];
 
 export function RunNowButton() {
