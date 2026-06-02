@@ -7,6 +7,7 @@ const log = createLogger('scheduler');
 const SCHEDULER_POLL_MS = 5_000;
 const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const SESSION_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 const CACHE_TTL_MS = 60_000;
 const POLLER_HEALTH_INTERVAL_MS = 60_000;
 const POLLER_GRACE_PERIOD_MS = 3 * 60_000;
@@ -66,6 +67,10 @@ export async function startScheduler() {
     checkPrune().catch(err => log.error({ err }, 'Prune error'));
   }, 60_000));
 
+  _intervals.push(setInterval(() => {
+    checkSessionCleanup().catch(err => log.error({ err }, 'Session cleanup error'));
+  }, 60_000));
+
 }
 
 export function stopScheduler() {
@@ -111,6 +116,21 @@ async function checkPrune() {
     }
   } catch (err) {
     log.error({ err }, 'prune failed');
+  }
+}
+
+async function checkSessionCleanup() {
+  const last = await getSetting('last_session_cleanup_time');
+  const lastMs = last ? parseInt(last, 10) : 0;
+  const now = Date.now();
+  if (now - lastMs < SESSION_CLEANUP_INTERVAL_MS) return;
+
+  try {
+    const { pruneExpiredSessions } = await import('./db');
+    await pruneExpiredSessions();
+    await setSetting('last_session_cleanup_time', now.toString());
+  } catch (err) {
+    log.error({ err }, 'session cleanup failed');
   }
 }
 
