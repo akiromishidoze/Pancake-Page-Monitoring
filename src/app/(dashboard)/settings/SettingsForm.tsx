@@ -140,14 +140,26 @@ export function SettingsForm({ initialEndpoints }: { initialEndpoints: Endpoint[
       )}
 
       {/* BotCake Platform card */}
-      {botcakeEndpoint && (
-        <div className="rounded-lg border border-slate-800 bg-slate-900 overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-800/40">
-            <h3 className="text-sm font-semibold text-slate-200">BotCake Platform</h3>
-          </div>
-          {renderEndpointRow(botcakeEndpoint)}
+      <div className="rounded-lg border border-slate-800 bg-slate-900 overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-800/40">
+          <h3 className="text-sm font-semibold text-slate-200">BotCake Platform</h3>
+          {!botcakeEndpoint && (
+            <button
+              onClick={() => setEditing({ name: 'BotCake Platform', api_key: '', url: '', access_token: '', token_expires_at: '' })}
+              className="text-xs px-3 py-1.5 rounded border border-blue-700 bg-blue-900/30 text-blue-300 hover:bg-blue-800/40 transition-colors cursor-pointer"
+            >
+              + Add Platform
+            </button>
+          )}
         </div>
-      )}
+        {botcakeEndpoint ? (
+          renderEndpointRow(botcakeEndpoint)
+        ) : (
+          <div className="p-6 text-sm text-slate-400 text-center">
+            No BotCake platform configured. Add one to monitor BotCake pages.
+          </div>
+        )}
+      </div>
 
       {/* Pancake Shops card */}
       <div className="rounded-lg border border-slate-800 bg-slate-900 overflow-hidden">
