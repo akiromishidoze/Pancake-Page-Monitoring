@@ -14,7 +14,7 @@ export async function backup(): Promise<string> {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error('DATABASE_URL not set');
 
-  await execAsync(`pg_dump --clean --if-exists --no-owner --no-privileges "${dbUrl}" > "${backupFile}"`);
+  await execAsync(`pg_dump --clean --no-owner --no-privileges "${dbUrl}" > "${backupFile}"`);
 
   // Keep only last 30 backups
   const files = (await fs.readdir(BACKUPS_DIR))
