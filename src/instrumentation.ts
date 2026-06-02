@@ -79,6 +79,14 @@ export async function register() {
     }
 
     try {
+      const { stopConnectorPollers } = await import('./lib/connector-poller');
+      stopConnectorPollers();
+      log.info('connector pollers stopped');
+    } catch (err) {
+      log.error({ err }, 'error stopping connector pollers');
+    }
+
+    try {
       const { stopEviction } = await import('./lib/sse');
       stopEviction();
       log.info('SSE eviction stopped');
