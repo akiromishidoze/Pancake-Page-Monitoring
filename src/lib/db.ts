@@ -720,7 +720,7 @@ export async function getEndpoint(id: string): Promise<EndpointRow | undefined> 
 }
 
 export function slugify(name: string): string {
-  return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  return name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/^-+|-+$/g, '');
 }
 
 export async function getEndpointBySlug(slug: string): Promise<EndpointRow | undefined> {

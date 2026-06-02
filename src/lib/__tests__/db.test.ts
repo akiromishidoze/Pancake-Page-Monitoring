@@ -220,4 +220,186 @@ describe('db module', () => {
       expect(createCalls.length).toBe(10);
     });
   });
+
+  describe('slugify', () => {
+    it('converts name to lowercase slug', async () => {
+      const { slugify } = await import('../db');
+      expect(slugify('Hello World')).toBe('hello-world');
+      expect(slugify('My Shop!')).toBe('my-shop');
+      expect(slugify('  Extra   Spaces  ')).toBe('extra-spaces');
+      expect(slugify('Special@#$Chars')).toBe('specialchars');
+    });
+  });
+
+  describe('endpoint CRUD', () => {
+    it('getEndpoint returns undefined for missing', async () => {
+      const { getEndpoint } = await import('../db');
+      const ep = await getEndpoint('missing');
+      expect(ep).toBeUndefined();
+    });
+
+    it('deleteEndpoint deletes platform pages and endpoint', async () => {
+      const { deleteEndpoint } = await import('../db');
+      await deleteEndpoint('ep1');
+      const deleteCalls = mockPool.query.mock.calls.filter((call: any[]) =>
+        typeof call[0] === 'string' && call[0].includes('DELETE FROM')
+      );
+      expect(deleteCalls.length).toBe(2);
+      expect(deleteCalls[0][0]).toContain('DELETE FROM platform_pages');
+      expect(deleteCalls[1][0]).toContain('DELETE FROM endpoints');
+    });
+
+    it('touchEndpoint updates last_used_at', async () => {
+      const { touchEndpoint } = await import('../db');
+      await touchEndpoint('ep1');
+      const updateCall = mockPool.query.mock.calls.find((call: any[]) =>
+        typeof call[0] === 'string' && call[0].includes('UPDATE endpoints SET last_used_at')
+      ) as any;
+      expect(updateCall).toBeDefined();
+      expect(updateCall[1][1]).toBe('ep1');
+      expect(typeof updateCall[1][0]).toBe('string');
+    });
+  });
+
+  describe('run queries', () => {
+    it('getLatestRun queries with endpointId', async () => {
+      const { getLatestRun } = await import('../db');
+      const result = await getLatestRun('ep1');
+      const queryCall = mockPool.query.mock.calls.find((call: any[]) =>
+        typeof call[0] === 'string' && call[0].includes('ORDER BY generated_at DESC LIMIT 1')
+      ) as any;
+      expect(queryCall).toBeDefined();
+      expect(result).toBeUndefined();
+    });
+
+    it('getRunHistory returns runs', async () => {
+      mockPool.query.mockImplementation(async (sql: any) => {
+        if (typeof sql === 'string' && sql.includes('SELECT * FROM runs')) {
+          return { rows: [{ run_id: 'r1', endpoint_id: 'ep1' }] };
+        }
+        return defaultQuery(sql);
+      });
+      const { getRunHistory } = await import('../db');
+      const runs = await getRunHistory('ep1');
+      expect(runs).toHaveLength(1);
+      expect(runs[0].run_id).toBe('r1');
+    });
+
+    it('getRecentRuns returns runs', async () => {
+      const { getRecentRuns } = await import('../db');
+      const runs = await getRecentRuns();
+      expect(Array.isArray(runs)).toBe(true);
+    });
+  });
+
+  describe('sessions', () => {
+    it('createSessionToken inserts and returns token', async () => {
+      const { createSessionToken } = await import('../db');
+      const token = await createSessionToken();
+      expect(typeof token).toBe('string');
+      expect(token.length).toBeGreaterThan(0);
+      const insertCall = mockPool.query.mock.calls.find((call: any[]) =>
+        typeof call[0] === 'string' && call[0].includes('INSERT INTO sessions')
+      ) as any;
+      expect(insertCall).toBeDefined();
+      expect(insertCall[1][1]).toBe('admin');
+    });
+
+    it('getSessionRole returns null for missing token', async () => {
+      const { getSessionRole } = await import('../db');
+      const role = await getSessionRole(null);
+      expect(role).toBeNull();
+    });
+
+    it('getSessionRole returns role for valid token', async () => {
+      mockPool.query.mockImplementation(async (sql: any) => {
+        if (typeof sql === 'string' && sql.includes('SELECT role FROM sessions')) {
+          return { rows: [{ role: 'admin' }] };
+        }
+        return defaultQuery(sql);
+      });
+      const { getSessionRole } = await import('../db');
+      const role = await getSessionRole('valid-token');
+      expect(role).toBe('admin');
+    });
+
+    it('requireAdminSession returns false for null token', async () => {
+      const { requireAdminSession } = await import('../db');
+      const ok = await requireAdminSession(null);
+      expect(ok).toBe(false);
+    });
+
+    it('validateSessionToken returns false for null token', async () => {
+      const { validateSessionToken } = await import('../db');
+      const ok = await validateSessionToken(null);
+      expect(ok).toBe(false);
+    });
+
+    it('clearSessionToken deletes session', async () => {
+      const { clearSessionToken } = await import('../db');
+      await clearSessionToken('some-token');
+      const deleteCall = mockPool.query.mock.calls.find((call: any[]) =>
+        typeof call[0] === 'string' && call[0].includes('DELETE FROM sessions WHERE token')
+      ) as any;
+      expect(deleteCall).toBeDefined();
+      expect(deleteCall[1]).toEqual(['some-token']);
+    });
+
+    it('pruneExpiredSessions deletes expired', async () => {
+      const { pruneExpiredSessions } = await import('../db');
+      await pruneExpiredSessions();
+      const deleteCall = mockPool.query.mock.calls.find((call: any[]) =>
+        typeof call[0] === 'string' && call[0].includes('DELETE FROM sessions WHERE expires_at')
+      ) as any;
+      expect(deleteCall).toBeDefined();
+    });
+  });
+
+  describe('platform pages', () => {
+    it('listPlatformPages returns pages', async () => {
+      mockPool.query.mockImplementation(async (sql: any) => {
+        if (typeof sql === 'string' && sql.includes('SELECT * FROM platform_pages')) {
+          return { rows: [{ id: 'p1', page_name: 'Test Page' }] };
+        }
+        return defaultQuery(sql);
+      });
+      const { listPlatformPages } = await import('../db');
+      const pages = await listPlatformPages();
+      expect(pages).toHaveLength(1);
+    });
+
+    it('deletePlatformPage deletes by id', async () => {
+      const { deletePlatformPage } = await import('../db');
+      await deletePlatformPage('p1');
+      const deleteCall = mockPool.query.mock.calls.find((call: any[]) =>
+        typeof call[0] === 'string' && call[0].includes('DELETE FROM platform_pages WHERE id')
+      ) as any;
+      expect(deleteCall).toBeDefined();
+      expect(deleteCall[1]).toEqual(['p1']);
+    });
+  });
+
+  describe('audit log', () => {
+    it('logAuditEntry inserts entry', async () => {
+      const { logAuditEntry } = await import('../db');
+      await logAuditEntry('test_action', 'endpoint', 'ep1', 'test detail', '127.0.0.1');
+      const insertCall = mockPool.query.mock.calls.find((call: any[]) =>
+        typeof call[0] === 'object' && call[0].text?.includes('INSERT INTO audit_log')
+      ) as any;
+      expect(insertCall).toBeDefined();
+      expect(insertCall[0].values).toContain('test_action');
+    });
+  });
+
+  describe('botcake overrides', () => {
+    it('removeBotCakeOverride deletes by page_id', async () => {
+      const { removeBotCakeOverride } = await import('../db');
+      await removeBotCakeOverride('bp1');
+      const deleteCall = mockPool.query.mock.calls.find((call: any[]) =>
+        typeof call[0] === 'string' && call[0].includes('DELETE FROM botcake_overrides WHERE page_id')
+      ) as any;
+      expect(deleteCall).toBeDefined();
+      expect(deleteCall[1]).toEqual(['bp1']);
+    });
+  });
 });
