@@ -129,6 +129,121 @@ describe('notify module', () => {
     });
   });
 
+  describe('sendEmail edge cases', () => {
+    it('uses secure:true for port 465', async () => {
+      mockSettings.set('notify_smtp_host', 'smtp.example.com');
+      mockSettings.set('notify_smtp_port', '465');
+      mockSettings.set('notify_smtp_user', 'user1');
+      mockSettings.set('notify_smtp_pass', 'enc:pass1');
+      mockSettings.set('notify_email_to', 'admin@example.com');
+      const { sendAlert } = await import('../notify');
+      await sendAlert({ title: 'T', message: 'M', level: 'info' });
+      expect(nodemailer.createTransport).toHaveBeenCalledWith(expect.objectContaining({
+        secure: true,
+      }));
+    });
+
+    it('falls back to user as from when notify_email_from is missing', async () => {
+      mockSettings.set('notify_smtp_host', 'smtp.example.com');
+      mockSettings.set('notify_smtp_port', '587');
+      mockSettings.set('notify_smtp_user', 'user1');
+      mockSettings.set('notify_smtp_pass', 'enc:pass1');
+      mockSettings.set('notify_email_to', 'admin@example.com');
+      // Intentional: no notify_email_from set
+      const { sendAlert } = await import('../notify');
+      await sendAlert({ title: 'T', message: 'M', level: 'info' });
+      expect(mockSendMail).toHaveBeenCalledWith(expect.objectContaining({
+        from: 'user1',
+      }));
+    });
+
+    it('handles unencrypted pass (no colon)', async () => {
+      mockSettings.set('notify_smtp_host', 'smtp.example.com');
+      mockSettings.set('notify_smtp_port', '587');
+      mockSettings.set('notify_smtp_user', 'user1');
+      mockSettings.set('notify_smtp_pass', 'plain-password');
+      mockSettings.set('notify_email_to', 'admin@example.com');
+      const { sendAlert } = await import('../notify');
+      await sendAlert({ title: 'T', message: 'M', level: 'info' });
+      expect(nodemailer.createTransport).toHaveBeenCalledWith(expect.objectContaining({
+        auth: { user: 'user1', pass: 'plain-password' },
+      }));
+    });
+
+    it('returns false when sendMail throws', async () => {
+      mockSendMail.mockRejectedValueOnce(new Error('SMTP error'));
+      mockSettings.set('notify_smtp_host', 'smtp.example.com');
+      mockSettings.set('notify_smtp_port', '587');
+      mockSettings.set('notify_smtp_user', 'user1');
+      mockSettings.set('notify_smtp_pass', 'enc:pass1');
+      mockSettings.set('notify_email_to', 'admin@example.com');
+      const { sendAlert } = await import('../notify');
+      // Should not throw
+      await expect(sendAlert({ title: 'T', message: 'M', level: 'info' })).resolves.toBeUndefined();
+    });
+  });
+
+  describe('sendSlack edge cases', () => {
+    it('handles fetch rejection', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+      mockSettings.set('notify_slack_webhook', 'https://slack.com/webhook');
+      const { sendAlert } = await import('../notify');
+      await expect(sendAlert({ title: 'T', message: 'M', level: 'info' })).resolves.toBeUndefined();
+    });
+
+    it('handles non-ok response', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: false } as Response);
+      mockSettings.set('notify_slack_webhook', 'https://slack.com/webhook');
+      const { sendAlert } = await import('../notify');
+      await expect(sendAlert({ title: 'T', message: 'M', level: 'info' })).resolves.toBeUndefined();
+    });
+  });
+
+  describe('sendAlert dispatch edge cases', () => {
+    it('sends only email when no slack webhook is configured', async () => {
+      mockSettings.set('notify_smtp_host', 'smtp.example.com');
+      mockSettings.set('notify_smtp_port', '587');
+      mockSettings.set('notify_smtp_user', 'user1');
+      mockSettings.set('notify_smtp_pass', 'enc:pass1');
+      mockSettings.set('notify_email_to', 'admin@example.com');
+      const { sendAlert } = await import('../notify');
+      await sendAlert({ title: 'Email Only', message: 'M', level: 'info' });
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockSendMail).toHaveBeenCalled();
+    });
+
+    it('sends only slack when no email config', async () => {
+      mockSettings.set('notify_slack_webhook', 'https://slack.com/webhook');
+      const { sendAlert } = await import('../notify');
+      await sendAlert({ title: 'Slack Only', message: 'M', level: 'info' });
+      expect(mockFetch).toHaveBeenCalled();
+      expect(mockSendMail).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('dedup cache edge cases', () => {
+    it('handles expired entries on load', async () => {
+      const past = Date.now() - 60 * 60 * 1000;
+      mockSettings.set('notify_dedup', JSON.stringify({ 'old|key': past }));
+      mockSettings.set('notify_slack_webhook', 'https://slack.com/webhook');
+      const { sendAlert } = await import('../notify');
+      await sendAlert({ title: 'new', message: 'alert', level: 'warning' });
+      // First alert should go through since expired entry was filtered
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      // Send same alert twice to confirm dedup works after fresh entry
+      await sendAlert({ title: 'new', message: 'alert', level: 'warning' });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('handles corrupted JSON in settings', async () => {
+      mockSettings.set('notify_dedup', 'not-json-at-all');
+      mockSettings.set('notify_slack_webhook', 'https://slack.com/webhook');
+      const { sendAlert } = await import('../notify');
+      await expect(sendAlert({ title: 'T', message: 'M', level: 'info' })).resolves.toBeUndefined();
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('checkAlertsForRun', () => {
     it('sends Canary DOWN alert', async () => {
       mockSettings.set('notify_slack_webhook', 'https://slack.com/webhook');
@@ -188,6 +303,13 @@ describe('notify module', () => {
       expect(mockFetch).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
         body: expect.stringContaining('Heartbeat Stale')
       }));
+    });
+
+    it('does nothing for missing run', async () => {
+      mockSettings.set('notify_slack_webhook', 'https://slack.com/webhook');
+      const { checkAlertsForRun } = await import('../notify');
+      await checkAlertsForRun('non-existent-run');
+      expect(mockFetch).not.toHaveBeenCalled();
     });
 
     it('sends NO alerts if run is perfectly healthy', async () => {
