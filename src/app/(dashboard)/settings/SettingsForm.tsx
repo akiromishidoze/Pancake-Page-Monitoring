@@ -77,21 +77,26 @@ export function SettingsForm({ initialEndpoints }: { initialEndpoints: Endpoint[
   }
 
   function renderEndpointRow(ep: Endpoint) {
-    let expiresLabel: string | null = '—';
-    let expiresTone: string = 'text-slate-500';
-    if (ep.token_expires_at) {
-      const diffMs = new Date(ep.token_expires_at).getTime() - Date.now();
-      const diffDays = Math.round(diffMs / 86400000);
-      if (diffMs < 0) {
-        expiresLabel = `Expired ${Math.abs(diffDays)}d ago`;
-        expiresTone = 'text-red-400';
-      } else if (diffDays <= 7) {
-        expiresLabel = `${diffDays}d`;
-        expiresTone = 'text-yellow-400';
-      } else {
-        expiresLabel = `${diffDays}d`;
-        expiresTone = 'text-green-400';
-      }
+    const diffMs = ep.token_expires_at ? new Date(ep.token_expires_at).getTime() - Date.now() : NaN;
+    const diffDays = isFinite(diffMs) ? Math.round(diffMs / 86400000) : NaN;
+    const expired = isFinite(diffMs) && diffMs < 0;
+    const expiringSoon = isFinite(diffMs) && !expired && diffDays <= 7;
+    const hasExpiry = isFinite(diffDays);
+
+    let expiresBg: string;
+    let expiresLabel: string;
+    if (!hasExpiry) {
+      expiresBg = 'bg-slate-800 text-slate-500 border-slate-700';
+      expiresLabel = 'No expiry';
+    } else if (expired) {
+      expiresBg = 'bg-red-900/40 text-red-300 border-red-800';
+      expiresLabel = `Expired ${Math.abs(diffDays)}d ago`;
+    } else if (expiringSoon) {
+      expiresBg = 'bg-yellow-900/40 text-yellow-300 border-yellow-800';
+      expiresLabel = `${diffDays}d remaining`;
+    } else {
+      expiresBg = 'bg-green-900/40 text-green-300 border-green-800';
+      expiresLabel = `${diffDays}d remaining`;
     }
 
     const isEditingExpiry = expiryEditor === ep.id;
@@ -103,17 +108,17 @@ export function SettingsForm({ initialEndpoints }: { initialEndpoints: Endpoint[
             <span className={`inline-block w-2 h-2 rounded-full ${ep.is_active ? 'bg-green-500' : 'bg-red-500'}`} />
             <span className="text-sm font-medium text-slate-200">{ep.name}</span>
             {isEditingExpiry ? (
-              <span className="flex items-center gap-1">
+              <span className="flex items-center gap-1 ml-1">
                 <input
                   type="number"
                   min={1}
                   value={expiryDays}
                   onChange={(e) => setExpiryDays(e.target.value)}
-                  className="w-16 rounded border border-slate-700 bg-slate-800 px-2 py-0.5 text-xs font-mono text-slate-200"
+                  className="w-20 rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs font-mono text-slate-200"
                   placeholder="days"
                   autoFocus
                 />
-                <span className="text-xs text-slate-400">d</span>
+                <span className="text-xs text-slate-400">days</span>
                 <button
                   onClick={async () => {
                     const days = parseInt(expiryDays, 10);
@@ -123,39 +128,36 @@ export function SettingsForm({ initialEndpoints }: { initialEndpoints: Endpoint[
                     setExpiryEditor(null);
                     setExpiryDays('');
                   }}
-                  className="text-xs px-1.5 py-0.5 rounded bg-blue-900/30 text-blue-300 hover:bg-blue-800/40 transition-colors cursor-pointer"
+                  className="text-xs px-2 py-1 rounded bg-blue-700 text-blue-100 hover:bg-blue-600 transition-colors cursor-pointer font-medium"
                 >
                   Save
                 </button>
                 <button
                   onClick={() => { setExpiryEditor(null); setExpiryDays(''); }}
-                  className="text-xs px-1.5 py-0.5 rounded text-slate-400 hover:bg-slate-800 transition-colors cursor-pointer"
+                  className="text-xs px-2 py-1 rounded text-slate-400 hover:bg-slate-800 transition-colors cursor-pointer"
                 >
-                  x
+                  Cancel
                 </button>
               </span>
             ) : (
               <button
                 onClick={() => {
-                  if (ep.token_expires_at) {
-                    const diffMs = new Date(ep.token_expires_at).getTime() - Date.now();
-                    setExpiryDays(String(Math.round(diffMs / 86400000)));
-                  } else {
-                    setExpiryDays('');
-                  }
+                  if (hasExpiry) setExpiryDays(String(diffDays));
+                  else setExpiryDays('60');
                   setExpiryEditor(ep.id);
                 }}
-                className={`text-xs font-mono ${expiresTone} hover:underline cursor-pointer`}
-                title="Click to set expiry"
+                className={`text-xs font-mono px-2 py-0.5 rounded border ${expiresBg} hover:opacity-80 cursor-pointer font-semibold`}
+                title="Click to change expiry"
               >
                 {expiresLabel}
               </button>
             )}
           </div>
-          <div className="mt-1 text-xs text-slate-500 space-y-0.5">
+          <div className="mt-2 text-xs text-slate-500 space-y-1">
             {ep.url && <div>URL: {ep.url}</div>}
             <div>Key: <span className="font-mono text-slate-400">{mask(ep.api_key)}</span></div>
             {ep.access_token && <div>Token: <span className="font-mono text-slate-400">{mask(ep.access_token)}</span></div>}
+            {hasExpiry && <div>Expires: <span className={`font-mono font-semibold ${expired ? 'text-red-400' : expiringSoon ? 'text-yellow-400' : 'text-green-400'}`}>{new Date(ep.token_expires_at!).toLocaleDateString()}</span></div>}
             {ep.last_used_at && <div>Last used: {formatWithTz(ep.last_used_at)}</div>}
           </div>
         </div>
