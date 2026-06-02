@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
-import { listEndpoints } from '@/lib/db';
+import { listEndpoints, isPancakeEndpoint } from '@/lib/db';
 import { fetchPancakeShops, TARGET_SHOP_IDS } from '@/lib/pancake';
 import { cors, corsOptions } from '@/lib/cors';
 
@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   const rawShopId = searchParams.get('shop_id');
 
   const allEndpoints = await listEndpoints();
-  const endpoints = allEndpoints.filter(ep => ep.id !== 'botcake-platform' && ep.access_token);
+  const endpoints = allEndpoints.filter(ep => isPancakeEndpoint(ep) && ep.access_token);
   if (endpoints.length === 0) {
     return cors(apiError(ErrorCodes.NOT_FOUND, 'No Pancake endpoints configured', 400));
   }

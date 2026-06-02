@@ -1,4 +1,4 @@
-import { pool, listEndpoints, type RunRow } from '@/lib/db';
+import { pool, listEndpoints, isBotCakeEndpoint, type RunRow } from '@/lib/db';
 import { PlatformFilter } from '@/components/PlatformFilter';
 import { Pagination } from '@/components/Pagination';
 import { formatWithTz } from '@/lib/format';
@@ -53,7 +53,7 @@ export default async function RunsPage({
       }
     }),
   ]);
-  const endpoints = allEndpoints;
+  const endpointMap = new Map(allEndpoints.map(e => [e.id, e]));
   const { rows, total } = runsResult;
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -72,7 +72,7 @@ export default async function RunsPage({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <label className="text-xs text-slate-400">Filter by platform:</label>
-          <PlatformFilter endpoints={endpoints.map(e => ({ id: e.id, name: e.name }))} selected={endpointId || undefined} />
+          <PlatformFilter endpoints={allEndpoints.map(e => ({ id: e.id, name: e.name }))} selected={endpointId || undefined} />
         </div>
         <a
           href={`/api/export?format=csv${endpointId ? `&endpoint_id=${encodeURIComponent(endpointId)}` : ''}`}
@@ -108,7 +108,7 @@ export default async function RunsPage({
                     {r.run_id.length > 24 ? r.run_id.slice(0, 24) + '…' : r.run_id}
                   </td>
                   <td className="px-4 py-3 text-slate-300">
-                    {r.endpoint_id === 'botcake-platform' ? 'BotCake' : r.endpoint_id || 'Legacy'}
+                    {r.endpoint_id && endpointMap.get(r.endpoint_id) ? (isBotCakeEndpoint(endpointMap.get(r.endpoint_id)!) ? 'BotCake' : r.endpoint_id) : 'Legacy'}
                   </td>
                   <td className="px-4 py-3 text-slate-400 text-xs">
                     {formatWithTz(r.generated_at)}

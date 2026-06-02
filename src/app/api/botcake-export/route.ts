@@ -1,18 +1,26 @@
 import { NextResponse } from 'next/server';
 import { apiCatch } from '@/lib/errors';
-import { getLatestPageStates, getBotCakeOverrides } from '@/lib/db';
+import { getLatestPageStates, getBotCakeOverrides, listEndpoints, isBotCakeEndpoint } from '@/lib/db';
 import { cors, corsOptions } from '@/lib/cors';
 
 export async function OPTIONS() {
   return corsOptions();
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const [pages, overrides] = await Promise.all([
-    getLatestPageStates('botcake-platform'),
-    getBotCakeOverrides(),
-  ]);
+    const { searchParams } = new URL(request.url);
+    const endpointId = searchParams.get('endpoint_id');
+
+    const allEndpoints = await listEndpoints();
+    const botcakeEndpoints = allEndpoints.filter(isBotCakeEndpoint);
+    const targetIds = endpointId
+      ? [endpointId]
+      : botcakeEndpoints.map(e => e.id);
+
+    const pageResults = await Promise.all(targetIds.map(id => getLatestPageStates(id)));
+    const pages = pageResults.flat();
+    const overrides = await getBotCakeOverrides();
 
   const header = 'page_id,page_name,status,activation_reason,customer_count,hours_since_last_activity,overridden';
   const rows = pages.map(p => {

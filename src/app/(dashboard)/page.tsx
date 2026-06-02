@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
-import { getLatestRun, getRunCount, getSetting, listEndpoints, getEndpoint, getLatestPageStates, getLatestPageStatesForEndpoints, getRecentRuns, getRunHistory, getRunHistories, getBotCakeOverrides, type PageStateRow, type RunRow } from '@/lib/db';
+import { getLatestRun, getRunCount, getSetting, listEndpoints, getEndpoint, getLatestPageStates, getLatestPageStatesForEndpoints, getRecentRuns, getRunHistory, getRunHistories, getBotCakeOverrides, isBotCakeEndpoint, isPancakeEndpoint, type PageStateRow, type RunRow, type EndpointRow } from '@/lib/db';
 import { StatusCard } from '@/components/StatusCard';
 import { SectionErrorBoundary } from '@/components/SectionErrorBoundary';
 import { RunNowButton } from '@/components/RunNowButton';
@@ -62,9 +62,9 @@ function StatusCardGrid({ data }: { data: StatusCardData }) {
   );
 }
 
-async function PancakeSection({ endpointId, pancakeIds, allEndpoints }: { endpointId?: string; pancakeIds: string[]; allEndpoints: { id: string; shop_label?: string | null; name: string }[] }) {
+async function PancakeSection({ endpointId, pancakeIds, allEndpoints }: { endpointId?: string; pancakeIds: string[]; allEndpoints: EndpointRow[] }) {
   let allPages: PageStateRow[] = [];
-  let pancakeEndpoints = allEndpoints.filter(e => e.id !== 'botcake-platform' && pancakeIds.includes(e.id));
+  let pancakeEndpoints = allEndpoints.filter(e => isPancakeEndpoint(e) && pancakeIds.includes(e.id));
 
   if (endpointId) {
     allPages = await getLatestPageStates(endpointId);
@@ -164,12 +164,12 @@ async function PancakeSection({ endpointId, pancakeIds, allEndpoints }: { endpoi
   );
 }
 
-async function BotCakeSection() {
-  const [pages, overrides, latestRun, botCakeHistory] = await Promise.all([
-    getLatestPageStates('botcake-platform'),
+async function BotCakeSection({ endpointId }: { endpointId: string }) {
+  const [pages, latestRun, botCakeHistory, overrides] = await Promise.all([
+    getLatestPageStates(endpointId),
+    getLatestRun(endpointId),
+    getRunHistory(endpointId, 200),
     getBotCakeOverrides(),
-    getLatestRun('botcake-platform'),
-    getRunHistory('botcake-platform', 200),
   ]);
   if (pages.length === 0) return null;
 
@@ -209,7 +209,7 @@ async function BotCakeSection() {
           <span className={`inline-block w-2 h-2 rounded-full ${apiHealthy ? 'bg-green-500' : 'bg-red-500'}`} title={apiHealthy ? 'API healthy' : 'API degraded'} />
           <h3 className="text-lg font-semibold text-slate-200">BotCake Platform</h3>
         </div>
-        <a href="/api/botcake-export" className="ml-auto rounded px-2 py-0.5 text-xs font-medium bg-slate-800 text-slate-400 hover:bg-slate-700 transition-colors">
+        <a href={`/api/botcake-export?endpoint_id=${encodeURIComponent(endpointId)}`} className="ml-auto rounded px-2 py-0.5 text-xs font-medium bg-slate-800 text-slate-400 hover:bg-slate-700 transition-colors">
           Export CSV
         </a>
       </div>
@@ -290,12 +290,13 @@ export default async function OverviewPage({
   ]);
   const lastScheduledRunMs = lastScheduledRunStr ? parseInt(lastScheduledRunStr, 10) : null;
 
-  const pancakeIds = allEndpoints.filter(e => e.id !== 'botcake-platform').map(e => e.id);
+  const pancakeIds = allEndpoints.filter(isPancakeEndpoint).map(e => e.id);
+  const botcakeEndpointIds = allEndpoints.filter(isBotCakeEndpoint).map(e => e.id);
   const endpoints = allEndpoints.map((ep) => ({ id: ep.id, name: ep.name }));
 
   const isFiltered = !!endpointId;
-  const isBotCake = endpointId === 'botcake-platform';
-  const isPancakeShop = isFiltered && !isBotCake;
+  const isBotCakeFilter = endpoint ? isBotCakeEndpoint(endpoint) : false;
+  const isPancakeShop = isFiltered && !isBotCakeFilter;
 
   const lastUpdatedDisplay = localRun
     ? formatWithTz(localRun.received_at)
@@ -355,11 +356,13 @@ export default async function OverviewPage({
                   <PancakeSection pancakeIds={pancakeIds} allEndpoints={allEndpoints} />
                 </Suspense>
               </SectionErrorBoundary>
-              <SectionErrorBoundary title="BotCake Section">
-                <Suspense fallback={<div className="rounded-lg border border-slate-800 bg-slate-900 p-6 animate-pulse"><div className="h-5 w-40 rounded bg-slate-800" /><div className="mt-4 h-48 rounded bg-slate-800" /></div>}>
-                  <BotCakeSection />
-                </Suspense>
-              </SectionErrorBoundary>
+              {botcakeEndpointIds.length > 0 && botcakeEndpointIds.map(id => (
+                <SectionErrorBoundary key={id} title={`BotCake ${id}`}>
+                  <Suspense fallback={<div className="rounded-lg border border-slate-800 bg-slate-900 p-6 animate-pulse"><div className="h-5 w-40 rounded bg-slate-800" /><div className="mt-4 h-48 rounded bg-slate-800" /></div>}>
+                    <BotCakeSection endpointId={id} />
+                  </Suspense>
+                </SectionErrorBoundary>
+              ))}
             </div>
 
             <SectionErrorBoundary title="Database Stats">
@@ -427,7 +430,7 @@ export default async function OverviewPage({
                     </div>
                     <div className="flex justify-between">
                       <dt className="text-slate-400">Data source</dt>
-                      <dd className="font-mono text-xs">{localRun ? (localRun.endpoint_id === 'botcake-platform' ? 'BotCake API' : 'Pancake / Ingest') : '—'}</dd>
+                      <dd className="font-mono text-xs">{localRun?.endpoint_id ? (botcakeEndpointIds.includes(localRun.endpoint_id) ? 'BotCake API' : 'Pancake / Ingest') : '—'}</dd>
                     </div>
                   </dl>
                 </div>
@@ -449,14 +452,14 @@ export default async function OverviewPage({
           </>
         )}
 
-        {isBotCake && (
+        {isBotCakeFilter && endpointId && (
           <>
             <SectionErrorBoundary title="Status Cards">
               <StatusCardGrid data={cardData} />
             </SectionErrorBoundary>
             <SectionErrorBoundary title="BotCake Section">
               <Suspense fallback={<div className="rounded-lg border border-slate-800 bg-slate-900 p-6 animate-pulse"><div className="h-5 w-40 rounded bg-slate-800" /><div className="mt-4 h-48 rounded bg-slate-800" /></div>}>
-                <BotCakeSection />
+                <BotCakeSection endpointId={endpointId} />
               </Suspense>
             </SectionErrorBoundary>
           </>

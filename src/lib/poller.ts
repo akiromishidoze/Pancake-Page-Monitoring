@@ -1,12 +1,10 @@
 import { fetchBotCakePages, checkBotCakeConversations, checkBotCakeToolsFlows } from './botcake';
 import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, fetchPancakeActivePageIdsFromCustomers, fetchCachedPancakeShops, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop, type PancakePage } from './pancake';
-import { getEndpoint, insertSnapshot, getSetting, setSetting, listEndpoints, getPancakeActivePageIds, getPreviousRunActiveCount, pool, getBotCakeOverrides, type SlimPage } from './db';
+import { insertSnapshot, setSetting, listEndpoints, getPancakeActivePageIds, getPreviousRunActiveCount, pool, getBotCakeOverrides, isBotCakeEndpoint, type SlimPage, type EndpointRow } from './db';
 import { broadcastSSE } from './sse';
 import { createLogger } from './logger';
-import { trace } from '@opentelemetry/api';
 
 const log = createLogger('poller');
-const tracer = trace.getTracer('page-monitor');
 
 const POLL_INTERVAL_MS = 60_000;
 
@@ -34,192 +32,189 @@ export function stopPoller() {
 }
 
 export async function refreshAll() {
-  return tracer.startActiveSpan('poller.refreshAll', async (span) => {
-    _lastPolledAt = new Date().toISOString();
-    await Promise.all([refreshBotCake(), refreshPancake()]);
-    broadcastSSE('refresh', JSON.stringify({ source: 'refresh-all', all_endpoints: true }));
-    await setSetting('last_scheduled_run', Date.now().toString()).catch(e => log.error({ err: e }, 'Failed to update last_scheduled_run'));
-    span.end();
-  });
+  _lastPolledAt = new Date().toISOString();
+  await Promise.all([refreshBotCake(), refreshPancake()]);
+  broadcastSSE('refresh', JSON.stringify({ source: 'refresh-all', all_endpoints: true }));
+  await setSetting('last_scheduled_run', Date.now().toString()).catch(e => log.error({ err: e }, 'Failed to update last_scheduled_run'));
 }
 
 const ALERT_DROP_THRESHOLD_PCT = 0.50;
 
 export async function refreshBotCake() {
-  return tracer.startActiveSpan('poller.refreshBotCake', async (span) => {
-  if (_refreshingBotCake) { span.end(); return; }
+  if (_refreshingBotCake) return;
   _refreshingBotCake = true;
   try {
-    const endpoint = await getEndpoint('botcake-platform');
-    if (!endpoint?.access_token) { span.end(); return; }
-
-    const pages = await fetchBotCakePages(endpoint.access_token);
-    if (pages.length === 0) {
-      log.warn('botcake: API returned 0 pages — skipping insert to preserve previous data');
-      span.end(); return;
-    }
-    const runId = `botcake_refresh_${Date.now()}`;
-    const ts = new Date().toISOString();
-
-    const pancakeActive = await getPancakeActivePageIds();
-
-    const noOrders = pages.filter(p => !pancakeActive.has(p.page_id)).map(p => p.page_id);
-    const convResult = await checkBotCakeConversations(noOrders, endpoint.access_token);
-
-    const noOrdersNoConv = pages.filter(p => !pancakeActive.has(p.page_id) && !convResult.has(p.page_id)).map(p => p.page_id);
-    const toolsActive = await checkBotCakeToolsFlows(noOrdersNoConv, endpoint.access_token);
-
-    let activePages: SlimPage[] = [];
-    let inactivePages: SlimPage[] = [];
-
-    for (const p of pages) {
-      if (pancakeActive.has(p.page_id)) {
-        activePages.push({
-          page_id: p.page_id, id: p.page_id,
-          name: p.name,
-          shop_label: null, shop: null,
-          activity_kind: null, kind: null,
-          activation_reason: 'pancake-activity', reason: null,
-          state_change: null, activity_kind_change: null,
-          is_canary: false,
-          response_ms: null, fetch_errors: 0,
-          last_customer_activity_at: null,
-          last_order_at: null,
-        });
-      } else if (convResult.has(p.page_id)) {
-        const convInfo = convResult.get(p.page_id)!;
-        activePages.push({
-          page_id: p.page_id, id: p.page_id,
-          name: p.name,
-          shop_label: null, shop: null,
-          activity_kind: null, kind: null,
-          activation_reason: 'has-conversations', reason: null,
-          state_change: null, activity_kind_change: null,
-          is_canary: false,
-          response_ms: null, fetch_errors: 0,
-          last_customer_activity_at: convInfo.ts,
-          last_order_at: null,
-          customer_count: convInfo.count,
-        });
-      } else if (toolsActive.has(p.page_id)) {
-        activePages.push({
-          page_id: p.page_id, id: p.page_id,
-          name: p.name,
-          shop_label: null, shop: null,
-          activity_kind: null, kind: null,
-          activation_reason: 'has-tools', reason: null,
-          state_change: null, activity_kind_change: null,
-          is_canary: false,
-          response_ms: null, fetch_errors: 0,
-          last_customer_activity_at: toolsActive.get(p.page_id) ?? null,
-          last_order_at: null,
-        });
-      } else {
-        inactivePages.push({
-          page_id: p.page_id, id: p.page_id,
-          name: p.name,
-          shop_label: null, shop: null,
-          activity_kind: null, kind: null,
-          activation_reason: 'no-activity', reason: null,
-          state_change: null, activity_kind_change: null,
-          is_canary: false,
-          response_ms: null, fetch_errors: 0,
-          last_customer_activity_at: null,
-          last_order_at: null,
-        });
-      }
-    }
-
-    // Apply manual overrides (overrides signal-based decisions)
-    const overrides = await getBotCakeOverrides();
-    if (overrides.size > 0) {
-      const remainingActive: SlimPage[] = [];
-      const remainingInactive: SlimPage[] = [];
-      for (const p of activePages) {
-        const ov = overrides.get(p.page_id ?? p.id ?? '');
-        if (ov && !ov.is_active) {
-          p.activation_reason = 'manual-override';
-          remainingInactive.push(p);
-        } else {
-          remainingActive.push(p);
-        }
-      }
-      for (const p of inactivePages) {
-        const ov = overrides.get(p.page_id ?? p.id ?? '');
-        if (ov && ov.is_active) {
-          p.activation_reason = 'manual-override';
-          remainingActive.push(p);
-        } else {
-          remainingInactive.push(p);
-        }
-      }
-      activePages = remainingActive;
-      inactivePages = remainingInactive;
-    }
-
-    const prevActive = await getPreviousRunActiveCount('botcake-platform');
-    let alertCount = 0;
-    let outageSuspected = false;
-    if (prevActive !== null && prevActive > 0) {
-      const dropRatio = (prevActive - activePages.length) / prevActive;
-      if (dropRatio >= ALERT_DROP_THRESHOLD_PCT) {
-        alertCount = activePages.length === 0 ? 2 : 1;
-        outageSuspected = true;
-        log.warn({ dropPct: Math.round(dropRatio * 100), prevActive, current: activePages.length }, 'ALERT BotCake: active pages dropped %d%% (%d → %d)', Math.round(dropRatio * 100), prevActive, activePages.length);
-        broadcastSSE('alert', JSON.stringify({
-          endpoint_id: 'botcake-platform', shop: 'BotCake',
-          previous: prevActive, current: activePages.length,
-          drop_pct: Math.round(dropRatio * 100),
-        }));
-      }
-    }
-
-    const result = await insertSnapshot({
-      run_id: runId,
-      endpoint_id: 'botcake-platform',
-      generated_at: ts,
-      heartbeat_ok: true,
-      run_quality: 'full',
-      severity: null,
-      canary_status: 'ok',
-      canary_alert: false,
-      outage_suspected: outageSuspected,
-      alert_count: alertCount,
-      rule_version: null,
-      in_maintenance_window: false,
-      total_pages: pages.length,
-      active_pages_count: activePages.length,
-      inactive_pages_count: inactivePages.length,
-      receiver_sd_size_bytes: null,
-      raw_summary: {
-        source: 'botcake-refresh',
-        page_count: pages.length,
-        pancake_activity: activePages.filter(p => p.activation_reason === 'pancake-activity').length,
-        has_conversations: activePages.filter(p => p.activation_reason === 'has-conversations').length,
-        has_tools: activePages.filter(p => p.activation_reason === 'has-tools').length,
-        no_activity: inactivePages.length,
-      },
-      active_pages: activePages,
-      inactive_pages: inactivePages,
-    });
-
-    if (result.inserted) {
-      await setSetting('poller_ok_botcake-platform', Date.now().toString());
-      const pa = activePages.filter(p => p.activation_reason === 'pancake-activity').length;
-      const hc = activePages.filter(p => p.activation_reason === 'has-conversations').length;
-      const ht = activePages.filter(p => p.activation_reason === 'has-tools').length;
-      const na = inactivePages.length;
-      log.info('botcake: %dA (%dorders+%dconv+%dtools) / %dI — %d total, run %s', activePages.length, pa, hc, ht, na, pages.length, runId);
-    }
-    span.end();
+    const botCakeEndpoints = (await listEndpoints()).filter(isBotCakeEndpoint);
+    await Promise.all(botCakeEndpoints.map(ep => refreshSingleBotCake(ep)));
   } catch (err) {
     log.error({ err }, 'botcake: refresh failed');
-    span.end();
   } finally {
     _refreshingBotCake = false;
   }
+}
+
+async function refreshSingleBotCake(endpoint: EndpointRow) {
+  const fbPageId = endpoint.fb_page_id!;
+  if (!endpoint.access_token) return;
+
+  const pages = await fetchBotCakePages(endpoint.access_token, fbPageId);
+  if (pages.length === 0) {
+    log.warn({ ep: endpoint.name }, 'botcake: API returned 0 pages — skipping insert');
+    return;
+  }
+  const runId = `botcake_refresh_${Date.now()}_${endpoint.id}`;
+  const ts = new Date().toISOString();
+
+  const pancakeActive = await getPancakeActivePageIds();
+
+  const noOrders = pages.filter(p => !pancakeActive.has(p.page_id)).map(p => p.page_id);
+  const convResult = await checkBotCakeConversations(noOrders, endpoint.access_token, fbPageId);
+
+  const noOrdersNoConv = pages.filter(p => !pancakeActive.has(p.page_id) && !convResult.has(p.page_id)).map(p => p.page_id);
+  const toolsActive = await checkBotCakeToolsFlows(noOrdersNoConv, endpoint.access_token, fbPageId);
+
+  let activePages: SlimPage[] = [];
+  let inactivePages: SlimPage[] = [];
+
+  for (const p of pages) {
+    if (pancakeActive.has(p.page_id)) {
+      activePages.push({
+        page_id: p.page_id, id: p.page_id,
+        name: p.name,
+        shop_label: null, shop: null,
+        activity_kind: null, kind: null,
+        activation_reason: 'pancake-activity', reason: null,
+        state_change: null, activity_kind_change: null,
+        is_canary: false,
+        response_ms: null, fetch_errors: 0,
+        last_customer_activity_at: null,
+        last_order_at: null,
+      });
+    } else if (convResult.has(p.page_id)) {
+      const convInfo = convResult.get(p.page_id)!;
+      activePages.push({
+        page_id: p.page_id, id: p.page_id,
+        name: p.name,
+        shop_label: null, shop: null,
+        activity_kind: null, kind: null,
+        activation_reason: 'has-conversations', reason: null,
+        state_change: null, activity_kind_change: null,
+        is_canary: false,
+        response_ms: null, fetch_errors: 0,
+        last_customer_activity_at: convInfo.ts,
+        last_order_at: null,
+        customer_count: convInfo.count,
+      });
+    } else if (toolsActive.has(p.page_id)) {
+      activePages.push({
+        page_id: p.page_id, id: p.page_id,
+        name: p.name,
+        shop_label: null, shop: null,
+        activity_kind: null, kind: null,
+        activation_reason: 'has-tools', reason: null,
+        state_change: null, activity_kind_change: null,
+        is_canary: false,
+        response_ms: null, fetch_errors: 0,
+        last_customer_activity_at: toolsActive.get(p.page_id) ?? null,
+        last_order_at: null,
+      });
+    } else {
+      inactivePages.push({
+        page_id: p.page_id, id: p.page_id,
+        name: p.name,
+        shop_label: null, shop: null,
+        activity_kind: null, kind: null,
+        activation_reason: 'no-activity', reason: null,
+        state_change: null, activity_kind_change: null,
+        is_canary: false,
+        response_ms: null, fetch_errors: 0,
+        last_customer_activity_at: null,
+        last_order_at: null,
+      });
+    }
+  }
+
+  // Apply manual overrides (overrides signal-based decisions)
+  const overrides = await getBotCakeOverrides();
+  if (overrides.size > 0) {
+    const remainingActive: SlimPage[] = [];
+    const remainingInactive: SlimPage[] = [];
+    for (const p of activePages) {
+      const ov = overrides.get(p.page_id ?? p.id ?? '');
+      if (ov && !ov.is_active) {
+        p.activation_reason = 'manual-override';
+        remainingInactive.push(p);
+      } else {
+        remainingActive.push(p);
+      }
+    }
+    for (const p of inactivePages) {
+      const ov = overrides.get(p.page_id ?? p.id ?? '');
+      if (ov && ov.is_active) {
+        p.activation_reason = 'manual-override';
+        remainingActive.push(p);
+      } else {
+        remainingInactive.push(p);
+      }
+    }
+    activePages = remainingActive;
+    inactivePages = remainingInactive;
+  }
+
+  const prevActive = await getPreviousRunActiveCount(endpoint.id);
+  let alertCount = 0;
+  let outageSuspected = false;
+  if (prevActive !== null && prevActive > 0) {
+    const dropRatio = (prevActive - activePages.length) / prevActive;
+    if (dropRatio >= ALERT_DROP_THRESHOLD_PCT) {
+      alertCount = activePages.length === 0 ? 2 : 1;
+      outageSuspected = true;
+      log.warn({ dropPct: Math.round(dropRatio * 100), prevActive, current: activePages.length }, 'ALERT %s: active pages dropped %d%% (%d → %d)', endpoint.name, Math.round(dropRatio * 100), prevActive, activePages.length);
+      broadcastSSE('alert', JSON.stringify({
+        endpoint_id: endpoint.id, shop: endpoint.name,
+        previous: prevActive, current: activePages.length,
+        drop_pct: Math.round(dropRatio * 100),
+      }));
+    }
+  }
+
+  const result = await insertSnapshot({
+    run_id: runId,
+    endpoint_id: endpoint.id,
+    generated_at: ts,
+    heartbeat_ok: true,
+    run_quality: 'full',
+    severity: null,
+    canary_status: 'ok',
+    canary_alert: false,
+    outage_suspected: outageSuspected,
+    alert_count: alertCount,
+    rule_version: null,
+    in_maintenance_window: false,
+    total_pages: pages.length,
+    active_pages_count: activePages.length,
+    inactive_pages_count: inactivePages.length,
+    receiver_sd_size_bytes: null,
+    raw_summary: {
+      source: 'botcake-refresh',
+      page_count: pages.length,
+      pancake_activity: activePages.filter(p => p.activation_reason === 'pancake-activity').length,
+      has_conversations: activePages.filter(p => p.activation_reason === 'has-conversations').length,
+      has_tools: activePages.filter(p => p.activation_reason === 'has-tools').length,
+      no_activity: inactivePages.length,
+    },
+    active_pages: activePages,
+    inactive_pages: inactivePages,
   });
 
+  if (result.inserted) {
+    await setSetting(`poller_ok_${endpoint.id}`, Date.now().toString());
+    const pa = activePages.filter(p => p.activation_reason === 'pancake-activity').length;
+    const hc = activePages.filter(p => p.activation_reason === 'has-conversations').length;
+    const ht = activePages.filter(p => p.activation_reason === 'has-tools').length;
+    const na = inactivePages.length;
+    log.info('botcake %s: %dA (%dorders+%dconv+%dtools) / %dI — %d total, run %s', endpoint.name, activePages.length, pa, hc, ht, na, pages.length, runId);
+  }
 }
 
 async function refreshPancake() {
@@ -227,7 +222,7 @@ async function refreshPancake() {
   _refreshingPancake = true;
   try {
   const allEndpoints = await listEndpoints();
-  const endpoints = allEndpoints.filter(ep => ep.id !== 'botcake-platform' && ep.url && ep.access_token && ep.is_active);
+  const endpoints = allEndpoints.filter(ep => !isBotCakeEndpoint(ep) && ep.url && ep.access_token && ep.is_active);
   if (endpoints.length === 0) return;
 
   const token = endpoints[0].access_token!;

@@ -1,4 +1,4 @@
-import { listEndpoints, slugify } from '@/lib/db';
+import { listEndpoints, slugify, isPancakeEndpoint } from '@/lib/db';
 import { getRunCount, getLatestPageStates } from '@/lib/db';
 import Link from 'next/link';
 import { formatDateWithTz } from '@/lib/format';
@@ -14,7 +14,7 @@ const KIND_TONE: Record<string, string> = {
 
 export default async function PlatformsPage() {
   const allEndpoints = await listEndpoints();
-  const endpoints = allEndpoints.filter((e: { is_active: boolean; url?: string | null }) => e.is_active && !e.url?.includes('botcake.io'));
+  const endpoints = allEndpoints.filter(e => e.is_active && isPancakeEndpoint(e));
   const dbCount = await getRunCount();
 
   // Compute per-platform page stats from monitoring data

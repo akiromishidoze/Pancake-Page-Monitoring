@@ -90,6 +90,7 @@ vi.mock('@/lib/db', () => ({
   getPancakeActivePageIds: vi.fn(async () => new Set(mocks.pancakeActivePageIds())),
   getPreviousRunActiveCount: vi.fn(async () => mocks.prevRunActiveCount()),
   getBotCakeOverrides: vi.fn(async () => new Map(mocks.overrides)),
+  isBotCakeEndpoint: vi.fn((ep: Record<string, unknown>) => !!ep.fb_page_id || ep.id === 'botcake-platform' || ((ep.url as string) ?? '').includes('botcake.io')),
   pool: { query: vi.fn(async () => ({ rows: [] })), connect: vi.fn() },
 }));
 
@@ -174,7 +175,7 @@ describe('refreshBotCake', () => {
   });
 
   it('returns early when endpoint has no access_token', async () => {
-    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: null, is_active: true });
+    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: null, is_active: true, fb_page_id: '104533988952572' });
     const mod = await import('@/lib/poller');
     const { fetchBotCakePages } = await import('@/lib/botcake');
     await mod.refreshBotCake();
@@ -182,7 +183,7 @@ describe('refreshBotCake', () => {
   });
 
   it('returns early when API returns 0 pages', async () => {
-    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true });
+    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true, fb_page_id: '104533988952572' });
     const mod = await import('@/lib/poller');
     const { insertSnapshot } = await import('@/lib/db');
     await mod.refreshBotCake();
@@ -190,7 +191,7 @@ describe('refreshBotCake', () => {
   });
 
   it('inserts snapshot when API returns data', async () => {
-    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true });
+    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true, fb_page_id: '104533988952572' });
     mocks.botCakePages.push({ page_id: 'p1', name: 'Page 1' }, { page_id: 'p2', name: 'Page 2' });
     const mod = await import('@/lib/poller');
     const { insertSnapshot, setSetting } = await import('@/lib/db');
@@ -200,7 +201,7 @@ describe('refreshBotCake', () => {
   });
 
   it('classifies pancake-active pages as active', async () => {
-    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true });
+    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true, fb_page_id: '104533988952572' });
     mocks.botCakePages.push({ page_id: 'p1', name: 'Page 1' });
     mocks.pancakeActivePageIds(['p1']);
     const mod = await import('@/lib/poller');
@@ -212,7 +213,7 @@ describe('refreshBotCake', () => {
   });
 
   it('classifies conversation pages as active', async () => {
-    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true });
+    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true, fb_page_id: '104533988952572' });
     mocks.botCakePages.push({ page_id: 'p1', name: 'Page 1' });
     mocks.convResult.set('p1', { ts: '2026-01-01T00:00:00Z', count: 5 });
     const mod = await import('@/lib/poller');
@@ -224,7 +225,7 @@ describe('refreshBotCake', () => {
   });
 
   it('classifies tools/flows pages as active', async () => {
-    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true });
+    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true, fb_page_id: '104533988952572' });
     mocks.botCakePages.push({ page_id: 'p1', name: 'Page 1' });
     mocks.toolsResult.set('p1', '2026-01-01T00:00:00Z');
     const mod = await import('@/lib/poller');
@@ -236,7 +237,7 @@ describe('refreshBotCake', () => {
   });
 
   it('applies manual overrides: active→inactive', async () => {
-    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true });
+    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true, fb_page_id: '104533988952572' });
     mocks.botCakePages.push({ page_id: 'p1', name: 'Page 1' });
     mocks.pancakeActivePageIds(['p1']);
     mocks.overrides.set('p1', { is_active: false });
@@ -250,7 +251,7 @@ describe('refreshBotCake', () => {
   });
 
   it('detects alert when active pages drop significantly', async () => {
-    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true });
+    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true, fb_page_id: '104533988952572' });
     mocks.botCakePages.push({ page_id: 'p1', name: 'Page 1' });
     mocks.pancakeActivePageIds(['p1']);
     mocks.setPrevRunActiveCount(10);
@@ -263,7 +264,7 @@ describe('refreshBotCake', () => {
   });
 
   it('does not alert when active pages are stable', async () => {
-    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true });
+    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true, fb_page_id: '104533988952572' });
     mocks.botCakePages.push({ page_id: 'p1', name: 'Page 1' });
     mocks.pancakeActivePageIds(['p1']);
     mocks.setPrevRunActiveCount(1);
@@ -301,7 +302,7 @@ describe('refreshPancake (via refreshAll)', () => {
 
   it('processes pancake endpoints and inserts snapshots', async () => {
     mocks.dbEndpoints.push(
-      { id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true },
+      { id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true, fb_page_id: '104533988952572' },
       { id: '430202960', name: 'Shop 1', access_token: 'tok-abc', url: 'https://example.com', is_active: true },
     );
     mocks.pancakeShops.push({
@@ -322,7 +323,7 @@ describe('refreshPancake (via refreshAll)', () => {
 
   it('falls back to cached shops when live API fails', async () => {
     mocks.dbEndpoints.push(
-      { id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true },
+      { id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true, fb_page_id: '104533988952572' },
       { id: '430202960', name: 'Shop 1', access_token: 'tok-abc', url: 'https://example.com', is_active: true },
     );
     mocks.setPancakeShopsFail(true);

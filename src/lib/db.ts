@@ -159,6 +159,9 @@ async function migrate() {
   try { await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'admin'`); } catch {
     // Column may already exist, safe to ignore
   }
+  try { await pool.query(`ALTER TABLE endpoints ADD COLUMN IF NOT EXISTS fb_page_id TEXT`); } catch {
+    // Column may already exist, safe to ignore
+  }
   await migrateTimestampTypes();
   await migrateBooleanTypes();
   await migrateBotCakeOverrides();
@@ -606,11 +609,13 @@ async function latestGoodRunIds(): Promise<string[]> {
   const r = await pool.query(`
     SELECT r1.run_id FROM runs r1
     INNER JOIN (
-      SELECT endpoint_id, MAX(generated_at) AS max_gen
-      FROM runs
-      WHERE endpoint_id != 'botcake-platform' AND endpoint_id IS NOT NULL
-      AND (active_pages > 0 OR active_pages IS NULL)
-      GROUP BY endpoint_id
+      SELECT r.endpoint_id, MAX(r.generated_at) AS max_gen
+      FROM runs r
+      WHERE r.endpoint_id NOT IN (
+        SELECT id FROM endpoints WHERE fb_page_id IS NOT NULL OR id = 'botcake-platform' OR url LIKE '%botcake.io%'
+      ) AND r.endpoint_id IS NOT NULL
+      AND (r.active_pages > 0 OR r.active_pages IS NULL)
+      GROUP BY r.endpoint_id
     ) r2 ON r1.endpoint_id = r2.endpoint_id AND r1.generated_at = r2.max_gen
   `);
   return (r.rows as { run_id: string }[]).map(r => r.run_id);
@@ -676,7 +681,9 @@ export async function getLatestPageStates(endpointId?: string): Promise<PageStat
   const r = await pool.query(`
     WITH latest AS (
       SELECT run_id, generated_at FROM runs
-      WHERE endpoint_id IS NULL OR endpoint_id != 'botcake-platform'
+      WHERE endpoint_id IS NULL OR endpoint_id NOT IN (
+        SELECT id FROM endpoints WHERE fb_page_id IS NOT NULL OR id = 'botcake-platform' OR url LIKE '%botcake.io%'
+      )
       ORDER BY generated_at DESC LIMIT 1
     )
     SELECT ps.* FROM page_states ps
@@ -705,7 +712,16 @@ export type EndpointRow = {
   created_at: string;
   last_used_at: string | null;
   shop_label: string | null;
+  fb_page_id: string | null;
 };
+
+export function isBotCakeEndpoint(ep: EndpointRow): boolean {
+  return !!ep.fb_page_id || ep.id === 'botcake-platform' || (ep.url ?? '').includes('botcake.io');
+}
+
+export function isPancakeEndpoint(ep: EndpointRow): boolean {
+  return !isBotCakeEndpoint(ep);
+}
 
 export async function listEndpoints(): Promise<EndpointRow[]> {
   await ensureMigrated();
@@ -742,6 +758,7 @@ export async function upsertEndpoint(input: {
   access_token?: string | null;
   token_expires_at?: string | null;
   is_active?: boolean;
+  fb_page_id?: string | null;
 }): Promise<EndpointRow> {
   await ensureMigrated();
   const id = input.id || crypto.randomUUID();
@@ -750,7 +767,8 @@ export async function upsertEndpoint(input: {
   if (input.id) {
     await pool.query(q(`
       UPDATE endpoints SET name=@name, url=@url, api_key=@api_key,
-        access_token=@access_token, token_expires_at=@token_expires_at, is_active=@is_active
+        access_token=@access_token, token_expires_at=@token_expires_at,
+        is_active=@is_active, fb_page_id=@fb_page_id
       WHERE id=@id
     `, {
       id: input.id,
@@ -760,13 +778,14 @@ export async function upsertEndpoint(input: {
       access_token: input.access_token ?? null,
       token_expires_at: input.token_expires_at ?? null,
       is_active: input.is_active ?? true,
+      fb_page_id: input.fb_page_id ?? null,
     }));
     return (await getEndpoint(input.id))!;
   }
 
   await pool.query(q(`
-    INSERT INTO endpoints (id, name, url, api_key, access_token, token_expires_at, is_active, created_at)
-    VALUES (@id, @name, @url, @api_key, @access_token, @token_expires_at, @is_active, @created_at)
+    INSERT INTO endpoints (id, name, url, api_key, access_token, token_expires_at, is_active, created_at, fb_page_id)
+    VALUES (@id, @name, @url, @api_key, @access_token, @token_expires_at, @is_active, @created_at, @fb_page_id)
   `, {
     id,
     name: input.name,
@@ -776,6 +795,7 @@ export async function upsertEndpoint(input: {
     token_expires_at: input.token_expires_at ?? null,
     is_active: input.is_active ?? true,
     created_at: now,
+    fb_page_id: input.fb_page_id ?? null,
   }));
 
   return (await getEndpoint(id))!;

@@ -13,6 +13,7 @@ type Endpoint = {
   is_active: boolean;
   created_at: string;
   last_used_at: string | null;
+  fb_page_id: string | null;
 };
 
 function mask(val: string | null | undefined) {
@@ -27,12 +28,10 @@ export function SettingsForm({ initialEndpoints }: { initialEndpoints: Endpoint[
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const botcakeEndpoint = endpoints.find(
-    (e) => e.id === 'botcake-platform' || e.url?.includes('botcake.io'),
-  );
-  const shopEndpoints = endpoints.filter(
-    (e) => e.id !== 'botcake-platform' && !e.url?.includes('botcake.io'),
-  );
+  const isBotCake = (e: Endpoint) => !!e.fb_page_id || e.id === 'botcake-platform' || (e.url ?? '').includes('botcake.io');
+
+  const botcakeEndpoint = endpoints.find(isBotCake);
+  const shopEndpoints = endpoints.filter((e) => !isBotCake(e));
 
   async function save(data: Partial<Endpoint>) {
     setError('');
@@ -241,6 +240,17 @@ export function SettingsForm({ initialEndpoints }: { initialEndpoints: Endpoint[
                   onChange={(e) => setEditing({ ...editing, access_token: e.target.value })}
                   className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200 font-mono"
                   placeholder="eyJ..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Facebook Page ID (BotCake only)</label>
+                <input
+                  type="text"
+                  value={editing.fb_page_id ?? ''}
+                  onChange={(e) => setEditing({ ...editing, fb_page_id: e.target.value || null })}
+                  className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200 font-mono"
+                  placeholder="104533988952572"
                 />
               </div>
 

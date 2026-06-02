@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
-import { getEndpointByApiKey, getLatestRun } from '@/lib/db';
+import { getEndpointByApiKey, getLatestRun, isBotCakeEndpoint } from '@/lib/db';
 import { refreshBotCake } from '@/lib/poller';
 import { broadcastSSE } from '@/lib/sse';
 import { cors, corsOptions } from '@/lib/cors';
@@ -17,14 +17,14 @@ async function handler(apiKey: string | null, ip?: string) {
     }
 
     const endpoint = await getEndpointByApiKey(apiKey);
-    if (!endpoint || endpoint.id !== 'botcake-platform') {
+    if (!endpoint || !isBotCakeEndpoint(endpoint)) {
       return cors(apiError(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'Unauthorized', 401));
     }
 
     await refreshBotCake();
-    broadcastSSE('refresh', JSON.stringify({ source: 'botcake-refresh', endpoint_id: 'botcake-platform' }));
+    broadcastSSE('refresh', JSON.stringify({ source: 'botcake-refresh', endpoint_id: endpoint.id }));
 
-    const latest = await getLatestRun('botcake-platform');
+    const latest = await getLatestRun(endpoint.id);
     return cors(NextResponse.json({
       ok: true,
       run_id: latest?.run_id ?? null,

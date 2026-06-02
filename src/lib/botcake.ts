@@ -2,7 +2,6 @@ import { pool } from '@/lib/db';
 import { BotCakePageTokenSchema, BotCakeCustomerDataSchema, BotCakeToolsResponseSchema, BotCakeFlowsResponseSchema, FbPageInfoSchema, PageStateRowSchema } from './schemas';
 
 const API_BASE = 'https://botcake.io/api/public_api/v1';
-const FB_ID = '104533988952572';
 const FB_GRAPH = 'https://graph.facebook.com/v22.0';
 const CONVERSATION_CACHE_TTL = 2 * 60 * 1000;
 
@@ -60,11 +59,11 @@ async function fetchPostWithRetry(url: string, token: string, retries = 2): Prom
 
 let _pageTokenCache: { tokens: Map<string, string>; fetchedAt: number } | null = null;
 
-async function getBotCakePageTokens(userToken: string): Promise<Map<string, string>> {
+async function getBotCakePageTokens(userToken: string, fbPageId: string): Promise<Map<string, string>> {
   if (_pageTokenCache && Date.now() - _pageTokenCache.fetchedAt < CONVERSATION_CACHE_TTL) {
     return _pageTokenCache.tokens;
   }
-  const url = `${API_BASE}/integration_page/list_access_token/${FB_ID}`;
+  const url = `${API_BASE}/integration_page/list_access_token/${fbPageId}`;
   const res = await fetchPostWithRetry(url, userToken, 1);
   if (!res) return new Map();
   const data = BotCakePageTokenSchema.array().parse(await res.json());
@@ -77,9 +76,9 @@ export type ConversationResult = Map<string, { ts: string | null; count: number 
 
 const _conversationCache: Map<string, { hasConversations: boolean; lastActivityAt: string | null; customerCount: number; checkedAt: number }> = new Map();
 
-export async function checkBotCakeConversations(pageIds: string[], userToken: string): Promise<ConversationResult> {
+export async function checkBotCakeConversations(pageIds: string[], userToken: string, fbPageId: string): Promise<ConversationResult> {
   const result: ConversationResult = new Map();
-  const tokens = await getBotCakePageTokens(userToken);
+  const tokens = await getBotCakePageTokens(userToken, fbPageId);
   if (tokens.size === 0) return result;
 
   const needsCheck = pageIds.filter(id => {
@@ -140,9 +139,9 @@ export async function checkBotCakeConversations(pageIds: string[], userToken: st
 
 const _toolsFlowsCache = new Map<string, { hasToolsOrFlows: boolean; lastActivityAt: string | null; checkedAt: number }>();
 
-export async function checkBotCakeToolsFlows(pageIds: string[], userToken: string): Promise<Map<string, string | null>> {
+export async function checkBotCakeToolsFlows(pageIds: string[], userToken: string, fbPageId: string): Promise<Map<string, string | null>> {
   const result = new Map<string, string | null>();
-  const tokens = await getBotCakePageTokens(userToken);
+  const tokens = await getBotCakePageTokens(userToken, fbPageId);
   if (tokens.size === 0) return result;
 
   const needsCheck = pageIds.filter(id => {
@@ -273,8 +272,8 @@ async function resolveFbPages(pageIds: string[]): Promise<Map<string, { status: 
   return result;
 }
 
-export async function fetchBotCakePages(token: string): Promise<BotCakePage[]> {
-  const ids = await fetchBotCakePageIds(token);
+export async function fetchBotCakePages(token: string, fbPageId: string): Promise<BotCakePage[]> {
+  const ids = await fetchBotCakePageIds(token, fbPageId);
 
   const nameMap = new Map<string, string>();
   const fbToken = process.env.FB_ACCESS_TOKEN;
@@ -302,11 +301,11 @@ export async function fetchBotCakePages(token: string): Promise<BotCakePage[]> {
   }));
 }
 
-async function fetchBotCakePageIds(token: string): Promise<string[]> {
+export async function fetchBotCakePageIds(token: string, fbPageId: string): Promise<string[]> {
   const all: string[] = [];
   let page = 1;
   while (true) {
-    const res = await fetchWithRetry(`${API_BASE}/integration_page/${FB_ID}/list_page_id?page=${page}`, token);
+    const res = await fetchWithRetry(`${API_BASE}/integration_page/${fbPageId}/list_page_id?page=${page}`, token);
     if (!res) break;
     const data: string[] = await res.json();
     if (!Array.isArray(data) || data.length === 0) break;

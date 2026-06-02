@@ -24,6 +24,7 @@ export default async function SettingsPage({
     is_active: e.is_active,
     created_at: e.created_at,
     last_used_at: e.last_used_at,
+    fb_page_id: e.fb_page_id,
   }));
 
   return (
