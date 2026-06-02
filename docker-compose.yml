@@ -9,4 +9,5 @@ services:
       - DATABASE_URL=postgresql://user:password@host.docker.internal:5432/botcake_monitor
       - PORT=3001
       - FB_ACCESS_TOKEN=${FB_ACCESS_TOKEN:-}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
     restart: unless-stopped

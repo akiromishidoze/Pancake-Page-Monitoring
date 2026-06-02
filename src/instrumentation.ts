@@ -30,6 +30,12 @@ export async function register() {
     log.warn('ENCRYPTION_KEY is not set — SMTP passwords will not be encryptable. Set it if you use email notifications.');
   }
 
+  if (process.env['ALLOWED_ORIGINS']) {
+    log.info('ALLOWED_ORIGINS set — CORS restricted to: %s', process.env['ALLOWED_ORIGINS']);
+  } else {
+    log.warn('ALLOWED_ORIGINS not set — CORS allows all origins (*). Set it for production.');
+  }
+
   const { initHttpAgent } = await import('./lib/http');
   initHttpAgent();
 
