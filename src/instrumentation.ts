@@ -36,6 +36,17 @@ export async function register() {
     log.warn('ALLOWED_ORIGINS not set — CORS allows all origins (*). Set it for production.');
   }
 
+  if (process.env['PGBOUNCER'] === 'true') {
+    log.info('PGBOUNCER enabled — using pgBouncer-compatible pool settings');
+  }
+
+  if (process.env['LOG_LEVEL']) {
+    const valid = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
+    if (!valid.includes(process.env['LOG_LEVEL'])) {
+      log.warn('LOG_LEVEL="%s" is not a valid level; expected one of: %s', process.env['LOG_LEVEL'], valid.join(', '));
+    }
+  }
+
   const { initHttpAgent } = await import('./lib/http');
   initHttpAgent();
 
