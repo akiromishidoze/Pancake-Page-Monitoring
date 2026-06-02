@@ -17,8 +17,15 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: __dirname,
   },
+  staticPageGenerationTimeout: 120,
   async headers() {
     return [
+      {
+        source: '/:path((?!_next/).+\\.(ico|png|jpg|jpeg|gif|svg|webp|woff2?|eot|ttf|otf|css|js)$)',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
       {
         source: '/(.*)',
         headers: [
