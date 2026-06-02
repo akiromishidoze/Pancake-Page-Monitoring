@@ -40,7 +40,12 @@ export async function POST(req: Request) {
       api_key: body.api_key,
       url: body.url ?? null,
       access_token: body.access_token ?? null,
-      token_expires_at: body.token_expires_at ?? null,
+      token_expires_at:
+        body.token_expires_at !== undefined
+          ? body.token_expires_at
+          : body.access_token
+            ? new Date(Date.now() + 60 * 86400000).toISOString()
+            : null,
       is_active: body.is_active,
     });
 

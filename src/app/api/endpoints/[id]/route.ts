@@ -26,13 +26,20 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   }
 
   const body = parsed.data;
+  const newToken = body.access_token !== undefined ? body.access_token : existing.access_token;
+  const tokenChanged = body.access_token !== undefined && body.access_token !== existing.access_token;
   const endpoint = await upsertEndpoint({
     id,
     name: body.name ?? existing.name,
     url: body.url !== undefined ? body.url : existing.url,
     api_key: body.api_key ?? existing.api_key,
-    access_token: body.access_token !== undefined ? body.access_token : existing.access_token,
-    token_expires_at: body.token_expires_at !== undefined ? body.token_expires_at : existing.token_expires_at,
+    access_token: newToken,
+    token_expires_at:
+      body.token_expires_at !== undefined
+        ? body.token_expires_at
+        : tokenChanged && newToken
+          ? new Date(Date.now() + 60 * 86400000).toISOString()
+          : existing.token_expires_at,
     is_active: body.is_active !== undefined ? body.is_active : existing.is_active,
   });
 
