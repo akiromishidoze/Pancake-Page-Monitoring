@@ -29,6 +29,13 @@ export async function proxy(request: NextRequest) {
 
   function respond(res: NextResponse): NextResponse {
     res.headers.set('x-request-id', requestId);
+    if (pathname.startsWith('/api/')) {
+      if (method === 'GET') {
+        res.headers.set('Cache-Control', 'private, no-cache, no-store, max-age=0, must-revalidate');
+      } else {
+        res.headers.set('Cache-Control', 'no-store');
+      }
+    }
     logReq('info', 'response', { requestId, method, pathname, status: res.status, durationMs: Date.now() - start });
     return res;
   }
