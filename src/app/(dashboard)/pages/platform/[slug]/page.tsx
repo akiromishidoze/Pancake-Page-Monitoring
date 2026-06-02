@@ -57,7 +57,8 @@ export default async function PlatformPage({
   const shops = Array.from(new Set(allRows.map((r) => r.shop).filter((s): s is string => !!s))).sort();
   const hasShops = shops.length > 0;
   const selectedShop = sp.shop || shops[0] || '';
-  const shopRows = hasShops ? allRows.filter((r) => r.shop === selectedShop) : allRows;
+  const shopRows = (hasShops ? allRows.filter((r) => r.shop === selectedShop) : allRows)
+    .sort((a, b) => (a.is_activated === b.is_activated ? 0 : a.is_activated ? -1 : 1));
   const shopCounts = Object.fromEntries(shops.map(s => [s, allRows.filter(r => r.shop === s).length]));
   const allKindsNull = allRows.every(r => !r.kind);
   const activeCount = shopRows.filter((r) => r.is_activated === true).length;
