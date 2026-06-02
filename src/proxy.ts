@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { ErrorCodes } from '@/lib/errors';
 
+const MAX_BODY_SIZE = 5 * 1024 * 1024;
+
 function getClientIp(request: NextRequest): string {
   return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
     || request.headers.get('x-real-ip')
@@ -26,6 +28,17 @@ export async function proxy(request: NextRequest) {
   const ip = getClientIp(request);
 
   logReq('info', 'request', { requestId, method, pathname, ip });
+
+  if (method === 'POST' || method === 'PUT') {
+    const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
+    if (contentLength > MAX_BODY_SIZE) {
+      logReq('warn', 'request body too large', { requestId, pathname, contentLength, maxSize: MAX_BODY_SIZE });
+      if (pathname.startsWith('/api/')) {
+        return apiJson({ ok: false, error: 'Request body too large', code: ErrorCodes.PAYLOAD_TOO_LARGE }, 413);
+      }
+      return new NextResponse('Request body too large', { status: 413 });
+    }
+  }
 
   function respond(res: NextResponse): NextResponse {
     res.headers.set('x-request-id', requestId);
