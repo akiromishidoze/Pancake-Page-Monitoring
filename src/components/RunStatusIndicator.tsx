@@ -32,12 +32,13 @@ export function RunStatusIndicator() {
 
   if (isRunning) {
     return (
-      <div className="flex items-center gap-2 mt-2 text-sm text-blue-400 font-medium animate-pulse">
+      <div className="flex items-center gap-2 mt-2 text-sm text-blue-400 font-medium animate-pulse" role="status" aria-live="polite">
         <svg
           className="animate-spin h-4 w-4 text-blue-400"
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <circle
             className="opacity-25"

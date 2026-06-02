@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { ErrorCodes } from '@/lib/errors';
+import { createLogger } from '@/lib/logger';
 
+const log = createLogger('proxy');
 const MAX_BODY_SIZE = 5 * 1024 * 1024;
 
 function getClientIp(request: NextRequest): string {
@@ -16,10 +18,6 @@ function generateId(): string {
   return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-function logReq(level: string, msg: string, meta?: Record<string, unknown>) {
-  console.log(JSON.stringify({ ts: new Date().toISOString(), level, msg, ...meta }));
-}
-
 export async function proxy(request: NextRequest) {
   const start = Date.now();
   const requestId = generateId();
@@ -27,12 +25,12 @@ export async function proxy(request: NextRequest) {
   const method = request.method;
   const ip = getClientIp(request);
 
-  logReq('info', 'request', { requestId, method, pathname, ip });
+  log.info({ requestId, method, pathname, ip }, 'request');
 
   if (method === 'POST' || method === 'PUT') {
     const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
     if (contentLength > MAX_BODY_SIZE) {
-      logReq('warn', 'request body too large', { requestId, pathname, contentLength, maxSize: MAX_BODY_SIZE });
+      log.warn({ requestId, pathname, contentLength, maxSize: MAX_BODY_SIZE }, 'request body too large');
       if (pathname.startsWith('/api/')) {
         return apiJson({ ok: false, error: 'Request body too large', code: ErrorCodes.PAYLOAD_TOO_LARGE }, 413);
       }
@@ -49,7 +47,7 @@ export async function proxy(request: NextRequest) {
         res.headers.set('Cache-Control', 'no-store');
       }
     }
-    logReq('info', 'response', { requestId, method, pathname, status: res.status, durationMs: Date.now() - start });
+    log.info({ requestId, method, pathname, status: res.status, durationMs: Date.now() - start }, 'response');
     return res;
   }
 
@@ -64,7 +62,7 @@ export async function proxy(request: NextRequest) {
 
   const session = request.cookies.get('session')?.value;
   if (!session) {
-    logReq('warn', 'no session', { requestId, pathname });
+    log.warn({ requestId, pathname }, 'no session');
     if (pathname.startsWith('/api/')) {
       return apiJson({ ok: false, error: 'Not authenticated', code: ErrorCodes.AUTH_REQUIRED }, 401);
     }
@@ -74,7 +72,7 @@ export async function proxy(request: NextRequest) {
   const { validateSession } = await import('@/lib/auth');
   const valid = await validateSession(session);
   if (!valid) {
-    logReq('warn', 'invalid session', { requestId, pathname });
+    log.warn({ requestId, pathname }, 'invalid session');
     if (pathname.startsWith('/api/')) {
       return apiJson({ ok: false, error: 'Not authenticated', code: ErrorCodes.AUTH_SESSION_EXPIRED }, 401);
     }
@@ -83,7 +81,7 @@ export async function proxy(request: NextRequest) {
 
   const { isStateChangingRequest, checkCsrf } = await import('@/lib/csrf');
   if (isStateChangingRequest(request.method) && !checkCsrf(request)) {
-    logReq('warn', 'csrf failed', { requestId, pathname, method });
+    log.warn({ requestId, pathname, method }, 'csrf failed');
     if (pathname.startsWith('/api/')) {
       return apiJson({ ok: false, error: 'CSRF validation failed', code: ErrorCodes.CSRF_FAILED }, 403);
     }

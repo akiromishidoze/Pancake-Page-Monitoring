@@ -19,6 +19,7 @@ export function Pagination({ page, totalPages, endpointId }: { page: number; tot
         <button
           onClick={() => goTo(page - 1)}
           className="px-3 py-1.5 rounded border border-slate-700 text-xs text-slate-400 hover:bg-slate-800 transition-colors cursor-pointer"
+          aria-label="Previous page"
         >
           Previous
         </button>
@@ -28,6 +29,7 @@ export function Pagination({ page, totalPages, endpointId }: { page: number; tot
         <button
           onClick={() => goTo(page + 1)}
           className="px-3 py-1.5 rounded border border-slate-700 text-xs text-slate-400 hover:bg-slate-800 transition-colors cursor-pointer"
+          aria-label="Next page"
         >
           Next
         </button>

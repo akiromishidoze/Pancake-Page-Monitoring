@@ -8,7 +8,7 @@ export default function DashboardError({
   reset: () => void;
 }) {
   return (
-    <div className="rounded-lg border border-red-700 bg-red-900/20 p-6">
+    <div className="rounded-lg border border-red-700 bg-red-900/20 p-6" role="alert">
       <h2 className="text-xl font-bold text-red-400">Something went wrong</h2>
       <p className="mt-2 text-red-200 text-sm">{error.message}</p>
       <button

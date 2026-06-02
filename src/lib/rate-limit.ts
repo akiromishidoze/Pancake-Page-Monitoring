@@ -3,6 +3,24 @@ import { ErrorCodes } from './errors';
 
 const _stores = new Map<string, Map<string, { count: number; resetAt: number }>>();
 
+let _evictionTimer: ReturnType<typeof setInterval> | null = null;
+
+function startEviction(): void {
+  if (_evictionTimer) return;
+  _evictionTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [storeKey, store] of _stores) {
+      for (const [ip, entry] of store) {
+        if (now > entry.resetAt) store.delete(ip);
+      }
+      if (store.size === 0) _stores.delete(storeKey);
+    }
+  }, 60_000);
+  _evictionTimer.unref();
+}
+
+startEviction();
+
 export function rateLimit(
   ip: string,
   opts?: { windowMs?: number; max?: number; store?: string },

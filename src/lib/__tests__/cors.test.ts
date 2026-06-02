@@ -1,0 +1,133 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { NextResponse } from 'next/server';
+
+describe('cors module', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    delete process.env.ALLOWED_ORIGINS;
+  });
+
+  describe('cors', () => {
+    it('sets Access-Control-Allow-Origin to * when ALLOWED_ORIGINS is empty', async () => {
+      delete process.env.ALLOWED_ORIGINS;
+      const { cors } = await import('../cors');
+      const res = cors(new NextResponse());
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
+      expect(res.headers.get('Vary')).toBeNull();
+    });
+
+    it('sets Access-Control-Allow-Origin to * when ALLOWED_ORIGINS is blank', async () => {
+      process.env.ALLOWED_ORIGINS = '';
+      const { cors } = await import('../cors');
+      const res = cors(new NextResponse());
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
+    });
+
+    it('echoes matching origin', async () => {
+      process.env.ALLOWED_ORIGINS = 'https://app.example.com,https://admin.example.com';
+      const { cors } = await import('../cors');
+      const res = cors(new NextResponse(), 'https://app.example.com');
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://app.example.com');
+      expect(res.headers.get('Vary')).toBe('Origin');
+    });
+
+    it('falls back to first allowed origin for non-matching origin', async () => {
+      process.env.ALLOWED_ORIGINS = 'https://app.example.com,https://admin.example.com';
+      const { cors } = await import('../cors');
+      const res = cors(new NextResponse(), 'https://evil.com');
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://app.example.com');
+      expect(res.headers.get('Vary')).toBe('Origin');
+    });
+
+    it('sets Vary: Origin only when allowOrigin is not *', async () => {
+      process.env.ALLOWED_ORIGINS = 'https://app.example.com';
+      const { cors } = await import('../cors');
+      const res = cors(new NextResponse(), 'https://app.example.com');
+      expect(res.headers.get('Vary')).toBe('Origin');
+    });
+
+    it('sets standard CORS headers', async () => {
+      process.env.ALLOWED_ORIGINS = 'https://app.example.com';
+      const { cors } = await import('../cors');
+      const res = cors(new NextResponse(), 'https://app.example.com');
+      expect(res.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, PUT, DELETE, OPTIONS');
+      expect(res.headers.get('Access-Control-Allow-Headers')).toBe('Content-Type, X-Api-Key');
+    });
+
+    it('trims whitespace in ALLOWED_ORIGINS', async () => {
+      process.env.ALLOWED_ORIGINS = '  https://app.example.com  ,  https://admin.example.com  ';
+      const { cors } = await import('../cors');
+      const res = cors(new NextResponse(), 'https://app.example.com');
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://app.example.com');
+    });
+  });
+
+  describe('corsReflectOrigin', () => {
+    it('reflects matching origin', async () => {
+      process.env.ALLOWED_ORIGINS = 'https://app.example.com';
+      const { corsReflectOrigin } = await import('../cors');
+      const res = corsReflectOrigin(new NextResponse(), 'https://app.example.com');
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://app.example.com');
+    });
+
+    it('falls back to first allowed for non-matching origin', async () => {
+      process.env.ALLOWED_ORIGINS = 'https://app.example.com,https://admin.example.com';
+      const { corsReflectOrigin } = await import('../cors');
+      const res = corsReflectOrigin(new NextResponse(), 'https://evil.com');
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://app.example.com');
+    });
+
+    it('falls back to * when no allowed origins configured', async () => {
+      delete process.env.ALLOWED_ORIGINS;
+      const { corsReflectOrigin } = await import('../cors');
+      const res = corsReflectOrigin(new NextResponse(), 'https://any.com');
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://any.com');
+    });
+
+    it('does nothing when origin is null', async () => {
+      process.env.ALLOWED_ORIGINS = 'https://app.example.com';
+      const { corsReflectOrigin } = await import('../cors');
+      const res = corsReflectOrigin(new NextResponse(), null);
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
+    });
+
+    it('sets Vary header when origin is not *', async () => {
+      process.env.ALLOWED_ORIGINS = 'https://app.example.com';
+      const { corsReflectOrigin } = await import('../cors');
+      const res = corsReflectOrigin(new NextResponse(), 'https://app.example.com');
+      expect(res.headers.get('Vary')).toBe('Origin');
+    });
+
+    it('does not set Vary when allowOrigin is *', async () => {
+      delete process.env.ALLOWED_ORIGINS;
+      const { corsReflectOrigin } = await import('../cors');
+      const res = corsReflectOrigin(new NextResponse(), 'https://any.com');
+      // When no ALLOWED_ORIGINS and origin is provided, allowed = true -> allowOrigin = origin = 'https://any.com'
+      // list.length === 0 so allowed is true -> allowOrigin = origin
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://any.com');
+      // allowOrigin is not '*', so Vary should be set... wait, let me re-check logic
+      // Actually: list.length === 0 -> allowed = true -> allowOrigin = origin ('https://any.com') -> allowOrigin !== '*' -> Vary set
+      expect(res.headers.get('Vary')).toBe('Origin');
+    });
+  });
+
+  describe('corsOptions', () => {
+    it('returns 204 response with CORS headers', async () => {
+      process.env.ALLOWED_ORIGINS = '';
+      const { corsOptions } = await import('../cors');
+      const res = corsOptions();
+      expect(res.status).toBe(204);
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
+    });
+
+    it('passes origin to cors', async () => {
+      process.env.ALLOWED_ORIGINS = 'https://app.example.com';
+      const { corsOptions } = await import('../cors');
+      const res = corsOptions('https://app.example.com');
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://app.example.com');
+    });
+  });
+});

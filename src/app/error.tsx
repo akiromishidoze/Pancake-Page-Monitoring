@@ -9,7 +9,7 @@ export default function RootError({
 }) {
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
-      <div className="max-w-md w-full rounded-lg border border-red-800 bg-slate-900 p-8 text-center">
+      <div className="max-w-md w-full rounded-lg border border-red-800 bg-slate-900 p-8 text-center" role="alert">
         <h1 className="text-2xl font-bold text-red-400">Error</h1>
         <p className="mt-3 text-sm text-slate-400">{error.message || 'An unexpected error occurred.'}</p>
         <button

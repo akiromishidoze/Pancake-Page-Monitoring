@@ -23,7 +23,7 @@ function resolveAllowedOrigin(requestOrigin: string | null): string {
 export function cors(res: NextResponse, origin?: string | null): NextResponse {
   const allowOrigin = resolveAllowedOrigin(origin ?? null);
   res.headers.set('Access-Control-Allow-Origin', allowOrigin);
-  res.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key');
   if (allowOrigin !== '*') {
     res.headers.set('Vary', 'Origin');
@@ -37,7 +37,7 @@ export function corsReflectOrigin(res: NextResponse, origin: string | null): Nex
     const allowed = list.length === 0 || list.includes(origin);
     const allowOrigin = allowed ? origin : (list.length > 0 ? list[0] : '*');
     res.headers.set('Access-Control-Allow-Origin', allowOrigin);
-    res.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key');
     if (allowOrigin !== '*') {
       res.headers.set('Vary', 'Origin');

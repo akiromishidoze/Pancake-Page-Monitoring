@@ -19,5 +19,16 @@ export function checkCsrf(request: NextRequest): boolean {
     }
   }
 
+  // Fall back to Referer header when Origin is absent
+  const referer = request.headers.get('referer');
+  if (referer) {
+    try {
+      const refererUrl = new URL(referer);
+      return refererUrl.host === host;
+    } catch {
+      return false;
+    }
+  }
+
   return true;
 }

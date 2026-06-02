@@ -10,7 +10,7 @@ export default function LoginError({
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-950">
       <div className="w-full max-w-sm mx-4">
-        <div className="rounded-lg border border-red-700 bg-red-900/20 p-8">
+        <div className="rounded-lg border border-red-700 bg-red-900/20 p-8" role="alert">
           <h2 className="text-lg font-bold text-red-400 text-center">Error</h2>
           <p className="mt-2 text-red-200 text-sm text-center">{error.message}</p>
           <button

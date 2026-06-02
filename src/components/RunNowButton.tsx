@@ -52,7 +52,7 @@ export function RunNowButton() {
           setSchedule(data.interval);
         }
       })
-      .catch(() => {});
+      .catch(() => toast('Failed to load schedule'));
   }, []);
 
   async function handleScheduleChange(newInterval: string) {
