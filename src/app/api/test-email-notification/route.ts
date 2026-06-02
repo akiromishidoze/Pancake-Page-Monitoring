@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { apiCatch } from '@/lib/errors';
 import { sendAlert } from '@/lib/notify';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
+    const rateLimited = rateLimit(getClientIp(req), { store: 'test-email-notification', max: 5 });
+    if (rateLimited) return rateLimited;
 
     await sendAlert({
       title: '🔔 Test Email Notification',

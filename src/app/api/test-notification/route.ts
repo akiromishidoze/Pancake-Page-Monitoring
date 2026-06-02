@@ -2,9 +2,12 @@ import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { getSetting } from '@/lib/db';
 import { sendAlert } from '@/lib/notify';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
+    const rateLimited = rateLimit(getClientIp(req), { store: 'test-notification', max: 5 });
+    if (rateLimited) return rateLimited;
     const webhook = await getSetting('notify_slack_webhook');
     if (!webhook) {
       return apiError(ErrorCodes.MISSING_FIELD, 'No Slack webhook configured', 400);

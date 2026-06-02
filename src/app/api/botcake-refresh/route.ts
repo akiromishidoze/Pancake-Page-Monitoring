@@ -4,8 +4,13 @@ import { getEndpointByApiKey, getLatestRun } from '@/lib/db';
 import { refreshBotCake } from '@/lib/poller';
 import { broadcastSSE } from '@/lib/sse';
 import { cors, corsOptions } from '@/lib/cors';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
-async function handler(apiKey: string | null) {
+async function handler(apiKey: string | null, ip?: string) {
+  if (ip) {
+    const rateLimited = rateLimit(ip, { store: 'botcake-refresh', max: 5 });
+    if (rateLimited) return rateLimited;
+  }
   try {
     if (!apiKey) {
       return cors(apiError(ErrorCodes.AUTH_REQUIRED, 'Missing X-Api-Key header or ?key=', 401));
@@ -39,11 +44,11 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   const apiKey = req.headers.get('x-api-key') || req.headers.get('X-Api-Key');
-  return handler(apiKey);
+  return handler(apiKey, getClientIp(req));
 }
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const apiKey = searchParams.get('key');
-  return handler(apiKey);
+  return handler(apiKey, getClientIp(req));
 }

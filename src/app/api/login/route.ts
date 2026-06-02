@@ -8,7 +8,7 @@ import { LoginSchema } from '@/lib/schemas';
 export async function POST(req: Request) {
   try {
     const ip = getClientIp(req);
-    const rateLimited = rateLimit(ip, { store: 'login' });
+    const rateLimited = rateLimit(ip, { store: 'login', max: 5 });
     if (rateLimited) return rateLimited;
 
     let raw: unknown;

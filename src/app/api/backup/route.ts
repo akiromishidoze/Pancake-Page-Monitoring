@@ -4,9 +4,12 @@
 import { NextResponse } from 'next/server';
 import { apiCatch } from '@/lib/errors';
 import { pool } from '@/lib/db';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
+    const rateLimited = rateLimit(getClientIp(req), { store: 'backup', max: 2 });
+    if (rateLimited) return rateLimited;
     // PostgreSQL backup via pg_dump
     const { execSync } = await import('child_process');
     const fs = await import('fs');
