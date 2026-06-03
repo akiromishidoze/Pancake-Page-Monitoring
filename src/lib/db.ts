@@ -764,28 +764,13 @@ export async function upsertEndpoint(input: {
   const id = input.id || crypto.randomUUID();
   const now = new Date().toISOString();
 
-  if (input.id) {
-    await pool.query(q(`
-      UPDATE endpoints SET name=@name, url=@url, api_key=@api_key,
-        access_token=@access_token, token_expires_at=@token_expires_at,
-        is_active=@is_active, fb_page_id=@fb_page_id
-      WHERE id=@id
-    `, {
-      id: input.id,
-      name: input.name,
-      url: input.url ?? null,
-      api_key: input.api_key,
-      access_token: input.access_token ?? null,
-      token_expires_at: input.token_expires_at ?? null,
-      is_active: input.is_active ?? true,
-      fb_page_id: input.fb_page_id ?? null,
-    }));
-    return (await getEndpoint(input.id))!;
-  }
-
   await pool.query(q(`
     INSERT INTO endpoints (id, name, url, api_key, access_token, token_expires_at, is_active, created_at, fb_page_id)
     VALUES (@id, @name, @url, @api_key, @access_token, @token_expires_at, @is_active, @created_at, @fb_page_id)
+    ON CONFLICT (id) DO UPDATE SET
+      name=EXCLUDED.name, url=EXCLUDED.url, api_key=EXCLUDED.api_key,
+      access_token=EXCLUDED.access_token, token_expires_at=EXCLUDED.token_expires_at,
+      is_active=EXCLUDED.is_active, fb_page_id=EXCLUDED.fb_page_id
   `, {
     id,
     name: input.name,
@@ -951,46 +936,27 @@ export async function upsertPlatformConnector(input: {
   const id = input.id || crypto.randomUUID();
   const now = new Date().toISOString();
 
-  if (input.id) {
-    await pool.query(q(`
-      UPDATE platform_connectors SET name=@name, platform_type=@platform_type, api_url=@api_url,
-        auth_header=@auth_header, auth_token=@auth_token, json_path=@json_path,
-        interval_ms=@interval_ms, is_active=@is_active, updated_at=@updated_at
-      WHERE id=@id
-    `, {
-      id: input.id,
-      name: input.name,
-      platform_type: input.platform_type,
-      api_url: input.api_url,
-      auth_header: input.auth_header ?? null,
-      auth_token: input.auth_token ?? null,
-      json_path: input.json_path ?? null,
-      interval_ms: input.interval_ms ?? 60000,
-      is_active: input.is_active ?? true,
-      updated_at: now,
-    }));
-    return (await getPlatformConnector(input.id))!;
-  }
-
-  // Ensure FK reference exists in endpoints table
-  const exists = await pool.query('SELECT 1 FROM endpoints WHERE id = $1', [id]);
-  if (exists.rows.length === 0) {
-    await pool.query(q(`
-      INSERT INTO endpoints (id, name, url, api_key, is_active, created_at)
-      VALUES (@id, @name, @url, @api_key, @is_active, @created_at)
-    `, {
-      id,
-      name: `${input.name} (Connector)`,
-      url: input.api_url,
-      api_key: `connector_${id}`,
-      is_active: 1,
-      created_at: now,
-    }));
-  }
+  // Ensure FK reference exists in endpoints table (no-op if already exists)
+  await pool.query(q(`
+    INSERT INTO endpoints (id, name, url, api_key, is_active, created_at)
+    VALUES (@id, @name, @url, @api_key, @is_active, @created_at)
+    ON CONFLICT (id) DO NOTHING
+  `, {
+    id,
+    name: `${input.name} (Connector)`,
+    url: input.api_url,
+    api_key: `connector_${id}`,
+    is_active: 1,
+    created_at: now,
+  }));
 
   await pool.query(q(`
     INSERT INTO platform_connectors (id, name, platform_type, api_url, auth_header, auth_token, json_path, interval_ms, is_active, created_at, updated_at)
     VALUES (@id, @name, @platform_type, @api_url, @auth_header, @auth_token, @json_path, @interval_ms, @is_active, @created_at, @updated_at)
+    ON CONFLICT (id) DO UPDATE SET
+      name=EXCLUDED.name, platform_type=EXCLUDED.platform_type, api_url=EXCLUDED.api_url,
+      auth_header=EXCLUDED.auth_header, auth_token=EXCLUDED.auth_token, json_path=EXCLUDED.json_path,
+      interval_ms=EXCLUDED.interval_ms, is_active=EXCLUDED.is_active, updated_at=EXCLUDED.updated_at
   `, {
     id,
     name: input.name,
