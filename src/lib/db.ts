@@ -1,6 +1,8 @@
-import { Pool } from 'pg';
+import { Pool, type PoolConfig } from 'pg';
 import { parse } from 'pg-connection-string';
 import { createLogger } from './logger';
+
+type DbPoolConfig = PoolConfig & { pgbouncer?: boolean | undefined };
 
 const log = createLogger('db');
 
@@ -8,7 +10,7 @@ const connectionString = process.env.DATABASE_URL || '';
 const parsed = parse(connectionString);
 const isPgBouncer = process.env.PGBOUNCER === 'true';
 if (isPgBouncer) log.info('PgBouncer mode enabled');
-const pool = new Pool({
+const poolConfig: DbPoolConfig = {
   host: parsed.host || '/var/run/postgresql',
   port: parsed.port ? parseInt(String(parsed.port), 10) : undefined,
   database: parsed.database || undefined,
@@ -19,7 +21,8 @@ const pool = new Pool({
   connectionTimeoutMillis: 10_000,
   idleTimeoutMillis: 30_000,
   pgbouncer: isPgBouncer || undefined,
-} as any);
+};
+const pool = new Pool(poolConfig);
 
 // Log connection errors without crashing
 pool.on('error', (err) => {
