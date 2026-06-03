@@ -22,9 +22,10 @@ export function NotificationSettings() {
   const [testingEmail, setTestingEmail] = useState(false);
 
   useEffect(() => {
-    fetch('/api/notify-settings')
-      .then(r => r.json())
-      .then(d => {
+    (async () => {
+      try {
+        const r = await fetch('/api/notify-settings');
+        const d = await r.json();
         if (d.ok) {
           setConfigured(d.slack_configured);
           setSmtpHost(d.smtp_host || '');
@@ -34,8 +35,10 @@ export function NotificationSettings() {
           setEmailTo(d.email_to || '');
           setEmailConfigured(d.email_configured);
         }
-      })
-      .catch(() => toast('Failed to load notification settings'));
+      } catch {
+        toast('Failed to load notification settings');
+      }
+    })();
   }, []);
 
   async function handleSubmit(e: FormEvent) {

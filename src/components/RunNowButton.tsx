@@ -46,14 +46,17 @@ export function RunNowButton() {
   }, []);
 
   useEffect(() => {
-    fetch('/api/schedule')
-      .then((res) => res.json())
-      .then((data) => {
+    (async () => {
+      try {
+        const res = await fetch('/api/schedule');
+        const data = await res.json();
         if (data.ok) {
           setSchedule(data.interval);
         }
-      })
-      .catch(() => toast('Failed to load schedule'));
+      } catch {
+        toast('Failed to load schedule');
+      }
+    })();
   }, []);
 
   async function handleScheduleChange(newInterval: string) {

@@ -29,9 +29,15 @@ export function ConnectorsSettings() {
   const { toast } = useToast();
 
   useEffect(() => {
-    fetch('/api/connectors').then(r => r.json()).then(d => {
-      if (d.ok) setConnectors(d.connectors);
-    }).catch(() => toast('Failed to load connectors'));
+    (async () => {
+      try {
+        const r = await fetch('/api/connectors');
+        const d = await r.json();
+        if (d.ok) setConnectors(d.connectors);
+      } catch {
+        toast('Failed to load connectors');
+      }
+    })();
   }, []);
 
   async function save(data: Partial<Connector>) {

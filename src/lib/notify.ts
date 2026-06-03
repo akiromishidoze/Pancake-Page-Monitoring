@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { getSetting, setSetting, pool, type RunRow } from './db';
+import { getSetting, setSetting, queryRow, type RunRow } from './db';
 import { decrypt, encrypt } from './crypto';
 import { createLogger } from './logger';
 
@@ -187,8 +187,7 @@ export async function sendAlert(event: AlertEvent): Promise<void> {
 }
 
 export async function checkAlertsForRun(runId: string): Promise<void> {
-  const r = await pool.query('SELECT * FROM runs WHERE run_id = $1', [runId]);
-  const run = (r.rows[0] ?? null) as RunRow | null;
+  const run = (await queryRow<RunRow>('SELECT * FROM runs WHERE run_id = $1', [runId])) ?? null;
   if (!run) return;
 
   const h = run;

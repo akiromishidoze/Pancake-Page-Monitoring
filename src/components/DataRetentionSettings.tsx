@@ -11,14 +11,17 @@ export function DataRetentionSettings() {
   const { toast } = useToast();
 
   useEffect(() => {
-    fetch('/api/settings')
-      .then(r => r.json())
-      .then(d => {
+    (async () => {
+      try {
+        const r = await fetch('/api/settings');
+        const d = await r.json();
         if (d.ok && d.settings?.retention_days) {
           setDays(d.settings.retention_days);
         }
-      })
-      .catch(() => toast('Failed to load retention settings'));
+      } catch {
+        toast('Failed to load retention settings');
+      }
+    })();
   }, []);
 
   async function handleSubmit(e: FormEvent) {

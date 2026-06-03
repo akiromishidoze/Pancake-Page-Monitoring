@@ -2,6 +2,7 @@ import { Pool, type PoolConfig } from 'pg';
 import { parse } from 'pg-connection-string';
 import { createLogger } from './logger';
 
+
 type DbPoolConfig = PoolConfig & { pgbouncer?: boolean | undefined };
 
 const log = createLogger('db');
@@ -29,6 +30,16 @@ pool.on('error', (err) => {
   log.error({ err: err.message }, 'unexpected pool error');
 });
 export { pool };
+
+export async function queryRows<T = any>(text: string, params?: unknown[]): Promise<T[]> {
+  const r = await pool.query(text, params);
+  return r.rows as T[];
+}
+
+export async function queryRow<T = any>(text: string, params?: unknown[]): Promise<T | undefined> {
+  const r = await pool.query(text, params);
+  return r.rows[0] as T | undefined;
+}
 
 // ──── SQL helper: convert @name params to $1, $2 positional ──────────
 
@@ -589,29 +600,26 @@ export async function insertSnapshot(input: InsertSnapshotInput): Promise<{ inse
 export async function getLatestRun(endpointId?: string): Promise<RunRow | undefined> {
   await ensureMigrated();
   if (endpointId) {
-    const r = await pool.query('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT 1', [endpointId]);
-    return r.rows[0] as RunRow | undefined;
+    return queryRow<RunRow>('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT 1', [endpointId]);
   }
-  const r = await pool.query('SELECT * FROM runs ORDER BY generated_at DESC LIMIT 1');
-  return r.rows[0] as RunRow | undefined;
+  return queryRow<RunRow>('SELECT * FROM runs ORDER BY generated_at DESC LIMIT 1');
 }
 
 export async function getRunHistory(endpointId: string, limit = 100): Promise<RunRow[]> {
   await ensureMigrated();
-  const r = await pool.query('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT $2', [endpointId, limit]);
-  return r.rows as RunRow[];
+  return queryRows<RunRow>('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT $2', [endpointId, limit]);
 }
 
 export async function getRunHistories(endpointIds: string[], limit = 100): Promise<Map<string, RunRow[]>> {
   await ensureMigrated();
   if (endpointIds.length === 0) return new Map();
   const placeholders = endpointIds.map((_, i) => `$${i + 1}`).join(',');
-  const r = await pool.query(`
+  const rows = await queryRows<RunRow>(`
     SELECT * FROM runs WHERE endpoint_id IN (${placeholders})
     ORDER BY endpoint_id, generated_at DESC
   `, endpointIds);
   const map = new Map<string, RunRow[]>();
-  for (const row of r.rows as RunRow[]) {
+  for (const row of rows) {
     const arr = map.get(row.endpoint_id!) ?? [];
     if (arr.length < limit) arr.push(row);
     map.set(row.endpoint_id!, arr);
@@ -622,16 +630,14 @@ export async function getRunHistories(endpointIds: string[], limit = 100): Promi
 export async function getRecentRuns(limit = 50, endpointId?: string): Promise<RunRow[]> {
   await ensureMigrated();
   if (endpointId) {
-    const r = await pool.query('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT $2', [endpointId, limit]);
-    return r.rows as RunRow[];
+    return queryRows<RunRow>('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT $2', [endpointId, limit]);
   }
-  const r = await pool.query('SELECT * FROM runs ORDER BY generated_at DESC LIMIT $1', [limit]);
-  return r.rows as RunRow[];
+  return queryRows<RunRow>('SELECT * FROM runs ORDER BY generated_at DESC LIMIT $1', [limit]);
 }
 
 async function latestGoodRunIds(): Promise<string[]> {
   await ensureMigrated();
-  const r = await pool.query(`
+  const sql = `
     SELECT r1.run_id FROM runs r1
     INNER JOIN (
       SELECT r.endpoint_id, MAX(r.generated_at) AS max_gen
@@ -642,8 +648,8 @@ async function latestGoodRunIds(): Promise<string[]> {
       AND (r.active_pages > 0 OR r.active_pages IS NULL)
       GROUP BY r.endpoint_id
     ) r2 ON r1.endpoint_id = r2.endpoint_id AND r1.generated_at = r2.max_gen
-  `);
-  return (r.rows as { run_id: string }[]).map(r => r.run_id);
+  `;
+  return (await queryRows<{ run_id: string }>(sql)).map(r => r.run_id);
 }
 
 export async function getPancakeActivePageIds(): Promise<Set<string>> {
@@ -651,14 +657,15 @@ export async function getPancakeActivePageIds(): Promise<Set<string>> {
   if (latestRunIds.length === 0) return new Set<string>();
   const placeholders = latestRunIds.map((_, i) => `$${i + 1}`).join(',');
   const r = await pool.query(`SELECT page_id FROM page_states WHERE run_id IN (${placeholders}) AND is_activated IS TRUE`, latestRunIds);
-  return new Set((r.rows as { page_id: string }[]).map(r => r.page_id));
+  const rows = await queryRows<{ page_id: string }>(`SELECT page_id FROM page_states WHERE run_id IN (${placeholders}) AND is_activated IS TRUE`, latestRunIds);
+  return new Set(rows.map(r => r.page_id));
 }
 
 export async function getLatestPageStatesForEndpoints(endpointIds: string[]): Promise<PageStateRow[]> {
   await ensureMigrated();
   if (endpointIds.length === 0) return [];
   const placeholders = endpointIds.map((_, i) => `$${i + 1}`).join(',');
-  const r = await pool.query(`
+  return queryRows<PageStateRow>(`
     WITH latest AS (
       SELECT endpoint_id, MAX(generated_at) AS max_gen
       FROM runs
@@ -672,14 +679,13 @@ export async function getLatestPageStatesForEndpoints(endpointIds: string[]): Pr
       AND ps.generated_at::timestamptz >= latest.max_gen
     ORDER BY ps.shop_label, ps.page_name
   `, endpointIds);
-  return r.rows as PageStateRow[];
 }
 
 export async function getLatestPageStates(endpointId?: string): Promise<PageStateRow[]> {
   await ensureMigrated();
   if (endpointId) {
     const ep = endpointId ? await getEndpoint(endpointId) : undefined;
-    const r = await pool.query(`
+    const rows = await queryRows<PageStateRow>(`
       SELECT ps.* FROM page_states ps
       JOIN runs r ON r.run_id = ps.run_id
       WHERE r.endpoint_id = $1
@@ -687,10 +693,10 @@ export async function getLatestPageStates(endpointId?: string): Promise<PageStat
       AND ps.generated_at::timestamptz >= (SELECT generated_at FROM runs WHERE endpoint_id = $2 ORDER BY generated_at DESC LIMIT 1)
       ORDER BY ps.shop_label, ps.page_name
     `, [endpointId, endpointId]);
-    if (r.rows.length > 0) return r.rows as PageStateRow[];
+    if (rows.length > 0) return rows;
 
     if (ep?.shop_label) {
-      const r2 = await pool.query(`
+      return queryRows<PageStateRow>(`
         SELECT ps.* FROM page_states ps
         JOIN runs r ON r.run_id = ps.run_id
         WHERE r.endpoint_id IS NULL
@@ -699,11 +705,10 @@ export async function getLatestPageStates(endpointId?: string): Promise<PageStat
         AND ps.generated_at::timestamptz >= (SELECT generated_at FROM runs WHERE endpoint_id IS NULL ORDER BY generated_at DESC LIMIT 1)
         ORDER BY ps.page_name
       `, [ep.shop_label]);
-      return r2.rows as PageStateRow[];
     }
     return [];
   }
-  const r = await pool.query(`
+  return queryRows<PageStateRow>(`
     WITH latest AS (
       SELECT run_id, generated_at FROM runs
       WHERE endpoint_id IS NULL OR endpoint_id NOT IN (
@@ -715,13 +720,11 @@ export async function getLatestPageStates(endpointId?: string): Promise<PageStat
     JOIN latest ON ps.run_id = latest.run_id AND ps.generated_at::timestamptz >= latest.generated_at
     ORDER BY ps.shop_label, ps.page_name
   `);
-  return r.rows as PageStateRow[];
 }
 
 export async function getPageHistory(pageId: string, limit = 1000): Promise<PageStateRow[]> {
   await ensureMigrated();
-  const r = await pool.query('SELECT * FROM page_states WHERE page_id = $1 ORDER BY generated_at ASC LIMIT $2', [pageId, limit]);
-  return r.rows as PageStateRow[];
+  return queryRows<PageStateRow>('SELECT * FROM page_states WHERE page_id = $1 ORDER BY generated_at ASC LIMIT $2', [pageId, limit]);
 }
 
 // ──── Endpoints ───────────────────────────────────────────────────────
@@ -750,14 +753,12 @@ export function isPancakeEndpoint(ep: EndpointRow): boolean {
 
 export async function listEndpoints(): Promise<EndpointRow[]> {
   await ensureMigrated();
-  const r = await pool.query('SELECT * FROM endpoints ORDER BY created_at DESC');
-  return r.rows as EndpointRow[];
+  return queryRows<EndpointRow>('SELECT * FROM endpoints ORDER BY created_at DESC');
 }
 
 export async function getEndpoint(id: string): Promise<EndpointRow | undefined> {
   await ensureMigrated();
-  const r = await pool.query('SELECT * FROM endpoints WHERE id = $1', [id]);
-  return r.rows[0] as EndpointRow | undefined;
+  return queryRow<EndpointRow>('SELECT * FROM endpoints WHERE id = $1', [id]);
 }
 
 export function slugify(name: string): string {
@@ -771,8 +772,7 @@ export async function getEndpointBySlug(slug: string): Promise<EndpointRow | und
 
 export async function getEndpointByApiKey(apiKey: string): Promise<EndpointRow | undefined> {
   await ensureMigrated();
-  const r = await pool.query('SELECT * FROM endpoints WHERE api_key = $1 AND is_active IS TRUE', [apiKey]);
-  return r.rows[0] as EndpointRow | undefined;
+  return queryRow<EndpointRow>('SELECT * FROM endpoints WHERE api_key = $1 AND is_active IS TRUE', [apiKey]);
 }
 
 export async function upsertEndpoint(input: {
@@ -829,18 +829,22 @@ export async function getPreviousRunActiveCount(endpointId: string): Promise<num
     WHERE endpoint_id = $1
     ORDER BY generated_at DESC LIMIT 1 OFFSET 1
   `, [endpointId]);
-  const row = r.rows[0] as { active_pages: number } | undefined;
+  const row = await queryRow<{ active_pages: number }>(`
+    SELECT active_pages FROM runs
+    WHERE endpoint_id = $1
+    ORDER BY generated_at DESC LIMIT 1 OFFSET 1
+  `, [endpointId]);
   return row?.active_pages ?? null;
 }
 
 export async function getRunCount(endpointId?: string): Promise<number> {
   await ensureMigrated();
   if (endpointId) {
-    const r = await pool.query('SELECT COUNT(*) as c FROM runs WHERE endpoint_id = $1', [endpointId]);
-    return (r.rows[0] as { c: number }).c;
+    const row = await queryRow<{ c: number }>('SELECT COUNT(*) as c FROM runs WHERE endpoint_id = $1', [endpointId]);
+    return row?.c ?? 0;
   }
-  const r = await pool.query('SELECT COUNT(*) as c FROM runs');
-  return (r.rows[0] as { c: number }).c;
+  const row = await queryRow<{ c: number }>('SELECT COUNT(*) as c FROM runs');
+  return row?.c ?? 0;
 }
 
 // ──── Platform Pages ────────────────────────────────────────────────────
@@ -858,17 +862,14 @@ export type PlatformPageRow = {
 export async function listPlatformPages(endpointId?: string): Promise<PlatformPageRow[]> {
   await ensureMigrated();
   if (endpointId) {
-    const r = await pool.query('SELECT * FROM platform_pages WHERE endpoint_id = $1 ORDER BY page_name ASC', [endpointId]);
-    return r.rows as PlatformPageRow[];
+    return queryRows<PlatformPageRow>('SELECT * FROM platform_pages WHERE endpoint_id = $1 ORDER BY page_name ASC', [endpointId]);
   }
-  const r = await pool.query('SELECT * FROM platform_pages ORDER BY page_name ASC');
-  return r.rows as PlatformPageRow[];
+  return queryRows<PlatformPageRow>('SELECT * FROM platform_pages ORDER BY page_name ASC');
 }
 
 export async function getPlatformPage(id: string): Promise<PlatformPageRow | undefined> {
   await ensureMigrated();
-  const r = await pool.query('SELECT * FROM platform_pages WHERE id = $1', [id]);
-  return r.rows[0] as PlatformPageRow | undefined;
+  return queryRow<PlatformPageRow>('SELECT * FROM platform_pages WHERE id = $1', [id]);
 }
 
 export async function upsertPlatformPage(input: {
@@ -936,14 +937,12 @@ export type PlatformConnectorRow = {
 
 export async function listPlatformConnectors(): Promise<PlatformConnectorRow[]> {
   await ensureMigrated();
-  const r = await pool.query('SELECT * FROM platform_connectors ORDER BY name ASC');
-  return r.rows as PlatformConnectorRow[];
+  return queryRows<PlatformConnectorRow>('SELECT * FROM platform_connectors ORDER BY name ASC');
 }
 
 export async function getPlatformConnector(id: string): Promise<PlatformConnectorRow | undefined> {
   await ensureMigrated();
-  const r = await pool.query('SELECT * FROM platform_connectors WHERE id = $1', [id]);
-  return r.rows[0] as PlatformConnectorRow | undefined;
+  return queryRow<PlatformConnectorRow>('SELECT * FROM platform_connectors WHERE id = $1', [id]);
 }
 
 export async function upsertPlatformConnector(input: {
@@ -1045,7 +1044,9 @@ async function migrateBotCakeOverrides() {
   const raw = await getSetting('botcake_overrides');
   if (!raw) return;
   try {
-    const arr = JSON.parse(raw) as BotCakeOverride[];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return;
+    const arr = parsed as BotCakeOverride[];
     if (arr.length === 0) return;
     for (const o of arr) {
       await pool.query(
@@ -1065,10 +1066,9 @@ async function migrateBotCakeOverrides() {
 
 export async function getBotCakeOverrides(): Promise<Map<string, BotCakeOverride>> {
   await ensureMigrated();
-  const r = await pool.query(
+  const rows = await queryRows<BotCakeOverride>(
     'SELECT page_id, is_active, reason, created_at FROM botcake_overrides ORDER BY created_at DESC',
   );
-  const rows = r.rows as BotCakeOverride[];
   return new Map(rows.map(o => [o.page_id, o]));
 }
 
@@ -1091,8 +1091,7 @@ export async function removeBotCakeOverride(pageId: string): Promise<void> {
 
 export async function getSetting(key: string): Promise<string | null> {
   await ensureMigrated();
-  const r = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
-  const row = r.rows[0] as { value: string } | undefined;
+  const row = await queryRow<{ value: string }>('SELECT value FROM settings WHERE key = $1', [key]);
   return row ? row.value : null;
 }
 

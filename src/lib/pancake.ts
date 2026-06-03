@@ -39,8 +39,8 @@ async function saveCachedShops(shops: PancakeShop[]): Promise<void> {
 export async function fetchPancakeShops(token: string): Promise<PancakeShop[]> {
   const res = await fetchWithRetry(`${PANCAKE_API}/shops?access_token=${encodeURIComponent(token)}`, 3, 60_000);
   if (!res.ok) throw new Error(`Pancake shops API HTTP ${res.status}`);
-  const data = await res.json() as { shops?: PancakeShop[]; success?: boolean };
-  const shops = data.shops ?? [];
+  const raw = await res.json();
+  const shops: PancakeShop[] = Array.isArray(raw?.shops) ? raw.shops : [];
   if (shops.length > 0) saveCachedShops(shops);
   return shops;
 }
@@ -52,14 +52,14 @@ export async function fetchCachedPancakeShops(): Promise<PancakeShop[]> {
 export async function fetchPancakePages(token: string): Promise<PancakePage[]> {
   const res = await fetchWithRetry(`${PANCAKE_API}/pages?access_token=${encodeURIComponent(token)}`, 3, 60_000);
   if (!res.ok) throw new Error(`Pancake pages API HTTP ${res.status}`);
-  const data = await res.json() as { pages?: PancakePage[]; categorized?: Record<string, unknown>; success?: boolean };
-  const pages = data.pages ?? [];
-  return pages.map((p: Record<string, unknown>) => ({
+  const raw = await res.json();
+  const pages: Record<string, unknown>[] = Array.isArray(raw?.pages) ? raw.pages : [];
+  return pages.map((p) => ({
     id: String(p.id ?? ''),
     name: String(p.name ?? ''),
     is_activated: p.is_activated === true,
-    shop_id: p.shop_id as number | undefined,
-    platform: p.platform as string | undefined,
+    shop_id: typeof p.shop_id === 'number' ? p.shop_id : undefined,
+    platform: typeof p.platform === 'string' ? p.platform : undefined,
   }));
 }
 
@@ -121,11 +121,12 @@ async function batchFetchPageIds(
     const pageOffset = batch * BATCH;
     const pageNumbers = Array.from({ length: BATCH }, (_, i) => pageOffset + i + 1);
 
-    const results = await Promise.all(pageNumbers.map(page =>
-      fetchWithRetryLight(buildUrl(page))
-        .then(r => r.ok ? r.json() : null)
-        .catch(() => null)
-    ));
+    const results = await Promise.all(pageNumbers.map(async page => {
+      try {
+        const r = await fetchWithRetryLight(buildUrl(page));
+        return r.ok ? r.json() : null;
+      } catch { return null; }
+    }));
 
     let hasRecent = false;
     for (const data of results) {

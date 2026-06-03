@@ -27,9 +27,10 @@ export default function AuditLogPage() {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
     if (actionFilter) params.set('action', actionFilter);
     setLoading(true);
-    fetch(`/api/audit-log?${params}`)
-      .then(r => r.json())
-      .then(body => {
+    (async () => {
+      try {
+        const r = await fetch(`/api/audit-log?${params}`);
+        const body = await r.json();
         if (body.ok) {
           setEntries(body.entries);
           setTotal(body.total);
@@ -41,9 +42,12 @@ export default function AuditLogPage() {
         } else {
           setError(body.error || 'Failed to load audit log');
         }
-      })
-      .catch(() => setError('Failed to load audit log'))
-      .finally(() => setLoading(false));
+      } catch {
+        setError('Failed to load audit log');
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [offset, actionFilter, limit]);
 
   return (

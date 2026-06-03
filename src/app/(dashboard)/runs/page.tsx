@@ -37,7 +37,7 @@ export default async function RunsPage({
 
   const [allEndpoints, runsResult] = await Promise.all([
     listEndpoints(),
-    Promise.resolve().then(async () => {
+    (async () => {
       if (endpointId) {
         const [r, c] = await Promise.all([
           pool.query('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT $2 OFFSET $3', [endpointId, PAGE_SIZE, offset]),
@@ -51,7 +51,7 @@ export default async function RunsPage({
         ]);
         return { rows: r.rows as RunRow[], total: parseInt(c.rows[0].c, 10) };
       }
-    }),
+    })(),
   ]);
   const endpointMap = new Map(allEndpoints.map(e => [e.id, e]));
   const { rows, total } = runsResult;
