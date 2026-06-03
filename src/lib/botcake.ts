@@ -57,25 +57,119 @@ async function getBotCakePageTokens(userToken: string, fbPageId: string): Promis
 
 export type ConversationResult = Map<string, { ts: string | null; count: number }>;
 
-const _conversationCache: Map<string, { hasConversations: boolean; lastActivityAt: string | null; customerCount: number; checkedAt: number }> = new Map();
+type CacheEntry<T> = { hasMatch: boolean; data: T; checkedAt: number };
 
-export async function checkBotCakeConversations(pageIds: string[], userToken: string, fbPageId: string): Promise<ConversationResult> {
-  const result: ConversationResult = new Map();
+async function batchCheckWithCache<T>(
+  pageIds: string[],
+  userToken: string,
+  fbPageId: string,
+  cache: Map<string, CacheEntry<T>>,
+  checkPage: (pageId: string, token: string) => Promise<{ hasMatch: boolean; data: T }>,
+  concurrency: number,
+  ttl: number = CONVERSATION_CACHE_TTL,
+): Promise<Map<string, T>> {
+  const result = new Map<string, T>();
   const tokens = await getBotCakePageTokens(userToken, fbPageId);
   if (tokens.size === 0) return result;
 
   const needsCheck = pageIds.filter(id => {
-    const cached = _conversationCache.get(id);
-    return !cached || Date.now() - cached.checkedAt > CONVERSATION_CACHE_TTL;
+    const cached = cache.get(id);
+    return !cached || Date.now() - cached.checkedAt > ttl;
   });
-  const cached = pageIds.filter(id => {
-    const c = _conversationCache.get(id);
-    return c && Date.now() - c.checkedAt <= CONVERSATION_CACHE_TTL && c.hasConversations;
-  });
-  for (const id of cached) {
-    const c = _conversationCache.get(id)!;
-    result.set(id, { ts: c.lastActivityAt, count: c.customerCount });
+  for (const id of pageIds) {
+    const c = cache.get(id);
+    if (c && Date.now() - c.checkedAt <= ttl && c.hasMatch) {
+      result.set(id, c.data);
+    }
   }
+
+  if (needsCheck.length === 0) return result;
+
+  for (let i = 0; i < needsCheck.length; i += concurrency) {
+    const batch = needsCheck.slice(i, i + concurrency);
+    await Promise.all(batch.map(async (pageId) => {
+      const token = tokens.get(pageId);
+      if (!token) {
+        cache.set(pageId, { hasMatch: false, data: null as T, checkedAt: Date.now() });
+        return;
+      }
+      try {
+        const checkResult = await checkPage(pageId, token);
+        cache.set(pageId, { ...checkResult, checkedAt: Date.now() });
+        if (checkResult.hasMatch) result.set(pageId, checkResult.data);
+      } catch {
+        cache.set(pageId, { hasMatch: false, data: null as T, checkedAt: Date.now() });
+      }
+    }));
+  }
+
+  return result;
+}
+
+export async function checkBotCakeConversations(pageIds: string[], userToken: string, fbPageId: string): Promise<ConversationResult> {
+  return batchCheckWithCache(pageIds, userToken, fbPageId, _conversationCache, async (pageId, token) => {
+    const r = await fetchWithTimeout(`${API_BASE}/pages/${pageId}/customer?page=1`, {
+      headers: { 'access-token': token },
+      timeout: 10_000,
+    });
+    if (!r.ok) return { hasMatch: false, data: { ts: null, count: 0 } };
+    const data = BotCakeCustomerDataSchema.parse(await r.json());
+    const customerCount = data.length;
+    const hasConversations = customerCount > 0;
+    let lastActivityAt: string | null = null;
+    if (hasConversations) {
+      for (const item of data) {
+        const ts = item.created_at ?? item.updated_at ?? null;
+        if (typeof ts === 'string' && (!lastActivityAt || ts > lastActivityAt)) lastActivityAt = ts;
+      }
+    }
+    return { hasMatch: hasConversations, data: { ts: lastActivityAt, count: customerCount } };
+  }, 5);
+}
+
+// ──── Deeper probe: tools + flows for pages without conversations ────
+
+export async function checkBotCakeToolsFlows(pageIds: string[], userToken: string, fbPageId: string): Promise<Map<string, string | null>> {
+  return batchCheckWithCache(pageIds, userToken, fbPageId, _toolsFlowsCache, async (pageId, token) => {
+    const [toolsRes, flowsRes] = await Promise.all([
+      fetchWithTimeout(`${API_BASE}/pages/${pageId}/tools`, {
+        headers: { 'access-token': token }, timeout: 8_000,
+      }),
+      fetchWithTimeout(`${API_BASE}/pages/${pageId}/flows`, {
+        headers: { 'access-token': token }, timeout: 8_000,
+      }),
+    ]);
+    let hasToolsOrFlows = false;
+    let lastActivityAt: string | null = null;
+
+    if (toolsRes.ok) {
+      const tData = BotCakeToolsResponseSchema.parse(await toolsRes.json());
+      if (tData.success && tData.data) {
+        for (const tool of tData.data) {
+          if (tool.is_published === true) {
+            hasToolsOrFlows = true;
+            const ts = tool.updated_at ?? null;
+            if (typeof ts === 'string' && (!lastActivityAt || ts > lastActivityAt)) lastActivityAt = ts;
+          }
+        }
+      }
+    }
+    if (!hasToolsOrFlows && flowsRes.ok) {
+      const fData = BotCakeFlowsResponseSchema.parse(await flowsRes.json());
+      if (fData.success && fData.data?.flows) {
+        for (const flow of fData.data.flows) {
+          if (flow.is_removed === false) {
+            hasToolsOrFlows = true;
+            const ts = flow.updated_at ?? null;
+            if (typeof ts === 'string' && (!lastActivityAt || ts > lastActivityAt)) lastActivityAt = ts;
+          }
+        }
+      }
+    }
+
+    return { hasMatch: hasToolsOrFlows, data: lastActivityAt };
+  }, 3);
+}
 
   if (needsCheck.length === 0) return result;
 
