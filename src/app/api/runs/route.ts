@@ -1,12 +1,9 @@
 import { NextResponse } from 'next/server';
 import { apiCatch } from '@/lib/errors';
 import { pool, type RunRow } from '@/lib/db';
-import { requireApiAuth } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 
-export async function GET(req: Request) {
-  try {
-    const auth = await requireApiAuth();
-    if (auth) return auth;
+export const GET = withAuth(async (req: Request) => {
     const url = new URL(req.url);
   const endpointId = url.searchParams.get('endpoint_id') || null;
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '100', 10), 1000);
@@ -34,7 +31,4 @@ export async function GET(req: Request) {
     limit,
     offset,
   });
-  } catch (e) {
-    return apiCatch(e);
-  }
-}
+});

@@ -5,12 +5,9 @@ import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { getEndpoint, upsertEndpoint, deleteEndpoint } from '@/lib/db';
 import { EndpointUpdateSchema } from '@/lib/schemas';
-import { requireApiAuth } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 
-export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const auth = await requireApiAuth();
-    if (auth) return auth;
+export const PUT = withAuth(async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
     const existing = await getEndpoint(id);
     if (!existing) {
@@ -48,15 +45,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     });
 
     return NextResponse.json({ ok: true, endpoint: { ...endpoint, api_key: undefined } });
-  } catch (e) {
-    return apiCatch(e);
-  }
-}
+});
 
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const auth = await requireApiAuth();
-    if (auth) return auth;
+export const DELETE = withAuth(async (_req: Request, { params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
     const existing = await getEndpoint(id);
     if (!existing) {
@@ -65,7 +56,4 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
     await deleteEndpoint(id);
     return NextResponse.json({ ok: true });
-  } catch (e) {
-    return apiCatch(e);
-  }
-}
+});

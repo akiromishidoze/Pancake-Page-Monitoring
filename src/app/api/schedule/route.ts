@@ -2,23 +2,14 @@ import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { getSetting, setSetting } from '@/lib/db';
 import { ScheduleSchema } from '@/lib/schemas';
-import { requireApiAuth } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 
-export async function GET() {
-  try {
-    const auth = await requireApiAuth();
-    if (auth) return auth;
-    const interval = (await getSetting('schedule_interval')) || 'off';
-    return NextResponse.json({ ok: true, interval });
-  } catch (e) {
-    return apiCatch(e);
-  }
-}
+export const GET = withAuth(async () => {
+  const interval = (await getSetting('schedule_interval')) || 'off';
+  return NextResponse.json({ ok: true, interval });
+});
 
-export async function POST(req: Request) {
-  try {
-    const auth = await requireApiAuth();
-    if (auth) return auth;
+export const POST = withAuth(async (req: Request) => {
     let raw: unknown;
     try {
       raw = await req.json();
@@ -36,7 +27,4 @@ export async function POST(req: Request) {
     await setSetting('last_scheduled_run', Date.now().toString());
 
     return NextResponse.json({ ok: true, interval });
-  } catch (e) {
-    return apiCatch(e);
-  }
-}
+});

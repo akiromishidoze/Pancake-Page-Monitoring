@@ -4,12 +4,9 @@ import { getSetting, setSetting, logAuditEntry } from '@/lib/db';
 import { encrypt } from '@/lib/crypto';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { NotifySettingsSchema } from '@/lib/schemas';
-import { requireApiAuth } from '@/lib/auth';
+import { requireApiAuth, withAuth } from '@/lib/auth';
 
-export async function GET() {
-  try {
-    const auth = await requireApiAuth();
-    if (auth) return auth;
+export const GET = withAuth(async () => {
     const slackWebhook = (await getSetting('notify_slack_webhook')) || '';
     const smtpHost = (await getSetting('notify_smtp_host')) || '';
     const smtpPort = (await getSetting('notify_smtp_port')) || '';
@@ -28,10 +25,7 @@ export async function GET() {
       email_to: emailTo,
       email_configured: !!(smtpHost && smtpUser && emailTo),
     });
-  } catch (e) {
-    return apiCatch(e);
-  }
-}
+});
 
 export async function POST(req: Request) {
   const auth = await requireApiAuth();

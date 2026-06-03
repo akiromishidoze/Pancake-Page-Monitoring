@@ -1,12 +1,9 @@
 import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { pruneOldRuns } from '@/lib/db';
-import { requireApiAuth } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 
-export async function POST(req: Request) {
-  try {
-    const auth = await requireApiAuth();
-    if (auth) return auth;
+export const POST = withAuth(async (req: Request) => {
     const body = await req.json();
     const days = parseInt(body.retention_days, 10);
     if (isNaN(days) || days <= 0) {
@@ -15,7 +12,4 @@ export async function POST(req: Request) {
 
     const deleted = await pruneOldRuns(days);
     return NextResponse.json({ ok: true, deleted });
-  } catch (e) {
-    return apiCatch(e);
-  }
-}
+});

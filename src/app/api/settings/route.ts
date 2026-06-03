@@ -2,26 +2,17 @@ import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { getSetting, setSetting, logAuditEntry } from '@/lib/db';
 import { RetentionSettingsSchema } from '@/lib/schemas';
-import { requireApiAuth } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 
-export async function GET() {
-  try {
-    const auth = await requireApiAuth();
-    if (auth) return auth;
-    const retentionDays = (await getSetting('retention_days')) || '90';
-    return NextResponse.json({
-      ok: true,
-      settings: { retention_days: retentionDays },
-    });
-  } catch (e) {
-    return apiCatch(e);
-  }
-}
+export const GET = withAuth(async () => {
+  const retentionDays = (await getSetting('retention_days')) || '90';
+  return NextResponse.json({
+    ok: true,
+    settings: { retention_days: retentionDays },
+  });
+});
 
-export async function POST(req: Request) {
-  try {
-    const auth = await requireApiAuth();
-    if (auth) return auth;
+export const POST = withAuth(async (req: Request) => {
     let raw: unknown;
     try {
       raw = await req.json();
@@ -47,7 +38,4 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ ok: true, message: 'Settings updated' });
-  } catch (e) {
-    return apiCatch(e);
-  }
-}
+});

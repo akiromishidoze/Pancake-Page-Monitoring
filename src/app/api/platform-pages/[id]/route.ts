@@ -2,12 +2,9 @@ import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { getPlatformPage, upsertPlatformPage, deletePlatformPage } from '@/lib/db';
 import { PlatformPageUpdateSchema } from '@/lib/schemas';
-import { requireApiAuth } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 
-export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const auth = await requireApiAuth();
-    if (auth) return auth;
+export const PUT = withAuth(async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
     const existing = await getPlatformPage(id);
     if (!existing) {
@@ -36,15 +33,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     });
 
     return NextResponse.json({ ok: true, page });
-  } catch (e) {
-    return apiCatch(e);
-  }
-}
+});
 
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const auth = await requireApiAuth();
-    if (auth) return auth;
+export const DELETE = withAuth(async (_req: Request, { params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
     const existing = await getPlatformPage(id);
     if (!existing) {
@@ -53,7 +44,4 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
   await deletePlatformPage(id);
     return NextResponse.json({ ok: true });
-  } catch (e) {
-    return apiCatch(e);
-  }
-}
+});

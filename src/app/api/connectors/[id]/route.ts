@@ -1,12 +1,9 @@
 import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { getPlatformConnector, deletePlatformConnector } from '@/lib/db';
-import { requireApiAuth } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const auth = await requireApiAuth();
-    if (auth) return auth;
+export const DELETE = withAuth(async (_req: Request, { params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
     const existing = await getPlatformConnector(id);
     if (!existing) {
@@ -14,7 +11,4 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     }
     await deletePlatformConnector(id);
     return NextResponse.json({ ok: true });
-  } catch (e) {
-    return apiCatch(e);
-  }
-}
+});

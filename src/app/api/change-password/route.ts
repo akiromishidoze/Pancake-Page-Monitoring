@@ -1,14 +1,11 @@
 import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
-import { validateCredentials, hashPassword, requireApiAuth } from '@/lib/auth';
+import { validateCredentials, hashPassword, withAuth } from '@/lib/auth';
 import { setSetting, logAuditEntry } from '@/lib/db';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { ChangePasswordSchema } from '@/lib/schemas';
 
-export async function POST(req: Request) {
-  try {
-    const auth = await requireApiAuth();
-    if (auth) return auth;
+export const POST = withAuth(async (req: Request) => {
     const ip = getClientIp(req);
     const rateLimited = rateLimit(ip, { store: 'change-password', max: 5 });
     if (rateLimited) return rateLimited;
@@ -55,7 +52,4 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ ok: true, message: 'Credentials updated' });
-  } catch (e) {
-    return apiCatch(e);
-  }
-}
+});

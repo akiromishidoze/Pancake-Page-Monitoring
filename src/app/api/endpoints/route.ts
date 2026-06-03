@@ -5,27 +5,18 @@ import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { listEndpoints, upsertEndpoint } from '@/lib/db';
 import { EndpointCreateSchema } from '@/lib/schemas';
-import { requireApiAuth } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 
-export async function GET() {
-  try {
-    const auth = await requireApiAuth();
-    if (auth) return auth;
-    const endpoints = await listEndpoints();
-    const safe = endpoints.map((e) => ({
-      ...e,
-      api_key: e.api_key ? `${e.api_key.slice(0, 8)}...${e.api_key.slice(-4)}` : null,
-    }));
-    return NextResponse.json({ ok: true, endpoints: safe });
-  } catch (e) {
-    return apiCatch(e);
-  }
-}
+export const GET = withAuth(async () => {
+  const endpoints = await listEndpoints();
+  const safe = endpoints.map((e) => ({
+    ...e,
+    api_key: e.api_key ? `${e.api_key.slice(0, 8)}...${e.api_key.slice(-4)}` : null,
+  }));
+  return NextResponse.json({ ok: true, endpoints: safe });
+});
 
-export async function POST(req: Request) {
-  try {
-    const auth = await requireApiAuth();
-    if (auth) return auth;
+export const POST = withAuth(async (req: Request) => {
     let raw: unknown;
     try {
       raw = await req.json();
@@ -58,7 +49,4 @@ export async function POST(req: Request) {
       ok: true,
       endpoint: { ...endpoint, api_key: undefined },
     });
-  } catch (e) {
-    return apiCatch(e);
-  }
-}
+});

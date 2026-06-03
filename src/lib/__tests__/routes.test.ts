@@ -125,6 +125,7 @@ vi.mock('@/lib/auth', () => ({
   clearSession: vi.fn(async () => {}),
   isDefaultPassword: vi.fn(async () => false),
   requireApiAuth: vi.fn(async () => null),
+  withAuth: vi.fn(<T extends (...args: any[]) => any>(handler: T) => handler),
 }));
 
 describe('GET /api/health', () => {

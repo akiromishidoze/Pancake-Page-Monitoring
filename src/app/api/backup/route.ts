@@ -5,13 +5,10 @@ import { NextResponse } from 'next/server';
 import { apiCatch } from '@/lib/errors';
 import { pool } from '@/lib/db';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
-import { requireApiAuth } from '@/lib/auth';
+import { requireApiAuth, withAuth } from '@/lib/auth';
 import { backup } from '@/lib/backup';
 
-export async function POST(req: Request) {
-  try {
-    const auth = await requireApiAuth();
-    if (auth) return auth;
+export const POST = withAuth(async (req: Request) => {
     const rateLimited = rateLimit(getClientIp(req), { store: 'backup', max: 2 });
     if (rateLimited) return rateLimited;
 
@@ -21,10 +18,7 @@ export async function POST(req: Request) {
     const sizeKb = (stats.size / 1024).toFixed(1);
 
     return NextResponse.json({ ok: true, file: backupFile, size_kb: sizeKb });
-  } catch (e) {
-    return apiCatch(e);
-  }
-}
+});
 
 export async function GET() {
   const auth = await requireApiAuth();

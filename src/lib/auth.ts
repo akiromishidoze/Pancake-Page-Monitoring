@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { getSetting, setSetting, createSessionToken, validateSessionToken, clearSessionToken } from './db';
+import { apiCatch } from './errors';
 import { createLogger } from './logger';
 
 const log = createLogger('auth');
@@ -100,4 +101,18 @@ export async function requireApiAuth(): Promise<NextResponse | null> {
     return NextResponse.json({ ok: false, error: 'Not authenticated' }, { status: 401 });
   }
   return null;
+}
+
+type RouteHandler = (...args: any[]) => Promise<Response>;
+
+export function withAuth<T extends RouteHandler>(handler: T): T {
+  return (async (...args: Parameters<T>) => {
+    try {
+      const auth = await requireApiAuth();
+      if (auth) return auth;
+      return handler(...args);
+    } catch (e) {
+      return apiCatch(e);
+    }
+  }) as T;
 }

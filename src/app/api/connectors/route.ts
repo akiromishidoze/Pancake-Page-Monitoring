@@ -2,23 +2,14 @@ import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { listPlatformConnectors, upsertPlatformConnector, deletePlatformConnector, getPlatformConnector } from '@/lib/db';
 import { ConnectorCreateSchema } from '@/lib/schemas';
-import { requireApiAuth } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 
-export async function GET() {
-  try {
-    const auth = await requireApiAuth();
-    if (auth) return auth;
-    const connectors = await listPlatformConnectors();
-    return NextResponse.json({ ok: true, connectors });
-  } catch (e) {
-    return apiCatch(e);
-  }
-}
+export const GET = withAuth(async () => {
+  const connectors = await listPlatformConnectors();
+  return NextResponse.json({ ok: true, connectors });
+});
 
-export async function POST(req: Request) {
-  try {
-    const auth = await requireApiAuth();
-    if (auth) return auth;
+export const POST = withAuth(async (req: Request) => {
     let raw: unknown;
     try {
       raw = await req.json();
@@ -45,7 +36,4 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ ok: true, connector });
-  } catch (e) {
-    return apiCatch(e);
-  }
-}
+});

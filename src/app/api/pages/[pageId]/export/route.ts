@@ -2,12 +2,9 @@ import { NextResponse } from 'next/server';
 import { toCsv } from '@/lib/format';
 import { apiCatch } from '@/lib/errors';
 import { pool } from '@/lib/db';
-import { requireApiAuth } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 
-export async function GET(req: Request, { params }: { params: Promise<{ pageId: string }> }) {
-  try {
-    const auth = await requireApiAuth();
-    if (auth) return auth;
+export const GET = withAuth(async (req: Request, { params }: { params: Promise<{ pageId: string }> }) => {
     const { pageId } = await params;
   const url = new URL(req.url);
   const shop = url.searchParams.get('shop');
@@ -31,7 +28,4 @@ export async function GET(req: Request, { params }: { params: Promise<{ pageId: 
       'Content-Disposition': `attachment; filename="page-${encodeURIComponent(pageId)}-history.csv"`,
     },
   });
-  } catch (e) {
-    return apiCatch(e);
-  }
-}
+});
