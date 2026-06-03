@@ -1,9 +1,8 @@
 import fs from 'fs/promises';
+import { createWriteStream } from 'fs';
 import path from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { spawn } from 'child_process';
 
-const execAsync = promisify(exec);
 const BACKUPS_DIR = path.join(process.cwd(), 'backups');
 
 export async function backup(): Promise<string> {
@@ -14,9 +13,29 @@ export async function backup(): Promise<string> {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error('DATABASE_URL not set');
 
-  await execAsync(`pg_dump --clean --no-owner --no-privileges "${dbUrl}" > "${backupFile}"`);
+  await new Promise<void>((resolve, reject) => {
+    const dump = spawn('pg_dump', ['--clean', '--no-owner', '--no-privileges', dbUrl], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const writeStream = createWriteStream(backupFile);
+    dump.stdout.pipe(writeStream);
 
-  // Keep only last 30 backups
+    let stderr = '';
+    dump.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
+
+    dump.on('error', (err: Error) => { writeStream.close(); reject(err); });
+    writeStream.on('error', (err: Error) => { dump.kill(); reject(err); });
+
+    dump.on('close', (code: number | null) => {
+      writeStream.close();
+      if (code !== 0) {
+        reject(new Error(`pg_dump exited with code ${code}: ${stderr.slice(0, 500)}`));
+      } else {
+        resolve();
+      }
+    });
+  });
+
   const files = (await fs.readdir(BACKUPS_DIR))
     .filter(f => f.startsWith('monitor_') && f.endsWith('.sql'))
     .sort()
