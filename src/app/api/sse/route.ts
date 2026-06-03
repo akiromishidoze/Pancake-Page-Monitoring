@@ -1,8 +1,11 @@
 export const dynamic = 'force-dynamic';
 
 import { addClient, removeClient, getClientCount } from '@/lib/sse';
+import { requireApiAuth } from '@/lib/auth';
 
 export async function GET(req: Request) {
+  const auth = await requireApiAuth();
+  if (auth) return auth;
   let id: string | null = null;
   const url = new URL(req.url);
   const scope = url.searchParams.get('scope') || undefined;

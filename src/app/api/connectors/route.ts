@@ -2,9 +2,12 @@ import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { listPlatformConnectors, upsertPlatformConnector, deletePlatformConnector, getPlatformConnector } from '@/lib/db';
 import { ConnectorCreateSchema } from '@/lib/schemas';
+import { requireApiAuth } from '@/lib/auth';
 
 export async function GET() {
   try {
+    const auth = await requireApiAuth();
+    if (auth) return auth;
     const connectors = await listPlatformConnectors();
     return NextResponse.json({ ok: true, connectors });
   } catch (e) {
@@ -14,6 +17,8 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    const auth = await requireApiAuth();
+    if (auth) return auth;
     let raw: unknown;
     try {
       raw = await req.json();

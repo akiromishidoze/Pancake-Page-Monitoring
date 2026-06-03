@@ -2,9 +2,12 @@ import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { getLatestRun } from '@/lib/db';
 import { checkAlertsForRun } from '@/lib/notify';
+import { requireApiAuth } from '@/lib/auth';
 
 export async function POST() {
   try {
+    const auth = await requireApiAuth();
+    if (auth) return auth;
     const run = await getLatestRun();
     if (!run) {
       return apiError(ErrorCodes.NOT_FOUND, 'No runs in database', 400);

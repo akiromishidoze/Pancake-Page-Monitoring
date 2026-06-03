@@ -2,9 +2,12 @@ import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { getSetting, setSetting } from '@/lib/db';
 import { ScheduleSchema } from '@/lib/schemas';
+import { requireApiAuth } from '@/lib/auth';
 
 export async function GET() {
   try {
+    const auth = await requireApiAuth();
+    if (auth) return auth;
     const interval = (await getSetting('schedule_interval')) || 'off';
     return NextResponse.json({ ok: true, interval });
   } catch (e) {
@@ -14,6 +17,8 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    const auth = await requireApiAuth();
+    if (auth) return auth;
     let raw: unknown;
     try {
       raw = await req.json();

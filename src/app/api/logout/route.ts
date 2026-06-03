@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { apiCatch } from '@/lib/errors';
 import { cookies } from 'next/headers';
-import { clearSession } from '@/lib/auth';
+import { clearSession, requireApiAuth } from '@/lib/auth';
 
 export async function POST() {
   try {
+    const auth = await requireApiAuth();
+    if (auth) return auth;
     const cookieStore = await cookies();
     const session = cookieStore.get('session')?.value;
     await clearSession(session);

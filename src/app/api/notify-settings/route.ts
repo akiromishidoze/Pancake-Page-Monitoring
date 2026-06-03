@@ -4,8 +4,11 @@ import { getSetting, setSetting, logAuditEntry } from '@/lib/db';
 import { encrypt } from '@/lib/crypto';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { NotifySettingsSchema } from '@/lib/schemas';
+import { requireApiAuth } from '@/lib/auth';
 
 export async function GET() {
+  const auth = await requireApiAuth();
+  if (auth) return auth;
   const slackWebhook = (await getSetting('notify_slack_webhook')) || '';
   const smtpHost = (await getSetting('notify_smtp_host')) || '';
   const smtpPort = (await getSetting('notify_smtp_port')) || '';
@@ -27,6 +30,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const auth = await requireApiAuth();
+  if (auth) return auth;
 
   const ip = getClientIp(req);
   const rateLimited = rateLimit(ip, { store: 'notify-settings', max: 20 });

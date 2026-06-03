@@ -2,9 +2,12 @@ import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { getPlatformPage, upsertPlatformPage, deletePlatformPage } from '@/lib/db';
 import { PlatformPageUpdateSchema } from '@/lib/schemas';
+import { requireApiAuth } from '@/lib/auth';
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const auth = await requireApiAuth();
+    if (auth) return auth;
     const { id } = await params;
     const existing = await getPlatformPage(id);
     if (!existing) {
@@ -40,6 +43,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const auth = await requireApiAuth();
+    if (auth) return auth;
     const { id } = await params;
     const existing = await getPlatformPage(id);
     if (!existing) {

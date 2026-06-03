@@ -119,6 +119,7 @@ vi.mock('@/lib/auth', () => ({
   createSession: vi.fn(async () => 'test-session-token'),
   clearSession: vi.fn(async () => {}),
   isDefaultPassword: vi.fn(async () => false),
+  requireApiAuth: vi.fn(async () => null),
 }));
 
 describe('GET /api/health', () => {

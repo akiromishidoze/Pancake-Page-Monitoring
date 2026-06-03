@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { apiError, apiCatch } from '@/lib/errors';
 import { pool } from '@/lib/db';
+import { requireApiAuth } from '@/lib/auth';
 
 export async function GET(req: Request) {
   try {
+    const auth = await requireApiAuth();
+    if (auth) return auth;
     const url = new URL(req.url);
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '100', 10), 500);
     const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10));

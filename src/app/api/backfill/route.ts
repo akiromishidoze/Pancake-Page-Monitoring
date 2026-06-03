@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { apiCatch } from '@/lib/errors';
 import { getRunCount, getSetting } from '@/lib/db';
+import { requireApiAuth } from '@/lib/auth';
 
 export async function GET() {
   try {
+    const auth = await requireApiAuth();
+    if (auth) return auth;
     const [runCount, lastBackfill] = await Promise.all([
       getRunCount(),
       getSetting('last_backfill_at'),
@@ -22,6 +25,8 @@ export async function GET() {
 
 export async function POST() {
   try {
+    const auth = await requireApiAuth();
+    if (auth) return auth;
     return NextResponse.json({
       ok: true,
       inserted: 0,

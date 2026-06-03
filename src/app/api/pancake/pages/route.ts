@@ -3,12 +3,15 @@ import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { listEndpoints, isPancakeEndpoint } from '@/lib/db';
 import { fetchPancakeShops, TARGET_SHOP_IDS } from '@/lib/pancake';
 import { cors, corsOptions } from '@/lib/cors';
+import { requireApiAuth } from '@/lib/auth';
 
 export async function OPTIONS() {
   return corsOptions();
 }
 
 export async function GET(request: Request) {
+  const auth = await requireApiAuth();
+  if (auth) return cors(auth);
   const { searchParams } = new URL(request.url);
   const rawShopId = searchParams.get('shop_id');
 

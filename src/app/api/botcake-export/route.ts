@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { apiCatch } from '@/lib/errors';
 import { getLatestPageStates, getBotCakeOverrides, listEndpoints, isBotCakeEndpoint } from '@/lib/db';
 import { cors, corsOptions } from '@/lib/cors';
+import { requireApiAuth } from '@/lib/auth';
 
 export async function OPTIONS() {
   return corsOptions();
@@ -9,6 +10,8 @@ export async function OPTIONS() {
 
 export async function GET(request: Request) {
   try {
+    const auth = await requireApiAuth();
+    if (auth) return cors(auth);
     const { searchParams } = new URL(request.url);
     const endpointId = searchParams.get('endpoint_id');
 

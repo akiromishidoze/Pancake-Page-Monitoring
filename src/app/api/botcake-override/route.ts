@@ -4,9 +4,12 @@ import { setBotCakeOverride, removeBotCakeOverride } from '@/lib/db';
 import { refreshAll } from '@/lib/poller';
 import { cors, corsOptions } from '@/lib/cors';
 import { BotCakeOverrideSchema } from '@/lib/schemas';
+import { requireApiAuth } from '@/lib/auth';
 
 export async function POST(req: Request) {
   try {
+    const auth = await requireApiAuth();
+    if (auth) return cors(auth);
     let raw: unknown;
     try {
       raw = await req.json();

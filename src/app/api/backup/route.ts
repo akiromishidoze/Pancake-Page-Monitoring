@@ -5,9 +5,12 @@ import { NextResponse } from 'next/server';
 import { apiCatch } from '@/lib/errors';
 import { pool } from '@/lib/db';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { requireApiAuth } from '@/lib/auth';
 
 export async function POST(req: Request) {
   try {
+    const auth = await requireApiAuth();
+    if (auth) return auth;
     const rateLimited = rateLimit(getClientIp(req), { store: 'backup', max: 2 });
     if (rateLimited) return rateLimited;
     // PostgreSQL backup via pg_dump
@@ -44,6 +47,8 @@ export async function POST(req: Request) {
 }
 
 export async function GET() {
+  const auth = await requireApiAuth();
+  if (auth) return auth;
   const fs = await import('fs');
   const path = await import('path');
   const BACKUPS_DIR = path.join(process.cwd(), 'backups');

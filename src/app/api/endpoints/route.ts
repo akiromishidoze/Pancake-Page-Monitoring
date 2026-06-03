@@ -5,9 +5,12 @@ import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { listEndpoints, upsertEndpoint } from '@/lib/db';
 import { EndpointCreateSchema } from '@/lib/schemas';
+import { requireApiAuth } from '@/lib/auth';
 
 export async function GET() {
   try {
+    const auth = await requireApiAuth();
+    if (auth) return auth;
     const endpoints = await listEndpoints();
     const safe = endpoints.map((e) => ({
       ...e,
@@ -21,6 +24,8 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    const auth = await requireApiAuth();
+    if (auth) return auth;
     let raw: unknown;
     try {
       raw = await req.json();
