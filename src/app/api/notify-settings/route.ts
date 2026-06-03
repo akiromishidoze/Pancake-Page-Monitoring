@@ -7,26 +7,30 @@ import { NotifySettingsSchema } from '@/lib/schemas';
 import { requireApiAuth } from '@/lib/auth';
 
 export async function GET() {
-  const auth = await requireApiAuth();
-  if (auth) return auth;
-  const slackWebhook = (await getSetting('notify_slack_webhook')) || '';
-  const smtpHost = (await getSetting('notify_smtp_host')) || '';
-  const smtpPort = (await getSetting('notify_smtp_port')) || '';
-  const smtpUser = (await getSetting('notify_smtp_user')) || '';
-  const emailFrom = (await getSetting('notify_email_from')) || '';
-  const emailTo = (await getSetting('notify_email_to')) || '';
-  return NextResponse.json({
-    ok: true,
-    slack_webhook: slackWebhook ? slackWebhook.slice(0, 8) + '••••' + slackWebhook.slice(-8) : '',
-    slack_configured: !!slackWebhook,
-    smtp_host: smtpHost,
-    smtp_port: smtpPort,
-    smtp_user: smtpUser,
-    smtp_pass_configured: !!(await getSetting('notify_smtp_pass')),
-    email_from: emailFrom,
-    email_to: emailTo,
-    email_configured: !!(smtpHost && smtpUser && emailTo),
-  });
+  try {
+    const auth = await requireApiAuth();
+    if (auth) return auth;
+    const slackWebhook = (await getSetting('notify_slack_webhook')) || '';
+    const smtpHost = (await getSetting('notify_smtp_host')) || '';
+    const smtpPort = (await getSetting('notify_smtp_port')) || '';
+    const smtpUser = (await getSetting('notify_smtp_user')) || '';
+    const emailFrom = (await getSetting('notify_email_from')) || '';
+    const emailTo = (await getSetting('notify_email_to')) || '';
+    return NextResponse.json({
+      ok: true,
+      slack_webhook: slackWebhook ? slackWebhook.slice(0, 8) + '••••' + slackWebhook.slice(-8) : '',
+      slack_configured: !!slackWebhook,
+      smtp_host: smtpHost,
+      smtp_port: smtpPort,
+      smtp_user: smtpUser,
+      smtp_pass_configured: !!(await getSetting('notify_smtp_pass')),
+      email_from: emailFrom,
+      email_to: emailTo,
+      email_configured: !!(smtpHost && smtpUser && emailTo),
+    });
+  } catch (e) {
+    return apiCatch(e);
+  }
 }
 
 export async function POST(req: Request) {
