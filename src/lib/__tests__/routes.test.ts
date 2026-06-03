@@ -27,7 +27,7 @@ const mocks = vi.hoisted(() => {
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-async function jsonResponse(res: Response): Promise<{ status: number; body: unknown }> {
+async function jsonResponse(res: Response): Promise<{ status: number; body: any }> {
   const text = await res.text();
   return { status: res.status, body: JSON.parse(text) };
 }

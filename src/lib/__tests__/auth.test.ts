@@ -195,7 +195,7 @@ describe('withAuth', () => {
 
     const handler = vi.fn(async () => { throw new Error('handler exploded'); });
     const wrapped = withAuth(handler);
-    const result = await wrapped();
+    const result = await wrapped() as Response;
     expect(result.status).toBe(500);
   });
 });

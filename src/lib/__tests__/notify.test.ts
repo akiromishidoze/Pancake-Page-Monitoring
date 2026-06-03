@@ -25,11 +25,11 @@ vi.mock('../db', () => {
     }),
     pool: mockPool,
     queryRow: vi.fn(async (text: string, params?: unknown[]) => {
-      const r = await mockPool.query(text, params);
+      const r = await mockPool.query(text, params ?? []);
       return r.rows[0];
     }),
     queryRows: vi.fn(async (text: string, params?: unknown[]) => {
-      const r = await mockPool.query(text, params);
+      const r = await mockPool.query(text, params ?? []);
       return r.rows;
     }),
   };
