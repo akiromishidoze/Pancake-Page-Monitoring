@@ -1,3 +1,7 @@
+import { createLogger } from './logger';
+
+const log = createLogger('sse');
+
 const clients = new Map<string, { controller: ReadableStreamDefaultController; scope?: string }>();
 
 let _evictionTimer: ReturnType<typeof setInterval> | null = null;
@@ -29,8 +33,8 @@ export function broadcastSSE(event: string, data: string) {
   try {
     const parsed = JSON.parse(data);
     eventEndpointId = parsed.endpoint_id;
-  } catch {
-    // If data isn't valid JSON, send to all
+  } catch (e) {
+    log.warn({ err: e }, 'broadcastSSE: invalid JSON data, sending to all');
   }
 
   const message = `event: ${event}\ndata: ${data}\n\n`;

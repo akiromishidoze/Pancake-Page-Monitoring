@@ -1166,6 +1166,10 @@ export async function clearSessionToken(token: string): Promise<void> {
 }
 
 export async function pruneExpiredSessions(): Promise<void> {
-  await pool.query('DELETE FROM sessions WHERE expires_at < $1', [new Date().toISOString()]);
+  try {
+    await pool.query('DELETE FROM sessions WHERE expires_at < $1', [new Date().toISOString()]);
+  } catch (e) {
+    log.warn({ err: e }, 'failed to prune expired sessions');
+  }
 }
 

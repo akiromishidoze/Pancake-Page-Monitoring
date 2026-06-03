@@ -1,4 +1,7 @@
 import { getSetting, setSetting } from './db';
+import { createLogger } from './logger';
+
+const log = createLogger('pancake');
 
 const PANCAKE_API = 'https://pos.pages.fm/api/v1';
 const PANCAKE_SHOPS_CACHE_KEY = 'pancake_shops_cache_v2';
@@ -24,13 +27,13 @@ async function loadCachedShops(): Promise<PancakeShop[] | null> {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) return parsed as PancakeShop[];
     return null;
-  } catch { return null; }
+  } catch (e) { log.warn({ err: e }, 'failed to load cached shops'); return null; }
 }
 
 async function saveCachedShops(shops: PancakeShop[]): Promise<void> {
   try {
     await setSetting(PANCAKE_SHOPS_CACHE_KEY, JSON.stringify(shops));
-  } catch { /* best effort */ }
+  } catch (e) { log.warn({ err: e }, 'failed to save cached shops'); }
 }
 
 export async function fetchPancakeShops(token: string): Promise<PancakeShop[]> {

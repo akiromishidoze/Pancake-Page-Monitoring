@@ -45,7 +45,8 @@ async function sendSlack(webhookUrl: string, event: AlertEvent): Promise<boolean
       body: JSON.stringify(payload),
     });
     return res.ok;
-  } catch {
+  } catch (e) {
+    log.warn({ err: e }, 'slack webhook fetch failed');
     return false;
   }
 }
@@ -67,7 +68,8 @@ async function sendEmail(event: AlertEvent): Promise<boolean> {
   let pass: string;
   try {
     pass = rawPass.includes(':') ? decrypt(rawPass) : rawPass;
-  } catch {
+  } catch (e) {
+    log.warn({ err: e }, 'failed to decrypt SMTP password, using raw');
     pass = rawPass;
   }
 
@@ -89,7 +91,8 @@ async function sendEmail(event: AlertEvent): Promise<boolean> {
     });
 
     return true;
-  } catch {
+  } catch (e) {
+    log.warn({ err: e }, 'sendmail failed');
     return false;
   }
 }
@@ -113,7 +116,8 @@ async function loadDedupCache(): Promise<Map<string, number>> {
         if (expiry > now) map.set(key, expiry);
       }
       dedupCache = map;
-    } catch {
+    } catch (e) {
+      log.warn({ err: e }, 'failed to parse dedup cache from settings');
       dedupCache = new Map();
     }
   } else {
@@ -130,11 +134,15 @@ async function persistDedupCache(): Promise<void> {
   const snapshot = dedupCache;
   persistTimer = setTimeout(async () => {
     persistTimer = null;
-    const obj: Record<string, number> = {};
-    for (const [key, expiry] of snapshot.entries()) {
-      obj[key] = expiry;
+    try {
+      const obj: Record<string, number> = {};
+      for (const [key, expiry] of snapshot.entries()) {
+        obj[key] = expiry;
+      }
+      await setSetting(SETTINGS_KEY, JSON.stringify(obj));
+    } catch (e) {
+      log.warn({ err: e }, 'failed to persist dedup cache');
     }
-    await setSetting(SETTINGS_KEY, JSON.stringify(obj));
   }, 30_000);
 }
 
