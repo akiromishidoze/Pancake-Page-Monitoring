@@ -110,7 +110,7 @@ export function withAuth<T extends RouteHandler>(handler: T): T {
     try {
       const auth = await requireApiAuth();
       if (auth) return auth;
-      return handler(...args);
+      return await handler(...args);
     } catch (e) {
       return apiCatch(e);
     }

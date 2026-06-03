@@ -1,5 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const sessionCookie = vi.hoisted(() => new Map<string, string>());
+
+vi.mock('next/headers', () => ({
+  cookies: vi.fn(() => ({
+    get: (key: string) => {
+      const val = sessionCookie.get(key);
+      return val ? { value: val } : undefined;
+    },
+  })),
+}));
+
+vi.mock('@/lib/errors', () => ({
+  apiCatch: vi.fn((e: unknown) =>
+    new Response(JSON.stringify({ ok: false, error: String(e) }), { status: 500, headers: { 'content-type': 'application/json' } })
+  ),
+}));
+
 vi.mock('@/lib/db', () => {
   const store = new Map<string, string>();
   const sessionTokens = new Map<string, string>();
@@ -104,5 +121,81 @@ describe('createSession and validateSession', () => {
     expect(await validateSession(token)).toBe(true);
     await clearSession(token);
     expect(await validateSession(token)).toBe(false);
+  });
+});
+
+describe('requireApiAuth', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionCookie.clear();
+  });
+
+  it('returns 401 when no session cookie', async () => {
+    const { requireApiAuth } = await import('@/lib/auth');
+    const result = await requireApiAuth();
+    expect(result).toBeInstanceOf(Response);
+    expect(result!.status).toBe(401);
+    const body = await result!.json();
+    expect(body).toMatchObject({ ok: false, error: 'Not authenticated' });
+  });
+
+  it('returns null when valid session cookie exists', async () => {
+    const { createSession, requireApiAuth } = await import('@/lib/auth');
+    const token = await createSession();
+    sessionCookie.set('session', token);
+
+    const result = await requireApiAuth();
+    expect(result).toBeNull();
+  });
+});
+
+describe('withAuth', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionCookie.clear();
+  });
+
+  it('returns 401 when auth fails', async () => {
+    const { withAuth } = await import('@/lib/auth');
+    const handler = vi.fn(async () => new Response('ok', { status: 200 }));
+    const wrapped = withAuth(handler);
+    const result = await wrapped();
+    expect(result.status).toBe(401);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('calls handler when auth succeeds', async () => {
+    const { createSession, withAuth } = await import('@/lib/auth');
+    const token = await createSession();
+    sessionCookie.set('session', token);
+
+    const handler = vi.fn(async () => new Response('ok', { status: 200 }));
+    const wrapped = withAuth(handler);
+    const result = await wrapped();
+    expect(result.status).toBe(200);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('forwards handler arguments', async () => {
+    const { createSession, withAuth } = await import('@/lib/auth');
+    const token = await createSession();
+    sessionCookie.set('session', token);
+
+    const handler = vi.fn(async (a: number, b: string) => new Response(`${a}:${b}`, { status: 200 }));
+    const wrapped = withAuth(handler);
+    const result = await wrapped(42, 'hello');
+    expect(result.status).toBe(200);
+    expect(handler).toHaveBeenCalledWith(42, 'hello');
+  });
+
+  it('wraps handler errors with apiCatch', async () => {
+    const { createSession, withAuth } = await import('@/lib/auth');
+    const token = await createSession();
+    sessionCookie.set('session', token);
+
+    const handler = vi.fn(async () => { throw new Error('handler exploded'); });
+    const wrapped = withAuth(handler);
+    const result = await wrapped();
+    expect(result.status).toBe(500);
   });
 });
