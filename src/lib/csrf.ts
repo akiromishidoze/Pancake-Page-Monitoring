@@ -30,5 +30,5 @@ export function checkCsrf(request: NextRequest): boolean {
     }
   }
 
-  return true;
+  return false;
 }

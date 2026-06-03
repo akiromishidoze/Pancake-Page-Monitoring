@@ -55,7 +55,7 @@ export async function proxy(request: NextRequest) {
     return respond(NextResponse.json(body, { status }));
   }
 
-  const publicPaths = ['/api/login', '/api/health', '/api/version', '/login'];
+  const publicPaths = ['/api/login', '/api/health', '/api/version', '/api/ingest', '/api/botcake-refresh', '/login'];
   if (publicPaths.some(p => pathname === p || pathname.startsWith(p + '/'))) {
     return respond(NextResponse.next());
   }

@@ -94,10 +94,10 @@ describe('csrf module', () => {
       expect(checkCsrf(req)).toBe(false);
     });
 
-    it('returns true when both origin and referer are absent', async () => {
+    it('returns false when both origin and referer are absent', async () => {
       const { checkCsrf } = await import('../csrf');
       const req = createMockRequest({});
-      expect(checkCsrf(req)).toBe(true);
+      expect(checkCsrf(req)).toBe(false);
     });
 
     it('prefers origin over referer when both present', async () => {
