@@ -1,4 +1,4 @@
-import { listPlatformConnectors, getPlatformConnector, getEndpoint, insertSnapshot } from './db';
+import { listPlatformConnectors, getPlatformConnector, getEndpoint, insertSnapshot, toSlimPage } from './db';
 import { broadcastSSE } from './sse';
 import { createLogger } from './logger';
 
@@ -51,28 +51,7 @@ async function pollConnector(connectorId: string) {
     const runId = `connector_${connector.id}_${now}`;
     const ts = new Date().toISOString();
 
-    const activePages = items.map((item) => {
-      const r = item as Record<string, unknown>;
-      return {
-        page_id: (r.id as string) || (r.page_id as string) || String(r.name ?? ''),
-        id: (r.id as string) || (r.page_id as string) || String(r.name ?? ''),
-        name: (r.name as string) || (r.page_name as string) || 'Unknown',
-        shop_label: (r.shop_label as string | null) ?? null,
-        shop: (r.shop as string | null) ?? null,
-        activity_kind: (r.activity_kind as string | null) ?? (r.kind as string | null) ?? null,
-        kind: (r.activity_kind as string | null) ?? (r.kind as string | null) ?? null,
-        is_activated: r.is_activated !== false,
-        is_canary: r.is_canary === true,
-        activation_reason: (r.activation_reason as string | null) ?? (r.reason as string | null) ?? null,
-        reason: (r.activation_reason as string | null) ?? (r.reason as string | null) ?? null,
-        state_change: (r.state_change as string | null) ?? null,
-        activity_kind_change: (r.activity_kind_change as string | null) ?? null,
-        last_order_at: null,
-        last_customer_activity_at: null,
-        response_ms: (r.response_ms as number | null) ?? (r.response_time_ms as number | null) ?? null,
-        fetch_errors: typeof r.fetch_errors === 'number' ? r.fetch_errors : 0,
-      };
-    });
+    const activePages = items.map((item) => toSlimPage(item as Record<string, unknown>));
 
     const result = await insertSnapshot({
       run_id: runId,

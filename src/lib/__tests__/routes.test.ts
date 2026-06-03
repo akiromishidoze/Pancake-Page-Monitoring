@@ -83,6 +83,11 @@ vi.mock('@/lib/db', () => ({
     return ep;
   }),
   getEndpointByApiKey: vi.fn(async (key: string) => mocks.getEndpointByApiKey(key)),
+  toSlimPage: vi.fn((src: Record<string, unknown>) => ({
+    name: (src.name as string) ?? 'Unknown',
+    page_id: (src.page_id as string) ?? '',
+    id: (src.page_id as string) ?? '',
+  })),
   insertSnapshot: vi.fn(async () => ({ inserted: true })),
   touchEndpoint: vi.fn(async () => {}),
   logAuditEntry: vi.fn(async () => {}),

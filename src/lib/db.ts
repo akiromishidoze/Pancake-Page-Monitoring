@@ -382,6 +382,27 @@ export type SlimPage = {
   customer_count?: number;
 };
 
+export function toSlimPage(src: Record<string, unknown>): SlimPage {
+  return {
+    shop_label: (src.shop_label as string | null) ?? null,
+    shop: (src.shop as string | null) ?? (src.shop_label as string | null) ?? null,
+    name: (src.name as string) ?? (src.page_name as string) ?? 'Unknown',
+    page_id: (src.page_id as string) ?? (src.id as string) ?? '',
+    id: (src.page_id as string) ?? (src.id as string) ?? '',
+    activity_kind: (src.activity_kind as string | null) ?? (src.kind as string | null) ?? null,
+    kind: (src.activity_kind as string | null) ?? (src.kind as string | null) ?? null,
+    activation_reason: (src.activation_reason as string | null) ?? (src.reason as string | null) ?? null,
+    reason: (src.activation_reason as string | null) ?? (src.reason as string | null) ?? null,
+    last_order_at: (src.last_order_at as string | null) ?? null,
+    last_customer_activity_at: (src.last_customer_activity_at as string | null) ?? null,
+    state_change: (src.state_change as string | null) ?? null,
+    activity_kind_change: (src.activity_kind_change as string | null) ?? null,
+    is_canary: src.is_canary === true,
+    response_ms: (src.response_ms as number | null) ?? (src.response_time_ms as number | null) ?? null,
+    fetch_errors: typeof src.fetch_errors === 'number' ? src.fetch_errors : 0,
+  };
+}
+
 export type RunRow = {
   run_id: string;
   endpoint_id: string | null;

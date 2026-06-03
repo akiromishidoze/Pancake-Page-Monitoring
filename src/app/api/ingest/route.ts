@@ -4,7 +4,7 @@
 
 import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
-import { getEndpointByApiKey, insertSnapshot, touchEndpoint, type SlimPage } from '@/lib/db';
+import { getEndpointByApiKey, insertSnapshot, touchEndpoint, toSlimPage, type SlimPage } from '@/lib/db';
 import { checkAlertsForRun } from '@/lib/notify';
 import { broadcastSSE } from '@/lib/sse';
 import { corsReflectOrigin, corsOptions } from '@/lib/cors';
@@ -65,26 +65,8 @@ export async function POST(req: Request) {
   const inactivePages: SlimPage[] = [];
 
   for (const r of body.rows) {
-    const isAct = r.is_activated === true;
-    const slim: SlimPage = {
-      shop_label: r.shop_label ?? null,
-      shop: r.shop_label ?? null,
-      name: r.page_name ?? r.name ?? 'Unknown',
-      page_id: r.page_id ?? r.id ?? '',
-      id: r.page_id ?? r.id ?? '',
-      activity_kind: r.activity_kind ?? r.kind ?? null,
-      kind: r.activity_kind ?? r.kind ?? null,
-      activation_reason: r.activation_reason ?? r.reason ?? null,
-      reason: r.activation_reason ?? r.reason ?? null,
-      last_order_at: r.last_order_at ?? null,
-      last_customer_activity_at: r.last_customer_activity_at ?? null,
-      state_change: r.state_change ?? null,
-      activity_kind_change: r.activity_kind_change ?? null,
-      is_canary: r.is_canary === true,
-      response_ms: r.response_ms ?? null,
-      fetch_errors: r.fetch_errors ?? 0,
-    };
-    (isAct ? activePages : inactivePages).push(slim);
+    const slim = toSlimPage(r as Record<string, unknown>);
+    ((r.is_activated === true) ? activePages : inactivePages).push(slim);
   }
 
   try {
