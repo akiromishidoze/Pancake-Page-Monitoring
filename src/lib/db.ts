@@ -552,6 +552,7 @@ export async function insertSnapshot(input: InsertSnapshotInput): Promise<{ inse
     await client.query('COMMIT');
     return { inserted: true };
   } catch (e) {
+    log.error({ err: e }, 'insertSnapshot transaction failed, rolling back');
     await client.query('ROLLBACK');
     throw e;
   } finally {
