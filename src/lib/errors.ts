@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server';
+import { createLogger } from './logger';
+
+const log = createLogger('errors');
 
 export const ErrorCodes = {
   AUTH_REQUIRED: 'AUTH_REQUIRED',
@@ -29,8 +32,15 @@ export function apiError(code: ErrorCode, message: string, status: number = 400,
 }
 
 export function apiCatch(e: unknown, status: number = 500): NextResponse {
+  const message = e instanceof Error ? e.message : String(e);
+  const errInfo = e instanceof Error ? { err: e, stack: e.stack } : { err: String(e) };
+  if (status >= 500) {
+    log.error({ ...errInfo, status, code: ErrorCodes.INTERNAL_ERROR }, message);
+  } else {
+    log.warn({ ...errInfo, status, code: ErrorCodes.INTERNAL_ERROR }, message);
+  }
   return NextResponse.json(
-    { ok: false, error: e instanceof Error ? e.message : String(e), code: ErrorCodes.INTERNAL_ERROR },
+    { ok: false, error: message, code: ErrorCodes.INTERNAL_ERROR },
     { status },
   );
 }
