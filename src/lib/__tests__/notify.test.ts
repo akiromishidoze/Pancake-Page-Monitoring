@@ -7,21 +7,31 @@ const mockSettings = new Map<string, string>();
 const mockRuns = new Map<string, any>();
 
 vi.mock('../db', () => {
+  const mockPool = {
+    query: vi.fn(async (sql: string, params: any[]) => {
+      if (sql.includes('SELECT * FROM runs')) {
+        const runId = params[0];
+        const run = mockRuns.get(runId);
+        return { rows: run ? [run] : [] };
+      }
+      return { rows: [] };
+    }),
+  };
+
   return {
     getSetting: vi.fn(async (key: string) => mockSettings.get(key) ?? null),
     setSetting: vi.fn(async (key: string, value: string) => {
       mockSettings.set(key, value);
     }),
-    pool: {
-      query: vi.fn(async (sql: string, params: any[]) => {
-        if (sql.includes('SELECT * FROM runs')) {
-          const runId = params[0];
-          const run = mockRuns.get(runId);
-          return { rows: run ? [run] : [] };
-        }
-        return { rows: [] };
-      }),
-    },
+    pool: mockPool,
+    queryRow: vi.fn(async (text: string, params?: unknown[]) => {
+      const r = await mockPool.query(text, params);
+      return r.rows[0];
+    }),
+    queryRows: vi.fn(async (text: string, params?: unknown[]) => {
+      const r = await mockPool.query(text, params);
+      return r.rows;
+    }),
   };
 });
 

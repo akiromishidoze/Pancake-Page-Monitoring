@@ -94,7 +94,7 @@ describe('db module', () => {
       const eps = await listEndpoints();
       
       expect(eps).toEqual(mockEndpoints);
-      expect(mockPool.query).toHaveBeenCalledWith(expect.stringContaining('SELECT * FROM endpoints ORDER BY created_at DESC'));
+      expect(mockPool.query).toHaveBeenCalledWith(expect.stringContaining('SELECT * FROM endpoints ORDER BY created_at DESC'), undefined);
     });
 
     it('upsertEndpoint creates new endpoint', async () => {
