@@ -22,28 +22,11 @@ async function fetchWithTimeout(url: string, options: RequestInit & { timeout?: 
   }
 }
 
-async function fetchWithRetry(url: string, token: string, retries = 2): Promise<Response | null> {
+async function fetchWithRetry(url: string, token: string, retries = 2, method: 'GET' | 'POST' = 'GET'): Promise<Response | null> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const res = await fetchWithTimeout(url, {
-        headers: { 'user-access-token': token },
-        timeout: 20_000,
-      });
-      if (res.ok) return res;
-      if (attempt === retries) return null;
-    } catch {
-      if (attempt === retries) return null;
-    }
-    await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
-  }
-  return null;
-}
-
-async function fetchPostWithRetry(url: string, token: string, retries = 2): Promise<Response | null> {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const res = await fetchWithTimeout(url, {
-        method: 'POST',
+        method,
         headers: { 'user-access-token': token },
         timeout: 20_000,
       });
@@ -64,7 +47,7 @@ async function getBotCakePageTokens(userToken: string, fbPageId: string): Promis
     return _pageTokenCache.tokens;
   }
   const url = `${API_BASE}/integration_page/list_access_token/${fbPageId}`;
-  const res = await fetchPostWithRetry(url, userToken, 1);
+  const res = await fetchWithRetry(url, userToken, 1, 'POST');
   if (!res) return new Map();
   const data = BotCakePageTokenSchema.array().parse(await res.json());
   const tokens = new Map(data.map(d => [d.page_id, d.public_token]));
