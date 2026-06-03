@@ -47,6 +47,10 @@ export async function register() {
     }
   }
 
+  if (process.env['NODE_ENV'] !== 'production') {
+    log.warn('NODE_ENV is not set to "production" — cookies will not use the secure flag, and logs will use pretty-print transport');
+  }
+
   const { initHttpAgent } = await import('./lib/http');
   initHttpAgent();
 
