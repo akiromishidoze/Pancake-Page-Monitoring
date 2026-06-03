@@ -3,6 +3,7 @@ import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, fetchP
 import { insertSnapshot, setSetting, listEndpoints, getPancakeActivePageIds, getPreviousRunActiveCount, pool, getBotCakeOverrides, isBotCakeEndpoint, type SlimPage, type EndpointRow } from './db';
 import { broadcastSSE } from './sse';
 import { createLogger } from './logger';
+import { addNotification } from './notifications';
 
 const log = createLogger('poller');
 
@@ -48,6 +49,7 @@ export async function refreshBotCake() {
     await Promise.all(botCakeEndpoints.map(ep => refreshSingleBotCake(ep)));
   } catch (err) {
     log.error({ err }, 'botcake: refresh failed');
+    void addNotification('external_error', 'warning', 'BotCake Refresh Failed', err instanceof Error ? err.message : String(err));
   } finally {
     _refreshingBotCake = false;
   }
@@ -60,6 +62,7 @@ async function refreshSingleBotCake(endpoint: EndpointRow) {
   const pages = await fetchBotCakePages(endpoint.access_token, fbPageId);
   if (pages.length === 0) {
     log.warn({ ep: endpoint.name }, 'botcake: API returned 0 pages — skipping insert');
+    void addNotification('external_error', 'warning', 'BotCake API Returned 0 Pages', `Endpoint "${endpoint.name}" returned 0 pages during refresh`);
     return;
   }
   const runId = `botcake_refresh_${Date.now()}_${endpoint.id}`;
@@ -175,6 +178,7 @@ async function refreshSingleBotCake(endpoint: EndpointRow) {
         previous: prevActive, current: activePages.length,
         drop_pct: Math.round(dropRatio * 100),
       }));
+      void addNotification('down_page', 'critical', `Active Pages Dropped: ${endpoint.name}`, `${activePages.length === 0 ? 'All' : 'Significant'} pages dropped on ${endpoint.name}: ${prevActive} → ${activePages.length} active (${Math.round(dropRatio * 100)}% drop)`);
     }
   }
 
@@ -256,12 +260,14 @@ async function refreshPancake() {
       for (const id of orderIds) combined.add(id);
     } catch (err) {
       log.error({ err, shopId: sid }, 'pancake: orders failed for shop %d', sid);
+      void addNotification('external_error', 'info', `Orders Fetch Failed for Shop ${sid}`, err instanceof Error ? err.message : String(err));
     }
     try {
       const customerIds = await fetchPancakeActivePageIdsFromCustomers(token, sid);
       for (const id of customerIds) combined.add(id);
     } catch (err) {
       log.error({ err, shopId: sid }, 'pancake: customers failed for shop %d', sid);
+      void addNotification('external_error', 'info', `Customers Fetch Failed for Shop ${sid}`, err instanceof Error ? err.message : String(err));
     }
     if (combined.size > 0) anyShopHadData = true;
     activePageIdsByShop.set(sid, combined);
@@ -269,6 +275,7 @@ async function refreshPancake() {
 
   if (!anyShopHadData) {
     log.warn('pancake: all shops returned 0 active pages — likely network/DNS issue, falling back to previous good run data');
+    void addNotification('external_error', 'warning', 'Pancake API Returned 0 Active Pages', 'All shops returned 0 active pages — falling back to previous run data');
       for (const sid of TARGET_SHOP_IDS) {
         const prevRun = (await pool.query(`
           SELECT run_id FROM runs
@@ -329,6 +336,7 @@ async function refreshPancake() {
           previous: prevActive, current: activePages.length,
           drop_pct: Math.round(dropRatio * 100),
         }));
+        void addNotification('down_page', 'critical', `Active Pages Dropped: ${ep.name}`, `${activePages.length === 0 ? 'All' : 'Significant'} pages dropped on ${ep.name}: ${prevActive} → ${activePages.length} active (${Math.round(dropRatio * 100)}% drop)`);
       }
     }
 
@@ -352,6 +360,7 @@ async function refreshPancake() {
   }
   } catch (err) {
     log.error({ err }, 'pancake: refresh failed');
+    void addNotification('external_error', 'warning', 'Pancake Refresh Failed', err instanceof Error ? err.message : String(err));
   } finally {
     _refreshingPancake = false;
   }

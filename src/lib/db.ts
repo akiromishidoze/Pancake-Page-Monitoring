@@ -166,6 +166,18 @@ async function migrate() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS audit_log_created_at ON audit_log(created_at DESC);
+    CREATE TABLE IF NOT EXISTS notifications (
+      id SERIAL PRIMARY KEY,
+      type TEXT NOT NULL,
+      severity TEXT NOT NULL DEFAULT 'info',
+      title TEXT NOT NULL,
+      message TEXT,
+      metadata JSONB DEFAULT '{}',
+      is_read BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS notifications_created_at ON notifications(created_at DESC);
+    CREATE INDEX IF NOT EXISTS notifications_is_read ON notifications(is_read);
     `);
   try { await pool.query(`ALTER TABLE page_states ADD COLUMN IF NOT EXISTS customer_count INTEGER`); } catch {
     // Column may already exist, safe to ignore

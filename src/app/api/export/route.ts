@@ -3,6 +3,7 @@ import { toCsv } from '@/lib/format';
 import { apiCatch } from '@/lib/errors';
 import { pool, type RunRow } from '@/lib/db';
 import { withAuth } from '@/lib/auth';
+import { addNotification } from '@/lib/notifications';
 
 export const GET = withAuth(async (req: Request) => {
     const url = new URL(req.url);
@@ -47,6 +48,8 @@ export const GET = withAuth(async (req: Request) => {
     const headers = ['run_id', 'endpoint_id', 'generated_at', 'received_at', 'heartbeat_ok', 'run_quality', 'severity', 'canary_status', 'canary_alert', 'outage_suspected', 'alert_count', 'total_pages', 'active_pages', 'inactive_pages'];
 
     const csv = toCsv(headers, rows);
+
+    void addNotification('csv_export', 'info', 'CSV Export', `Exported ${rows.length} runs as CSV${endpointId ? ` for endpoint ${endpointId}` : ''}`);
 
     return new NextResponse(csv, {
       headers: {

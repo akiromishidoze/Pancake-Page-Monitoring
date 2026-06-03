@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import { getSetting, setSetting, queryRow, type RunRow } from './db';
 import { decrypt, encrypt } from './crypto';
 import { createLogger } from './logger';
+import { addNotification } from './notifications';
 
 const log = createLogger('notify');
 
@@ -184,6 +185,8 @@ export async function sendAlert(event: AlertEvent): Promise<void> {
   if (emailOk) {
     log.info({ title: event.title }, 'email alert sent');
   }
+
+  void addNotification('alert_triggered', event.level, event.title, event.message, { platform: event.platform });
 }
 
 export async function checkAlertsForRun(runId: string): Promise<void> {
@@ -202,6 +205,7 @@ export async function checkAlertsForRun(runId: string): Promise<void> {
       platform: h.endpoint_id || undefined,
       timestamp: now,
     });
+    void addNotification('canary_down', 'critical', 'Canary is DOWN', `Canary status is "down" for endpoint ${h.endpoint_id} in run ${h.run_id}`);
   }
 
   // Outage suspected
@@ -213,6 +217,7 @@ export async function checkAlertsForRun(runId: string): Promise<void> {
       platform: h.endpoint_id || undefined,
       timestamp: now,
     });
+    void addNotification('outage_suspected', 'critical', 'Outage Suspected', `Outage flag triggered for endpoint ${h.endpoint_id || 'unknown'} in run ${h.run_id}`);
   }
 
   // High alert count

@@ -6,6 +6,7 @@ import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { listEndpoints, upsertEndpoint } from '@/lib/db';
 import { EndpointCreateSchema } from '@/lib/schemas';
 import { withAuth } from '@/lib/auth';
+import { addNotification } from '@/lib/notifications';
 
 export const GET = withAuth(async () => {
   const endpoints = await listEndpoints();
@@ -44,6 +45,8 @@ export const POST = withAuth(async (req: Request) => {
             : null,
       is_active: body.is_active,
     });
+
+    void addNotification('platform_added', 'info', 'Endpoint Updated', `Endpoint "${body.name}" (${body.id}) configured`);
 
     return NextResponse.json({
       ok: true,

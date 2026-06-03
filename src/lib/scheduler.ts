@@ -1,6 +1,7 @@
-import { getSetting, setSetting, pruneOldRuns, listEndpoints } from './db';
+import { getSetting, setSetting, pruneOldRuns, listEndpoints, queryRows } from './db';
 import { refreshAll } from './poller';
 import { createLogger } from './logger';
+import { addNotification, pruneNotifications } from './notifications';
 
 const log = createLogger('scheduler');
 
@@ -71,6 +72,14 @@ export async function startScheduler() {
     checkSessionCleanup().catch(err => log.error({ err }, 'Session cleanup error'));
   }, 60_000));
 
+  _intervals.push(setInterval(() => {
+    checkTokenExpiry().catch(err => log.error({ err }, 'Token expiry check error'));
+  }, 3600_000));
+
+  _intervals.push(setInterval(() => {
+    checkNotificationPrune().catch(err => log.error({ err }, 'Notification prune error'));
+  }, 3600_000));
+
 }
 
 export function stopScheduler() {
@@ -114,6 +123,7 @@ async function checkPrune() {
     if (deleted > 0) {
       log.info('pruned %d runs older than %d days', deleted, retentionDays);
     }
+    await checkRetentionNearing();
   } catch (err) {
     log.error({ err }, 'prune failed');
   }
@@ -132,6 +142,60 @@ async function checkSessionCleanup() {
   } catch (err) {
     log.error({ err }, 'session cleanup failed');
   }
+}
+
+// ─── Retention nearing notification ─────────────────────────────────
+
+async function checkRetentionNearing() {
+  const retentionStr = (await getSetting('retention_days')) || '90';
+  const retentionDays = parseInt(retentionStr, 10);
+  if (isNaN(retentionDays) || retentionDays <= 0) return;
+
+  const lastNotified = await getSetting('last_retention_notified');
+  if (lastNotified === retentionStr) return; // already notified for this setting
+
+  // Check the oldest run age
+  const oldest = await queryRows<{ generated_at: string }>('SELECT generated_at FROM runs ORDER BY generated_at ASC LIMIT 1');
+  if (oldest.length === 0) return;
+
+  const oldestDate = new Date(oldest[0].generated_at).getTime();
+  const ageDays = (Date.now() - oldestDate) / 86400000;
+  const remaining = retentionDays - ageDays;
+
+  if (remaining <= 7 && remaining > 0) {
+    void addNotification('retention_nearing', 'warning', 'Retention Period Nearing', `Data retention limit is ${retentionDays} days. Oldest run is ${ageDays.toFixed(0)} days old (${remaining.toFixed(0)} days remaining before pruning).`);
+    await setSetting('last_retention_notified', retentionStr);
+  }
+}
+
+// ─── Token expiration check ──────────────────────────────────────────
+
+async function checkTokenExpiry() {
+  const endpoints = await listEndpoints();
+  const now = Date.now();
+  const sevenDays = 7 * 86400000;
+
+  for (const ep of endpoints) {
+    if (!ep.token_expires_at) continue;
+    const expiresMs = new Date(ep.token_expires_at).getTime();
+    const remaining = expiresMs - now;
+
+    if (remaining <= sevenDays && remaining > 0) {
+      void addNotification('token_expiring', 'warning', `Token Expiring Soon: ${ep.name}`, `API token for "${ep.name}" expires on ${new Date(ep.token_expires_at).toLocaleDateString()} (${Math.ceil(remaining / 86400000)} days remaining)`);
+    }
+  }
+}
+
+// ─── Notification cleanup ────────────────────────────────────────────
+
+async function checkNotificationPrune() {
+  const last = await getSetting('last_notification_prune');
+  const lastMs = last ? parseInt(last, 10) : 0;
+  const now = Date.now();
+  if (now - lastMs < 86400000) return; // once per day
+
+  await pruneNotifications(30);
+  await setSetting('last_notification_prune', now.toString());
 }
 
 // ─── Poller health alerting ─────────────────────────────────────────

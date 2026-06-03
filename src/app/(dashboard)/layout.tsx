@@ -4,6 +4,7 @@ import { GlobalLoadingSequence } from '@/components/GlobalLoadingSequence';
 import { Sidebar } from '@/components/Sidebar';
 import { LogoutButton } from '@/components/LogoutButton';
 import { ToastProvider } from '@/components/Toast';
+import { NotificationsBell } from '@/components/NotificationsBell';
 
 export default function DashboardLayout({
   children,
@@ -22,7 +23,10 @@ export default function DashboardLayout({
             <div className="flex items-center gap-3">
               <h1 className="text-lg font-semibold">Pancake Page Monitoring</h1>
             </div>
-            <LogoutButton />
+            <div className="flex items-center gap-2">
+              <NotificationsBell />
+              <LogoutButton />
+            </div>
           </div>
         </header>
 

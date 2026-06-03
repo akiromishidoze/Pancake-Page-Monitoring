@@ -5,6 +5,7 @@ import { encrypt } from '@/lib/crypto';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { NotifySettingsSchema } from '@/lib/schemas';
 import { requireApiAuth, withAuth } from '@/lib/auth';
+import { addNotification } from '@/lib/notifications';
 
 export const GET = withAuth(async () => {
     const slackWebhook = (await getSetting('notify_slack_webhook')) || '';
@@ -84,6 +85,7 @@ export async function POST(req: Request) {
     if (changes.length > 0) {
       const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '';
       void logAuditEntry('update_notify_settings', 'settings', 'notifications', `Changed: ${changes.join(', ')}`, ip);
+      void addNotification('credential_change', 'info', 'Notification Settings Updated', `Notification settings changed: ${changes.join(', ')}`);
     }
 
     return NextResponse.json({ ok: true, message: 'Notification settings updated' });

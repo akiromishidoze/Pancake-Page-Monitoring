@@ -3,6 +3,7 @@ import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { listPlatformConnectors, upsertPlatformConnector, deletePlatformConnector, getPlatformConnector } from '@/lib/db';
 import { ConnectorCreateSchema } from '@/lib/schemas';
 import { withAuth } from '@/lib/auth';
+import { addNotification } from '@/lib/notifications';
 
 export const GET = withAuth(async () => {
   const connectors = await listPlatformConnectors();
@@ -34,6 +35,8 @@ export const POST = withAuth(async (req: Request) => {
       interval_ms: body.interval_ms,
       is_active: body.is_active,
     });
+
+    void addNotification('connector_added', 'info', 'Connector Added', `Connector "${body.name}" (${body.platform_type}) configured`);
 
     return NextResponse.json({ ok: true, connector });
 });

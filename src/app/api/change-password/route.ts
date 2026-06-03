@@ -4,6 +4,7 @@ import { validateCredentials, hashPassword, withAuth } from '@/lib/auth';
 import { setSetting, logAuditEntry } from '@/lib/db';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { ChangePasswordSchema } from '@/lib/schemas';
+import { addNotification } from '@/lib/notifications';
 
 export const POST = withAuth(async (req: Request) => {
     const ip = getClientIp(req);
@@ -49,6 +50,7 @@ export const POST = withAuth(async (req: Request) => {
     if (changes.length > 0) {
       const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '';
       void logAuditEntry('update_credentials', 'auth', 'credentials', `Changed: ${changes.join(', ')}`, ip);
+      void addNotification('credential_change', 'warning', 'Credentials Changed', `Authentication credentials updated: ${changes.join(', ')}`);
     }
 
     return NextResponse.json({ ok: true, message: 'Credentials updated' });
