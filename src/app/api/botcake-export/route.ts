@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { escapeCsvCell } from '@/lib/format';
 import { apiCatch } from '@/lib/errors';
 import { getLatestPageStates, getBotCakeOverrides, listEndpoints, isBotCakeEndpoint } from '@/lib/db';
 import { cors, corsOptions } from '@/lib/cors';
@@ -33,7 +34,7 @@ export async function GET(request: Request) {
     const overridden = overrides.has(p.page_id) ? 'yes' : 'no';
     return [
       p.page_id,
-      `"${(p.page_name ?? '').replace(/"/g, '""')}"`,
+      escapeCsvCell(p.page_name ?? ''),
       status,
       p.activation_reason ?? '',
       p.customer_count ?? '',

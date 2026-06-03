@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { toCsv } from '@/lib/format';
 import { apiCatch } from '@/lib/errors';
 import { pool, type RunRow } from '@/lib/db';
 import { requireApiAuth } from '@/lib/auth';
@@ -48,19 +49,7 @@ export async function GET(req: Request) {
 
     const headers = ['run_id', 'endpoint_id', 'generated_at', 'received_at', 'heartbeat_ok', 'run_quality', 'severity', 'canary_status', 'canary_alert', 'outage_suspected', 'alert_count', 'total_pages', 'active_pages', 'inactive_pages'];
 
-    const csvRows = rows.map((r) =>
-      headers.map((h) => {
-        const val = r[h];
-        if (val === null || val === undefined) return '';
-        const str = String(val);
-        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-          return '"' + str.replace(/"/g, '""') + '"';
-        }
-        return str;
-      }).join(',')
-    );
-
-    const csv = headers.join(',') + '\n' + csvRows.join('\n');
+    const csv = toCsv(headers, rows);
 
     return new NextResponse(csv, {
       headers: {
