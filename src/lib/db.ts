@@ -1187,9 +1187,10 @@ export async function createSessionToken(role?: string): Promise<string> {
   const token = crypto.randomUUID();
   const now = new Date().toISOString();
   const expires = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+  const pwv = await getCurrentPasswordVersion();
   await pool.query(
-    'INSERT INTO sessions (token, role, created_at, expires_at) VALUES ($1, $2, $3, $4)',
-    [token, role || 'admin', now, expires],
+    'INSERT INTO sessions (token, role, password_version, created_at, expires_at) VALUES ($1, $2, $3, $4, $5)',
+    [token, role || 'admin', pwv, now, expires],
   );
   // Prune expired sessions on each new login (lazy cleanup)
   void pruneExpiredSessions();
@@ -1214,12 +1215,14 @@ export async function validateSessionToken(token: string | null | undefined): Pr
   if (!token) return false;
   await ensureMigrated();
   const r = await pool.query(
-    'SELECT expires_at FROM sessions WHERE token = $1',
+    'SELECT expires_at, password_version FROM sessions WHERE token = $1',
     [token],
   );
-  const row = r.rows[0] as { expires_at: string } | undefined;
+  const row = r.rows[0] as { expires_at: string; password_version: number } | undefined;
   if (!row) return false;
-  return new Date(row.expires_at) > new Date();
+  if (new Date(row.expires_at) <= new Date()) return false;
+  const currentPwv = await getCurrentPasswordVersion();
+  return row.password_version === currentPwv;
 }
 
 export async function clearSessionToken(token: string): Promise<void> {
@@ -1233,5 +1236,20 @@ export async function pruneExpiredSessions(): Promise<void> {
   } catch (e) {
     log.warn({ err: e }, 'failed to prune expired sessions');
   }
+}
+
+export async function getCurrentPasswordVersion(): Promise<number> {
+  const v = await getSetting('auth_password_version');
+  return v ? parseInt(v, 10) : 1;
+}
+
+export async function incrementPasswordVersion(): Promise<void> {
+  const current = await getCurrentPasswordVersion();
+  await setSetting('auth_password_version', String(current + 1));
+}
+
+export async function clearAllSessions(): Promise<void> {
+  await ensureMigrated();
+  await pool.query('DELETE FROM sessions');
 }
 

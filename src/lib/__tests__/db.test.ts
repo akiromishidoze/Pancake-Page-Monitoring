@@ -354,6 +354,98 @@ describe('db module', () => {
       ) as any;
       expect(deleteCall).toBeDefined();
     });
+
+    it('createSessionToken includes password_version', async () => {
+      // Return a version from settings
+      mockPool.query.mockImplementation(async (sql: any) => {
+        if (typeof sql === 'string' && sql.includes('SELECT value FROM settings WHERE key = $1')) {
+          return { rows: [{ value: '3' }] };
+        }
+        if (typeof sql === 'string' && sql.includes('INSERT INTO sessions')) {
+          return { rows: [] };
+        }
+        return defaultQuery(sql);
+      });
+      const { createSessionToken } = await import('../db');
+      await createSessionToken();
+      const insertCall = mockPool.query.mock.calls.find((call: any[]) =>
+        typeof call[0] === 'string' && call[0].includes('INSERT INTO sessions')
+      ) as any;
+      expect(insertCall).toBeDefined();
+      // password_version is the 3rd value (token, role, password_version, ...)
+      expect(insertCall[1][2]).toBe(3);
+    });
+
+    it('validateSessionToken rejects expired session', async () => {
+      mockPool.query.mockImplementation(async (sql: any) => {
+        if (typeof sql === 'string' && sql.includes('SELECT expires_at, password_version FROM sessions')) {
+          return { rows: [{ expires_at: new Date(Date.now() - 86_400_000).toISOString(), password_version: 1 }] };
+        }
+        return defaultQuery(sql);
+      });
+      const { validateSessionToken } = await import('../db');
+      const ok = await validateSessionToken('expired-token');
+      expect(ok).toBe(false);
+    });
+
+    it('validateSessionToken rejects stale password_version', async () => {
+      mockPool.query.mockImplementation(async (sql: any) => {
+        if (typeof sql === 'string' && sql.includes('SELECT value FROM settings WHERE key = $1')) {
+          return { rows: [{ value: '2' }] };
+        }
+        if (typeof sql === 'string' && sql.includes('SELECT expires_at, password_version FROM sessions')) {
+          return { rows: [{ expires_at: new Date(Date.now() + 86_400_000).toISOString(), password_version: 1 }] };
+        }
+        return defaultQuery(sql);
+      });
+      const { validateSessionToken } = await import('../db');
+      const ok = await validateSessionToken('stale-token');
+      expect(ok).toBe(false);
+    });
+
+    it('validateSessionToken accepts matching password_version', async () => {
+      mockPool.query.mockImplementation(async (sql: any) => {
+        if (typeof sql === 'string' && sql.includes('SELECT value FROM settings WHERE key = $1')) {
+          return { rows: [{ value: '1' }] };
+        }
+        if (typeof sql === 'string' && sql.includes('SELECT expires_at, password_version FROM sessions')) {
+          return { rows: [{ expires_at: new Date(Date.now() + 86_400_000).toISOString(), password_version: 1 }] };
+        }
+        return defaultQuery(sql);
+      });
+      const { validateSessionToken } = await import('../db');
+      const ok = await validateSessionToken('valid-token');
+      expect(ok).toBe(true);
+    });
+
+    it('incrementPasswordVersion bumps the version', async () => {
+      let version = 1;
+      mockPool.query.mockImplementation(async (...args: unknown[]) => {
+        const sql = args[0];
+        if (typeof sql === 'string' && sql.includes('SELECT value FROM settings WHERE key = $1')) {
+          return { rows: [{ value: String(version) }] };
+        }
+        if (typeof sql === 'object' && (sql as any).text?.includes('INSERT INTO settings') && (sql as any).values?.[0] === 'auth_password_version') {
+          version = parseInt((sql as any).values[1] ?? 0, 10);
+          return { rows: [] };
+        }
+        return defaultQuery(sql);
+      });
+      const { incrementPasswordVersion } = await import('../db');
+      await incrementPasswordVersion();
+      expect(version).toBe(2);
+      await incrementPasswordVersion();
+      expect(version).toBe(3);
+    });
+
+    it('clearAllSessions deletes all sessions', async () => {
+      const { clearAllSessions } = await import('../db');
+      await clearAllSessions();
+      const deleteCall = mockPool.query.mock.calls.find((call: any[]) =>
+        typeof call[0] === 'string' && call[0].includes('DELETE FROM sessions')
+      ) as any;
+      expect(deleteCall).toBeDefined();
+    });
   });
 
   describe('platform pages', () => {

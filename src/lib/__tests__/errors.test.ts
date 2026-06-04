@@ -70,6 +70,58 @@ describe('errors module', () => {
     });
   });
 
+  describe('requireJson', () => {
+    it('returns null when Content-Type is application/json', async () => {
+      const { requireJson } = await import('../errors');
+      const req = new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      expect(requireJson(req)).toBeNull();
+    });
+
+    it('returns 415 when Content-Type is missing', async () => {
+      const { requireJson } = await import('../errors');
+      const req = new Request('http://localhost', { method: 'POST' });
+      const res = requireJson(req);
+      expect(res).not.toBeNull();
+      expect(res!.status).toBe(415);
+      const body = await res!.json();
+      expect(body.error).toBe('Content-Type must be application/json');
+    });
+
+    it('returns 415 when Content-Type is text/plain', async () => {
+      const { requireJson } = await import('../errors');
+      const req = new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+      });
+      const res = requireJson(req);
+      expect(res).not.toBeNull();
+      expect(res!.status).toBe(415);
+    });
+
+    it('returns 415 when Content-Type is multipart/form-data', async () => {
+      const { requireJson } = await import('../errors');
+      const req = new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const res = requireJson(req);
+      expect(res).not.toBeNull();
+      expect(res!.status).toBe(415);
+    });
+
+    it('ignores charset suffix in application/json', async () => {
+      const { requireJson } = await import('../errors');
+      const req = new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      });
+      expect(requireJson(req)).toBeNull();
+    });
+  });
+
   describe('apiCatch', () => {
     it('returns error message from Error object', async () => {
       const { apiCatch } = await import('../errors');
