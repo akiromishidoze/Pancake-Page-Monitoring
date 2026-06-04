@@ -2,6 +2,8 @@ import { createLogger } from './logger';
 
 const log = createLogger('sse');
 
+export const MAX_CLIENTS = parseInt(process.env.SSE_MAX_CLIENTS || '500', 10);
+
 const clients = new Map<string, { controller: ReadableStreamDefaultController; scope?: string }>();
 
 let _evictionTimer: ReturnType<typeof setInterval> | null = null;
@@ -19,9 +21,14 @@ function startEviction() {
   }, 30_000);
 }
 
-export function addClient(id: string, controller: ReadableStreamDefaultController, scope?: string) {
+export function addClient(id: string, controller: ReadableStreamDefaultController, scope?: string): boolean {
+  if (clients.size >= MAX_CLIENTS) {
+    log.warn({ max: MAX_CLIENTS }, 'SSE client rejected: max connections reached');
+    return false;
+  }
   clients.set(id, { controller, scope: scope || undefined });
   startEviction();
+  return true;
 }
 
 export function removeClient(id: string) {
