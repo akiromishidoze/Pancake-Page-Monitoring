@@ -61,7 +61,9 @@ async function getBotCakePageTokens(userToken: string, fbPageId: string): Promis
 
 export type ConversationResult = Map<string, { ts: string | null; count: number }>;
 
-type CacheEntry<T> = { hasMatch: boolean; data: T; checkedAt: number };
+type CacheEntry<T> =
+  | { hasMatch: true; data: T; checkedAt: number }
+  | { hasMatch: false; checkedAt: number };
 
 async function batchCheckWithCache<T>(
   pageIds: string[],
@@ -94,16 +96,20 @@ async function batchCheckWithCache<T>(
     await Promise.all(batch.map(async (pageId) => {
       const token = tokens.get(pageId);
       if (!token) {
-        cache.set(pageId, { hasMatch: false, data: null as T, checkedAt: Date.now() });
+        cache.set(pageId, { hasMatch: false, checkedAt: Date.now() });
         return;
       }
       try {
         const checkResult = await checkPage(pageId, token);
-        cache.set(pageId, { ...checkResult, checkedAt: Date.now() });
-        if (checkResult.hasMatch) result.set(pageId, checkResult.data);
+        if (checkResult.hasMatch) {
+          cache.set(pageId, { hasMatch: true, data: checkResult.data, checkedAt: Date.now() });
+          result.set(pageId, checkResult.data);
+        } else {
+          cache.set(pageId, { hasMatch: false, checkedAt: Date.now() });
+        }
       } catch (e) {
         log.warn({ err: e }, 'batchCheckWithCache failed for page %s', pageId);
-        cache.set(pageId, { hasMatch: false, data: null as T, checkedAt: Date.now() });
+        cache.set(pageId, { hasMatch: false, checkedAt: Date.now() });
       }
     }));
   }
