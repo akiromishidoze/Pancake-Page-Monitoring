@@ -3,17 +3,24 @@
 import { Component, type ReactNode } from 'react';
 
 type Props = { children: ReactNode; title?: string; onRetry?: () => void };
-type State = { error: Error | null };
+type State = { error: Error | null; retryKey: number };
 
 export class SectionErrorBoundary extends Component<Props, State> {
-  state: State = { error: null };
+  state: State = { error: null, retryKey: 0 };
 
   static getDerivedStateFromError(error: Error): State {
-    return { error };
+    return { error: error, retryKey: 0 };
   }
 
+  handleRetry = () => {
+    this.setState(prev => ({ error: null, retryKey: prev.retryKey + 1 }));
+    this.props.onRetry?.();
+  };
+
   render() {
-    if (!this.state.error) return this.props.children;
+    if (!this.state.error) {
+      return <div key={this.state.retryKey}>{this.props.children}</div>;
+    }
 
     return (
       <div className="rounded-lg border border-red-800 bg-red-950/30 p-6" role="alert">
@@ -24,12 +31,20 @@ export class SectionErrorBoundary extends Component<Props, State> {
           <span className="text-sm font-medium text-red-400">{this.props.title ?? 'Section Error'}</span>
         </div>
         <p className="text-xs text-red-300/70 mb-3 truncate">{this.state.error.message}</p>
-        <button
-          onClick={() => { this.setState({ error: null }); this.props.onRetry?.(); }}
-          className="rounded bg-red-800/50 px-2.5 py-1 text-xs text-red-300 hover:bg-red-700/50 transition-colors"
-        >
-          Dismiss
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={this.handleRetry}
+            className="rounded bg-red-800/50 px-2.5 py-1 text-xs text-red-300 hover:bg-red-700/50 transition-colors cursor-pointer"
+          >
+            Retry
+          </button>
+          <button
+            onClick={() => this.setState({ error: null })}
+            className="rounded bg-slate-800/50 px-2.5 py-1 text-xs text-slate-400 hover:bg-slate-700/50 transition-colors cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
       </div>
     );
   }

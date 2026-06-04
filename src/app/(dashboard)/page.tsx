@@ -62,21 +62,43 @@ function StatusCardGrid({ data }: { data: StatusCardData }) {
   );
 }
 
-async function PancakeSection({ endpointId, pancakeIds, allEndpoints }: { endpointId?: string; pancakeIds: string[]; allEndpoints: EndpointRow[] }) {
-  let allPages: PageStateRow[] = [];
-  let pancakeEndpoints = allEndpoints.filter(e => isPancakeEndpoint(e) && pancakeIds.includes(e.id));
+async function tryDb<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+  try { return await fn(); } catch { return fallback; }
+}
 
-  if (endpointId) {
-    allPages = await getLatestPageStates(endpointId);
-    pancakeEndpoints = pancakeEndpoints.filter(e => e.id === endpointId);
-  } else if (pancakeIds.length > 0) {
-    allPages = await getLatestPageStatesForEndpoints(pancakeIds);
+function DbErrorFallback({ label }: { label: string }) {
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900 p-6" role="alert">
+      <div className="flex items-center gap-2 mb-2">
+        <svg className="w-4 h-4 text-yellow-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+        </svg>
+        <span className="text-sm font-medium text-slate-300">{label} — Unavailable</span>
+      </div>
+      <p className="text-xs text-slate-500">Could not load data. The database may be temporarily unreachable.</p>
+    </div>
+  );
+}
+
+async function PancakeSection({ endpointId, pancakeIds, allEndpoints }: { endpointId?: string; pancakeIds: string[]; allEndpoints: EndpointRow[] }) {
+  let allPages: PageStateRow[];
+  try {
+    if (endpointId) {
+      allPages = await getLatestPageStates(endpointId);
+    } else if (pancakeIds.length > 0) {
+      allPages = await getLatestPageStatesForEndpoints(pancakeIds);
+    } else {
+      allPages = [];
+    }
+  } catch {
+    return <DbErrorFallback label="Pancake Platform" />;
   }
 
   if (allPages.length === 0) return null;
 
   const activeCount = allPages.filter((p) => p.is_activated).length;
   const inactiveCount = allPages.filter((p) => !p.is_activated).length;
+  const pancakeEndpoints = allEndpoints.filter(e => isPancakeEndpoint(e) && pancakeIds.includes(e.id));
 
   const shopBreakdown = pancakeEndpoints.map((ep) => {
     const shopPages = allPages.filter((p) => p.shop_label === ep.shop_label);
@@ -88,7 +110,7 @@ async function PancakeSection({ endpointId, pancakeIds, allEndpoints }: { endpoi
     };
   });
 
-  const histories = pancakeIds.length > 0 ? await getRunHistories(pancakeIds, 100) : new Map();
+  const histories = pancakeIds.length > 0 ? await tryDb(() => getRunHistories(pancakeIds, 100), new Map()) : new Map();
   const trendSeries = pancakeEndpoints.map((ep) => {
     const history: RunRow[] = histories.get(ep.id) ?? [];
     if (history.length < 2) return null;
@@ -165,13 +187,19 @@ async function PancakeSection({ endpointId, pancakeIds, allEndpoints }: { endpoi
 }
 
 async function BotCakeSection({ endpointId }: { endpointId: string }) {
-  const [pages, latestRun, botCakeHistory, overrides] = await Promise.all([
-    getLatestPageStates(endpointId),
-    getLatestRun(endpointId),
-    getRunHistory(endpointId, 200),
-    getBotCakeOverrides(),
-  ]);
+  let pages: PageStateRow[];
+  try {
+    pages = await getLatestPageStates(endpointId);
+  } catch {
+    return <DbErrorFallback label="BotCake Platform" />;
+  }
   if (pages.length === 0) return null;
+
+  const [latestRun, botCakeHistory, overrides] = await Promise.all([
+    tryDb(() => getLatestRun(endpointId), null),
+    tryDb(() => getRunHistory(endpointId, 200), []),
+    tryDb(() => getBotCakeOverrides(), new Map()),
+  ]);
 
   // Build override map: page_id → is_active
   const overrideMap = new Map<string, boolean>();
@@ -278,17 +306,27 @@ export default async function OverviewPage({
   const sp = await searchParams;
   const endpointId = sp.endpoint_id;
 
-  const endpoint = endpointId ? await getEndpoint(endpointId) : undefined;
+  let endpoint: EndpointRow | null = null;
+  try { endpoint = (endpointId ? await getEndpoint(endpointId) : null) ?? null; } catch { /* unavailable */ }
 
-  const [localRun, recentRuns, dbRunCount, totalRunCount, lastScheduledRunStr, allEndpoints] = await Promise.all([
-    getLatestRun(endpointId),
-    getRecentRuns(50, endpointId),
-    getRunCount(endpointId),
-    getRunCount(),
-    getSetting('last_scheduled_run'),
-    listEndpoints(),
-  ]);
-  const lastScheduledRunMs = lastScheduledRunStr ? parseInt(lastScheduledRunStr, 10) : null;
+  let localRun = null;
+  let recentRuns: RunRow[] = [];
+  let totalRunCount = 0;
+  let lastScheduledRunMs: number | null = null;
+  let allEndpoints: EndpointRow[] = [];
+
+  try {
+    [localRun, recentRuns, , totalRunCount, lastScheduledRunMs, allEndpoints] = await Promise.all([
+      getLatestRun(endpointId),
+      getRecentRuns(50, endpointId),
+      getRunCount(endpointId),
+      getRunCount(),
+      getSetting('last_scheduled_run').then(s => s ? parseInt(s, 10) : null),
+      listEndpoints(),
+    ]);
+  } catch {
+    // DB unavailable — use empty fallbacks
+  }
 
   const pancakeIds = allEndpoints.filter(isPancakeEndpoint).map(e => e.id);
   const botcakeEndpointIds = allEndpoints.filter(isBotCakeEndpoint).map(e => e.id);

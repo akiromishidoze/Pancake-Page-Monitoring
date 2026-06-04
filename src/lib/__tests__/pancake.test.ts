@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from 'vitest';
 import { mergePagesActivation, TARGET_SHOP_IDS } from '@/lib/pancake';
 
