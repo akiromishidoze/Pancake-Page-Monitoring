@@ -42,84 +42,84 @@ export const PageStateRowSchema = z.object({
 
 export const EndpointCreateSchema = z.object({
   id: z.string().optional(),
-  name: z.string().min(1, 'name is required'),
-  api_key: z.string().min(1, 'api_key is required'),
-  url: z.string().nullable().optional(),
-  access_token: z.string().nullable().optional(),
+  name: z.string().trim().min(1, 'name is required'),
+  api_key: z.string().trim().min(1, 'api_key is required'),
+  url: z.string().trim().nullable().optional(),
+  access_token: z.string().trim().nullable().optional(),
   token_expires_at: z.string().nullable().optional(),
-  shop_label: z.string().nullable().optional(),
+  shop_label: z.string().trim().nullable().optional(),
   is_active: z.boolean().optional().default(true),
 });
 
 export const EndpointUpdateSchema = z.object({
-  name: z.string().min(1).optional(),
-  api_key: z.string().min(1).optional(),
-  url: z.string().nullable().optional(),
-  access_token: z.string().nullable().optional(),
+  name: z.string().trim().min(1).optional(),
+  api_key: z.string().trim().min(1).optional(),
+  url: z.string().trim().nullable().optional(),
+  access_token: z.string().trim().nullable().optional(),
   token_expires_at: z.string().nullable().optional(),
-  shop_label: z.string().nullable().optional(),
+  shop_label: z.string().trim().nullable().optional(),
   is_active: z.boolean().optional(),
 });
 
 export const PlatformPageCreateSchema = z.object({
-  endpoint_id: z.string().min(1, 'endpoint_id is required'),
-  page_name: z.string().min(1, 'page_name is required'),
-  page_url: z.string().nullable().optional(),
+  endpoint_id: z.string().trim().min(1, 'endpoint_id is required'),
+  page_name: z.string().trim().min(1, 'page_name is required'),
+  page_url: z.string().trim().nullable().optional(),
   is_active: z.boolean().optional().default(true),
 });
 
 export const PlatformPageUpdateSchema = z.object({
-  endpoint_id: z.string().min(1).optional(),
-  page_name: z.string().min(1).optional(),
-  page_url: z.string().nullable().optional(),
+  endpoint_id: z.string().trim().min(1).optional(),
+  page_name: z.string().trim().min(1).optional(),
+  page_url: z.string().trim().nullable().optional(),
   is_active: z.boolean().optional(),
 });
 
 export const ConnectorCreateSchema = z.object({
   id: z.string().optional(),
-  name: z.string().min(1, 'name is required'),
-  platform_type: z.string().min(1, 'platform_type is required'),
-  api_url: z.string().min(1, 'api_url is required'),
-  auth_header: z.string().nullable().optional(),
-  auth_token: z.string().nullable().optional(),
-  json_path: z.string().nullable().optional(),
+  name: z.string().trim().min(1, 'name is required'),
+  platform_type: z.string().trim().min(1, 'platform_type is required'),
+  api_url: z.string().trim().min(1, 'api_url is required'),
+  auth_header: z.string().trim().nullable().optional(),
+  auth_token: z.string().trim().nullable().optional(),
+  json_path: z.string().trim().nullable().optional(),
   interval_ms: z.number().int().positive().optional().default(60000),
   is_active: z.boolean().optional().default(true),
 });
 
 export const LoginSchema = z.object({
-  email: z.string().min(1, 'email is required').optional(),
-  username: z.string().min(1, 'username is required').optional(),
+  email: z.string().trim().min(1, 'email is required').optional(),
+  username: z.string().trim().min(1, 'username is required').optional(),
   password: z.string().min(1, 'password is required'),
 }).refine(data => data.email || data.username, {
   message: 'Either email or username is required',
 });
 
 export const ChangePasswordSchema = z.object({
-  current_email: z.string().optional().default('admin'),
+  current_email: z.string().trim().optional().default('admin'),
   current_password: z.string().min(1, 'current_password is required'),
-  new_email: z.string().optional(),
+  new_email: z.string().trim().optional(),
   new_password: z.string().min(8, 'new_password must be at least 8 characters').optional(),
 });
 
 export const NotifySettingsSchema = z.object({
-  slack_webhook: z.string().optional(),
-  smtp_host: z.string().optional(),
-  smtp_port: z.string().optional(),
-  smtp_user: z.string().optional(),
-  smtp_pass: z.string().optional(),
-  email_from: z.string().optional(),
-  email_to: z.string().optional(),
+  slack_webhook: z.string().trim().optional(),
+  smtp_host: z.string().trim().optional(),
+  smtp_port: z.string().trim().optional(),
+  smtp_user: z.string().trim().optional(),
+  smtp_pass: z.string().trim().optional(),
+  email_from: z.string().trim().optional(),
+  email_to: z.string().trim().optional(),
 });
 
 export const ScheduleSchema = z.object({
-  interval: z.string().min(1, 'interval is required'),
+  interval: z.string().trim().min(1, 'interval is required'),
 });
 
 export const BotCakeOverrideSchema = z.object({
-  page_id: z.string().min(1, 'page_id is required'),
+  page_id: z.string().trim().min(1, 'page_id is required'),
   is_active: z.boolean().optional().default(true),
-  reason: z.string().optional(),
+  reason: z.string().trim().optional(),
   remove: z.boolean().optional(),
 });
 
@@ -127,22 +127,39 @@ export const RetentionSettingsSchema = z.object({
   retention_days: z.union([z.string(), z.number()]).optional(),
 });
 
+export const PruneSchema = z.object({
+  retention_days: z.union([z.string(), z.number()]).refine(
+    v => {
+      const n = typeof v === 'string' ? parseInt(v, 10) : v;
+      return !isNaN(n) && n > 0;
+    },
+    { message: 'retention_days must be a positive number' },
+  ).transform(v => typeof v === 'string' ? parseInt(v, 10) : v),
+});
+
+export const MarkNotificationsSchema = z.object({
+  id: z.number().int().positive().optional(),
+  all: z.boolean().optional(),
+}).refine(data => data.id !== undefined || data.all !== undefined, {
+  message: 'Either id or all is required',
+});
+
 export const IngestRowSchema = z.object({
-  page_id: z.string().optional(),
-  id: z.string().optional(),
-  shop_label: z.string().optional().nullable(),
-  page_name: z.string().optional(),
-  name: z.string().optional(),
-  activity_kind: z.string().optional().nullable(),
-  kind: z.string().optional().nullable(),
-  activation_reason: z.string().optional().nullable(),
-  reason: z.string().optional().nullable(),
+  page_id: z.string().trim().optional(),
+  id: z.string().trim().optional(),
+  shop_label: z.string().trim().optional().nullable(),
+  page_name: z.string().trim().optional(),
+  name: z.string().trim().optional(),
+  activity_kind: z.string().trim().optional().nullable(),
+  kind: z.string().trim().optional().nullable(),
+  activation_reason: z.string().trim().optional().nullable(),
+  reason: z.string().trim().optional().nullable(),
   is_activated: z.boolean().optional(),
   is_canary: z.boolean().optional(),
-  last_order_at: z.string().optional().nullable(),
-  last_customer_activity_at: z.string().optional().nullable(),
-  state_change: z.string().optional().nullable(),
-  activity_kind_change: z.string().optional().nullable(),
+  last_order_at: z.string().trim().optional().nullable(),
+  last_customer_activity_at: z.string().trim().optional().nullable(),
+  state_change: z.string().trim().optional().nullable(),
+  activity_kind_change: z.string().trim().optional().nullable(),
   response_ms: z.number().optional().nullable(),
   fetch_errors: z.number().optional(),
 });

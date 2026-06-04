@@ -2,14 +2,21 @@ import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { pruneOldRuns } from '@/lib/db';
 import { withAuth } from '@/lib/auth';
+import { PruneSchema } from '@/lib/schemas';
 
 export const POST = withAuth(async (req: Request) => {
-    const body = await req.json();
-    const days = parseInt(body.retention_days, 10);
-    if (isNaN(days) || days <= 0) {
-      return apiError(ErrorCodes.VALIDATION_ERROR, 'retention_days must be a positive number', 400);
+    let raw: unknown;
+    try {
+      raw = await req.json();
+    } catch {
+      return apiError(ErrorCodes.VALIDATION_INVALID_JSON, 'Invalid JSON', 400);
     }
 
-    const deleted = await pruneOldRuns(days);
+    const parsed = PruneSchema.safeParse(raw);
+    if (!parsed.success) {
+      return apiError(ErrorCodes.VALIDATION_ERROR, 'Validation failed', 400, parsed.error.flatten());
+    }
+
+    const deleted = await pruneOldRuns(parsed.data.retention_days);
     return NextResponse.json({ ok: true, deleted });
 });

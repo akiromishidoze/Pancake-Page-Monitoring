@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { apiCatch } from '@/lib/errors';
+import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { withAuth } from '@/lib/auth';
 import { getNotifications, markAsRead, markAllAsRead, dismissNotification, getUnreadCount } from '@/lib/notifications';
+import { MarkNotificationsSchema } from '@/lib/schemas';
 
 export const GET = withAuth(async (req: Request) => {
   const url = new URL(req.url);
@@ -22,16 +23,21 @@ export const PATCH = withAuth(async (req: Request) => {
   try {
     raw = await req.json();
   } catch {
-    return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
+    return apiError(ErrorCodes.VALIDATION_INVALID_JSON, 'Invalid JSON', 400);
   }
 
-  const body = raw as { id?: number; all?: boolean };
+  const parsed = MarkNotificationsSchema.safeParse(raw);
+  if (!parsed.success) {
+    return apiError(ErrorCodes.VALIDATION_ERROR, 'Validation failed', 400, parsed.error.flatten());
+  }
+
+  const body = parsed.data;
   if (body.all) {
     await markAllAsRead();
     return NextResponse.json({ ok: true });
   }
 
-  if (typeof body.id === 'number') {
+  if (body.id !== undefined) {
     await markAsRead(body.id);
     return NextResponse.json({ ok: true });
   }
