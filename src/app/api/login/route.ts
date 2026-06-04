@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
+import { ErrorCodes, apiError, apiCatch, requireJson } from '@/lib/errors';
 import { cookies } from 'next/headers';
 import { validateCredentials, createSession, isDefaultPassword } from '@/lib/auth';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
@@ -10,6 +10,9 @@ export async function POST(req: Request) {
     const ip = getClientIp(req);
     const rateLimited = rateLimit(ip, { store: 'login', max: 5 });
     if (rateLimited) return rateLimited;
+
+    const ctErr = requireJson(req);
+    if (ctErr) return ctErr;
 
     let raw: unknown;
     try {

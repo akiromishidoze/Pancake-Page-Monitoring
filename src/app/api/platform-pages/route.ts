@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ErrorCodes, apiError } from '@/lib/errors';
+import { ErrorCodes, apiError, requireJson } from '@/lib/errors';
 import { listPlatformPages, upsertPlatformPage } from '@/lib/db';
 import { PlatformPageCreateSchema } from '@/lib/schemas';
 import { requireApiAuth } from '@/lib/auth';
@@ -16,6 +16,8 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const auth = await requireApiAuth();
   if (auth) return auth;
+  const ctErr = requireJson(req);
+  if (ctErr) return ctErr;
   let raw: unknown;
   try {
     raw = await req.json();

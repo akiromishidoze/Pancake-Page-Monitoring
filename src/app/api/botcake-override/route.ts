@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
+import { ErrorCodes, apiError, apiCatch, requireJson } from '@/lib/errors';
 import { setBotCakeOverride, removeBotCakeOverride } from '@/lib/db';
 import { refreshAll } from '@/lib/poller';
 import { cors, corsOptions } from '@/lib/cors';
@@ -10,6 +10,8 @@ export async function POST(req: Request) {
   try {
     const auth = await requireApiAuth();
     if (auth) return cors(auth);
+    const ctErr = requireJson(req);
+    if (ctErr) return cors(ctErr);
     let raw: unknown;
     try {
       raw = await req.json();

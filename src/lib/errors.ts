@@ -32,6 +32,14 @@ export function apiError(code: ErrorCode, message: string, status: number = 400,
   return NextResponse.json(body, { status });
 }
 
+export function requireJson(req: Request): NextResponse | null {
+  const ct = req.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) {
+    return NextResponse.json({ ok: false, error: 'Content-Type must be application/json' }, { status: 415 });
+  }
+  return null;
+}
+
 export function apiCatch(e: unknown, status: number = 500): NextResponse {
   const message = e instanceof Error ? e.message : String(e);
   const errInfo = e instanceof Error ? { err: e, stack: e.stack } : { err: String(e) };

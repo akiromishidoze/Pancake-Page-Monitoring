@@ -3,7 +3,7 @@
 // Authenticated via X-Api-Key header matched against the endpoints table.
 
 import { NextResponse } from 'next/server';
-import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
+import { ErrorCodes, apiError, apiCatch, requireJson } from '@/lib/errors';
 import { getEndpointByApiKey, insertSnapshot, touchEndpoint, toSlimPage, type SlimPage } from '@/lib/db';
 import { checkAlertsForRun } from '@/lib/notify';
 import { broadcastSSE } from '@/lib/sse';
@@ -46,6 +46,9 @@ export async function POST(req: Request) {
   if (endpoint.token_expires_at && new Date(endpoint.token_expires_at) < new Date()) {
     return respond(apiError(ErrorCodes.AUTH_KEY_EXPIRED, 'API key has expired', 401), req);
   }
+
+  const ctErr = requireJson(req);
+  if (ctErr) return respond(ctErr, req);
 
   let raw: unknown;
   try {

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { getSetting, setSetting, createSessionToken, validateSessionToken, clearSessionToken } from './db';
-import { apiCatch } from './errors';
+import { apiCatch, requireJson } from './errors';
 import { createLogger } from './logger';
 
 const log = createLogger('auth');
@@ -140,6 +140,14 @@ export function withAuth<T extends RouteHandler>(handler: T): T {
       if (auth) {
         handlerLog.info({ method, path, status: auth.status, durationMs: Date.now() - start }, 'handler');
         return auth;
+      }
+      const req = args[0];
+      if (req instanceof Request && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+        const jsonErr = requireJson(req);
+        if (jsonErr) {
+          handlerLog.info({ method, path, status: jsonErr.status, durationMs: Date.now() - start }, 'handler');
+          return jsonErr;
+        }
       }
       const res = await handler(...args);
       handlerLog.info({ method, path, status: res.status, durationMs: Date.now() - start }, 'handler');
