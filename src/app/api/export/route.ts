@@ -9,7 +9,7 @@ export const GET = withAuth(async (req: Request) => {
     const url = new URL(req.url);
     const format = url.searchParams.get('format') || 'csv';
     const endpointId = url.searchParams.get('endpoint_id') || null;
-    const limit = Math.min(parseInt(url.searchParams.get('limit') || '10000', 10), 100000);
+    const limit = Math.min(parseInt(url.searchParams.get('limit') || '10000', 10), 50000);
 
     if (format === 'json') {
       let runs: RunRow[];
