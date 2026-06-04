@@ -210,58 +210,60 @@ export async function checkBotCakeToolsFlows(pageIds: string[], userToken: strin
 
 // ---- FB Graph API name resolution (used for page names only, not status) ----
 
-const _fbPageInfoCache = new Map<string, { status: 'valid' | 'not-found'; name?: string } | 'checking'>();
+const _fbPageInfoCache = new Map<string, Promise<{ status: 'valid' | 'not-found'; name?: string }>>();
+
+async function resolveSingleFbPage(pageId: string, fbToken: string): Promise<{ status: 'valid' | 'not-found'; name?: string }> {
+  try {
+    const r = await fetchWithTimeout(`${FB_GRAPH}/${pageId}?fields=id,name`, {
+      headers: { Authorization: `Bearer ${fbToken}` },
+      timeout: 8_000,
+    });
+    if (r.ok) {
+      const d = FbPageInfoSchema.parse(await r.json());
+      if (d.name) {
+        return { status: 'valid', name: d.name };
+      }
+    }
+  } catch (e) {
+    log.warn({ err: e }, 'resolveFbPages failed for page %s', pageId);
+  }
+  return { status: 'not-found' };
+}
 
 async function resolveFbPages(pageIds: string[]): Promise<Map<string, { status: 'valid' | 'not-found'; name?: string }>> {
   const result = new Map<string, { status: 'valid' | 'not-found'; name?: string }>();
   const fbToken = process.env.FB_ACCESS_TOKEN;
   if (!fbToken) return result;
 
-  const uncached = pageIds.filter(id => !_fbPageInfoCache.has(id) || _fbPageInfoCache.get(id) === 'checking');
-  if (uncached.length === 0) {
-    for (const id of pageIds) {
-      const entry = _fbPageInfoCache.get(id);
-      if (entry && entry !== 'checking') result.set(id, entry);
+  const promises: Promise<void>[] = [];
+  const toFetch: string[] = [];
+
+  for (const pageId of pageIds) {
+    const cached = _fbPageInfoCache.get(pageId);
+    if (cached) {
+      promises.push(cached.then(entry => { result.set(pageId, entry); }));
+    } else {
+      toFetch.push(pageId);
     }
-    return result;
   }
 
-  for (const id of uncached) _fbPageInfoCache.set(id, 'checking');
-
-  const CONCURRENCY = 5;
-  for (let i = 0; i < uncached.length; i += CONCURRENCY) {
-    const batch = uncached.slice(i, i + CONCURRENCY);
-    await Promise.all(batch.map(async (pageId) => {
-      try {
-        const r = await fetchWithTimeout(`${FB_GRAPH}/${pageId}?fields=id,name`, {
-          headers: { Authorization: `Bearer ${fbToken}` },
-          timeout: 8_000,
-        });
-        if (r.ok) {
-          const d = FbPageInfoSchema.parse(await r.json());
-          if (d.name) {
-            const entry = { status: 'valid' as const, name: d.name };
-            _fbPageInfoCache.set(pageId, entry);
-            result.set(pageId, entry);
-          } else {
-            const entry = { status: 'not-found' as const };
-            _fbPageInfoCache.set(pageId, entry);
-            result.set(pageId, entry);
-          }
-        } else {
-          const entry = { status: 'not-found' as const };
-          _fbPageInfoCache.set(pageId, entry);
-          result.set(pageId, entry);
-        }
-      } catch (e) {
-        log.warn({ err: e }, 'resolveFbPages failed for page %s', pageId);
-        const entry = { status: 'not-found' as const };
-        _fbPageInfoCache.set(pageId, entry);
+  if (toFetch.length > 0) {
+    const CONCURRENCY = 5;
+    for (let i = 0; i < toFetch.length; i += CONCURRENCY) {
+      const batch = toFetch.slice(i, i + CONCURRENCY);
+      const entries = await Promise.all(batch.map(async (pageId) => {
+        const promise = resolveSingleFbPage(pageId, fbToken);
+        _fbPageInfoCache.set(pageId, promise);
+        const entry = await promise;
+        return { pageId, entry };
+      }));
+      for (const { pageId, entry } of entries) {
         result.set(pageId, entry);
       }
-    }));
+    }
   }
 
+  if (promises.length > 0) await Promise.all(promises);
   return result;
 }
 
