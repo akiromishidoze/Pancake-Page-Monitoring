@@ -34,13 +34,35 @@ async function fetchWithRetry(url: string, token: string, retries = 2, method: '
         timeout: 20_000,
       });
       if (res.ok) return res;
+
+      if (res.status === 429) {
+        const retryAfter = parseRetryAfter(res.headers.get('Retry-After'));
+        if (retryAfter !== null) {
+          log.warn({ url, waitMs: retryAfter }, 'botcake rate-limited (429), waiting %dms', retryAfter);
+          if (attempt < retries) {
+            await new Promise(r => setTimeout(r, retryAfter));
+            continue;
+          }
+        }
+      }
+
       if (attempt === retries) return null;
     } catch (e) {
       log.warn({ err: e }, 'botcake fetch attempt %d failed', attempt);
       if (attempt === retries) return null;
     }
-    await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+    const delay = Math.min(1000 * Math.pow(2, attempt), 30_000);
+    await new Promise(r => setTimeout(r, delay));
   }
+  return null;
+}
+
+function parseRetryAfter(value: string | null): number | null {
+  if (!value) return null;
+  const seconds = parseInt(value, 10);
+  if (!isNaN(seconds) && seconds >= 0) return seconds * 1000;
+  const parsed = Date.parse(value);
+  if (!isNaN(parsed)) return Math.max(0, parsed - Date.now());
   return null;
 }
 
