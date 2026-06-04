@@ -19,9 +19,12 @@ export function formatDateWithTz(date: Date | string | number): string {
   return `${d.toLocaleDateString('en')} ${tzAbbr(d)}`;
 }
 
+const CSV_FORMULA_RE = /^[=+\-@]/;
+
 export function escapeCsvCell(val: unknown): string {
   if (val === null || val === undefined) return '';
-  const str = String(val);
+  let str = String(val);
+  if (CSV_FORMULA_RE.test(str)) str = '\t' + str;
   if (str.includes(',') || str.includes('"') || str.includes('\n')) {
     return '"' + str.replace(/"/g, '""') + '"';
   }
