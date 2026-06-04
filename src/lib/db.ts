@@ -188,6 +188,15 @@ async function migrate() {
   try { await pool.query(`ALTER TABLE endpoints ADD COLUMN IF NOT EXISTS fb_page_id TEXT`); } catch {
     // Column may already exist, safe to ignore
   }
+  try { await pool.query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'`); } catch {
+    // Column may already exist, safe to ignore
+  }
+  try { await pool.query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS severity TEXT NOT NULL DEFAULT 'info'`); } catch {
+    // Column may already exist, safe to ignore
+  }
+  try { await pool.query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS is_read BOOLEAN NOT NULL DEFAULT false`); } catch {
+    // Column may already exist, safe to ignore
+  }
   await migrateTimestampTypes();
   await migrateBooleanTypes();
   await migrateBotCakeOverrides();

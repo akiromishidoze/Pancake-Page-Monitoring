@@ -44,12 +44,14 @@ const ALERT_DROP_THRESHOLD_PCT = 0.50;
 export async function refreshBotCake() {
   if (_refreshingBotCake) return;
   _refreshingBotCake = true;
+  let botCakeEndpoints: EndpointRow[] = [];
   try {
-    const botCakeEndpoints = (await listEndpoints()).filter(isBotCakeEndpoint);
+    botCakeEndpoints = (await listEndpoints()).filter(isBotCakeEndpoint);
     await Promise.all(botCakeEndpoints.map(ep => refreshSingleBotCake(ep)));
   } catch (err) {
     log.error({ err }, 'botcake: refresh failed');
-    void addNotification('external_error', 'warning', 'BotCake Refresh Failed', err instanceof Error ? err.message : String(err));
+    const epNames = botCakeEndpoints.length > 0 ? botCakeEndpoints.map(e => e.name).join(', ') : 'unknown';
+    void addNotification('external_error', 'warning', 'BotCake Refresh Failed', `BotCake refresh error for [${epNames}]: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
     _refreshingBotCake = false;
   }
@@ -62,7 +64,7 @@ async function refreshSingleBotCake(endpoint: EndpointRow) {
   const pages = await fetchBotCakePages(endpoint.access_token, fbPageId);
   if (pages.length === 0) {
     log.warn({ ep: endpoint.name }, 'botcake: API returned 0 pages — skipping insert');
-    void addNotification('external_error', 'warning', 'BotCake API Returned 0 Pages', `Endpoint "${endpoint.name}" returned 0 pages during refresh`);
+    void addNotification('external_error', 'warning', 'BotCake API Returned 0 Pages', `Endpoint "${endpoint.name}" returned 0 pages during refresh. Skipping insert.`);
     return;
   }
   const runId = `botcake_refresh_${Date.now()}_${endpoint.id}`;
@@ -224,9 +226,10 @@ async function refreshSingleBotCake(endpoint: EndpointRow) {
 async function refreshPancake() {
   if (_refreshingPancake) return;
   _refreshingPancake = true;
+  let endpoints: EndpointRow[] = [];
   try {
   const allEndpoints = await listEndpoints();
-  const endpoints = allEndpoints.filter(ep => !isBotCakeEndpoint(ep) && ep.url && ep.access_token && ep.is_active);
+  endpoints = allEndpoints.filter(ep => !isBotCakeEndpoint(ep) && ep.url && ep.access_token && ep.is_active);
   if (endpoints.length === 0) return;
 
   const token = endpoints[0].access_token!;
@@ -360,7 +363,8 @@ async function refreshPancake() {
   }
   } catch (err) {
     log.error({ err }, 'pancake: refresh failed');
-    void addNotification('external_error', 'warning', 'Pancake Refresh Failed', err instanceof Error ? err.message : String(err));
+    const epNames = endpoints.length > 0 ? endpoints.map(e => e.name).join(', ') : 'unknown';
+    void addNotification('external_error', 'warning', 'Pancake Refresh Failed', `Pancake refresh error for [${epNames}]: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
     _refreshingPancake = false;
   }
