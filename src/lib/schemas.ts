@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const BotCakePageTokenSchema = z.object({
   page_id: z.string(),
   public_token: z.string(),
+  name: z.string().optional(),
 });
 
 export const BotCakeCustomerDataSchema = z.array(z.object({

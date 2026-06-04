@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { pool } from '@/lib/db';
 import { BotCakePageTokenSchema, BotCakeCustomerDataSchema, BotCakeToolsResponseSchema, BotCakeFlowsResponseSchema, FbPageInfoSchema, PageStateRowSchema } from './schemas';
 import { createLogger } from './logger';
@@ -267,6 +268,64 @@ async function resolveFbPages(pageIds: string[]): Promise<Map<string, { status: 
   return result;
 }
 
+const BotCakePageInfoSchema = z.object({
+  name: z.string().optional(),
+  page_name: z.string().optional(),
+  title: z.string().optional(),
+}).passthrough();
+
+async function resolveBotCakePageNames(
+  unnamedIds: string[],
+  token: string,
+  fbPageId: string,
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+
+  try {
+    const url = `${API_BASE}/integration_page/list_access_token/${fbPageId}`;
+    const res = await fetchWithRetry(url, token, 1, 'POST');
+    if (res) {
+      const data = BotCakePageTokenSchema.array().parse(await res.json());
+      for (const entry of data) {
+        if (entry.name && unnamedIds.includes(entry.page_id) && !result.has(entry.page_id)) {
+          result.set(entry.page_id, entry.name);
+        }
+      }
+    }
+  } catch {
+    log.warn('botcake: failed to extract page names from list_access_token');
+  }
+
+  const stillUnnamed = unnamedIds.filter(id => !result.has(id));
+  if (stillUnnamed.length > 0) {
+    const PAGE_INFO_CONCURRENCY = 5;
+    for (let i = 0; i < stillUnnamed.length; i += PAGE_INFO_CONCURRENCY) {
+      const batch = stillUnnamed.slice(i, i + PAGE_INFO_CONCURRENCY);
+      await Promise.all(batch.map(async (pageId) => {
+        if (result.has(pageId)) return;
+        try {
+          const pageUrl = `${API_BASE}/pages/${pageId}`;
+          const pageRes = await fetch(pageUrl, {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (pageRes.ok) {
+            const info = BotCakePageInfoSchema.parse(await pageRes.json());
+            const pageName = info.name ?? info.page_name ?? info.title;
+            if (pageName) {
+              result.set(pageId, pageName);
+            }
+          }
+        } catch {
+          // best-effort
+        }
+      }));
+    }
+  }
+
+  return result;
+}
+
 export async function fetchBotCakePages(token: string, fbPageId: string): Promise<BotCakePage[]> {
   const ids = await fetchBotCakePageIds(token, fbPageId);
 
@@ -287,6 +346,14 @@ export async function fetchBotCakePages(token: string, fbPageId: string): Promis
   for (const r of known) {
     if (!nameMap.has(r.page_id) && r.page_name) {
       nameMap.set(r.page_id, r.page_name);
+    }
+  }
+
+  const unnamedIds = ids.filter(id => !nameMap.has(id));
+  if (unnamedIds.length > 0) {
+    const botcakeNames = await resolveBotCakePageNames(unnamedIds, token, fbPageId);
+    for (const [pageId, name] of botcakeNames) {
+      nameMap.set(pageId, name);
     }
   }
 
