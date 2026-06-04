@@ -114,13 +114,16 @@ async function batchCheckWithCache<T>(
 
   if (needsCheck.length === 0) return result;
 
-  for (let i = 0; i < needsCheck.length; i += concurrency) {
-    const batch = needsCheck.slice(i, i + concurrency);
-    await Promise.all(batch.map(async (pageId) => {
+  let idx = 0;
+  const workers: Promise<void>[] = [];
+
+  async function worker(): Promise<void> {
+    while (idx < needsCheck.length) {
+      const pageId = needsCheck[idx++];
       const token = tokens.get(pageId);
       if (!token) {
         cache.set(pageId, { hasMatch: false, checkedAt: Date.now() });
-        return;
+        continue;
       }
       try {
         const checkResult = await checkPage(pageId, token);
@@ -134,8 +137,13 @@ async function batchCheckWithCache<T>(
         log.warn({ err: e }, 'batchCheckWithCache failed for page %s', pageId);
         cache.set(pageId, { hasMatch: false, checkedAt: Date.now() });
       }
-    }));
+    }
   }
+
+  for (let i = 0; i < Math.min(concurrency, needsCheck.length); i++) {
+    workers.push(worker());
+  }
+  await Promise.all(workers);
 
   return result;
 }
