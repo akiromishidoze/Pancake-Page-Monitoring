@@ -336,6 +336,7 @@ async function resolveBotCakePageNames(
 
 export async function fetchBotCakePages(token: string, fbPageId: string): Promise<BotCakePage[]> {
   const ids = await fetchBotCakePageIds(token, fbPageId);
+  if (ids.length === 0) return [];
 
   const nameMap = new Map<string, string>();
   const fbToken = process.env.FB_ACCESS_TOKEN;
