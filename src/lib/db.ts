@@ -11,6 +11,8 @@ const connectionString = process.env.DATABASE_URL || '';
 const parsed = parse(connectionString);
 const isPgBouncer = process.env.PGBOUNCER === 'true';
 if (isPgBouncer) log.info('PgBouncer mode enabled');
+const pgStatementTimeout = parseInt(process.env.PG_STATEMENT_TIMEOUT || '30000', 10);
+if (pgStatementTimeout !== 30000) log.info('PG_STATEMENT_TIMEOUT set to %d ms', pgStatementTimeout);
 const poolConfig: DbPoolConfig = {
   host: parsed.host || '/var/run/postgresql',
   port: parsed.port ? parseInt(String(parsed.port), 10) : undefined,
@@ -21,6 +23,7 @@ const poolConfig: DbPoolConfig = {
   max: isPgBouncer ? 5 : 20,
   connectionTimeoutMillis: 10_000,
   idleTimeoutMillis: 30_000,
+  statement_timeout: parseInt(process.env.PG_STATEMENT_TIMEOUT || '30000', 10),
   pgbouncer: isPgBouncer || undefined,
 };
 const pool = new Pool(poolConfig);
