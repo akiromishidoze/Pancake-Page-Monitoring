@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { apiCatch } from '@/lib/errors';
 import { getSetting, listEndpoints, pool } from '@/lib/db';
 import { cors, corsOptions } from '@/lib/cors';
+import { getBotCakeApiHealth } from '@/lib/botcake';
 
 const POLL_INTERVAL_MS = 60_000;
 const STALE_THRESHOLD_MS = POLL_INTERVAL_MS * 2;
@@ -35,12 +36,24 @@ export async function GET() {
   const allOk = checks.every(c => c.ok);
   const anyData = checks.some(c => c.last_run_ms !== null);
 
+  const botcakeHealth: Record<string, unknown> = {};
+  for (const [epId, h] of getBotCakeApiHealth()) {
+    botcakeHealth[epId] = {
+      ok: h.ok,
+      latency_ms: h.latencyMs,
+      last_checked_at: h.lastCheckedAt,
+      last_error: h.lastError,
+      consecutive_failures: h.consecutiveFailures,
+    };
+  }
+
   return cors(NextResponse.json({
     ok: allOk && anyData,
     db: 'connected',
     poll_interval_ms: POLL_INTERVAL_MS,
     stale_threshold_ms: STALE_THRESHOLD_MS,
     endpoints: checks,
+    botcake_api: botcakeHealth,
   }));
   } catch (e) {
     return cors(apiCatch(e));

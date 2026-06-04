@@ -2,6 +2,7 @@ import { getSetting, setSetting, pruneOldRuns, listEndpoints, queryRows } from '
 import { refreshAll } from './poller';
 import { createLogger } from './logger';
 import { addNotification, pruneNotifications } from './notifications';
+import { getBotCakeApiHealth } from './botcake';
 
 const log = createLogger('scheduler');
 
@@ -79,6 +80,10 @@ export async function startScheduler() {
   _intervals.push(setInterval(() => {
     checkNotificationPrune().catch(err => log.error({ err }, 'Notification prune error'));
   }, 3600_000));
+
+  _intervals.push(setInterval(() => {
+    checkBotCakeApiHealthAlert().catch(err => log.error({ err }, 'BotCake API health alert error'));
+  }, 300_000));
 
 }
 
@@ -182,6 +187,16 @@ async function checkTokenExpiry() {
 
     if (remaining <= sevenDays && remaining > 0) {
       void addNotification('token_expiring', 'warning', `Token Expiring Soon: ${ep.name}`, `API token for "${ep.name}" expires on ${new Date(ep.token_expires_at).toLocaleDateString()} (${Math.ceil(remaining / 86400000)} days remaining)`);
+    }
+  }
+}
+
+// ─── BotCake API health alert ─────────────────────────────────────────
+
+async function checkBotCakeApiHealthAlert() {
+  for (const [epId, h] of getBotCakeApiHealth()) {
+    if (!h.ok && h.consecutiveFailures >= 3) {
+      void addNotification('external_error', 'critical', `BotCake API Unreachable`, `Endpoint ${epId}: ${h.consecutiveFailures} consecutive failures, last error: ${h.lastError ?? 'unknown'}, last checked: ${h.lastCheckedAt}`);
     }
   }
 }

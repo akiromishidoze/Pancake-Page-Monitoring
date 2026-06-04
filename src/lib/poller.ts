@@ -1,4 +1,4 @@
-import { fetchBotCakePages, checkBotCakeConversations, checkBotCakeToolsFlows } from './botcake';
+import { fetchBotCakePages, checkBotCakeConversations, checkBotCakeToolsFlows, probeBotCakeApiHealth } from './botcake';
 import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, fetchPancakeActivePageIdsFromCustomers, fetchCachedPancakeShops, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop, type PancakePage } from './pancake';
 import { insertSnapshot, setSetting, listEndpoints, getPancakeActivePageIds, getPreviousRunActiveCount, pool, getBotCakeOverrides, isBotCakeEndpoint, type SlimPage, type EndpointRow } from './db';
 import { broadcastSSE } from './sse';
@@ -60,6 +60,8 @@ export async function refreshBotCake() {
 async function refreshSingleBotCake(endpoint: EndpointRow) {
   const fbPageId = endpoint.fb_page_id!;
   if (!endpoint.access_token) return;
+
+  void probeBotCakeApiHealth(endpoint.id, endpoint.access_token, fbPageId);
 
   const pages = await fetchBotCakePages(endpoint.access_token, fbPageId);
   if (pages.length === 0) {
