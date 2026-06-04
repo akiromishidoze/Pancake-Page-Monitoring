@@ -105,14 +105,49 @@ export async function requireApiAuth(): Promise<NextResponse | null> {
 
 type RouteHandler = (...args: any[]) => Promise<Response>;
 
+const handlerLog = createLogger('handler');
+
+function reqPath(req: unknown): { method: string; path: string } {
+  if (req instanceof Request) {
+    try { return { method: req.method, path: new URL(req.url).pathname }; } catch { /* fall through */ }
+  }
+  return { method: '?', path: '?' };
+}
+
+export function withTiming<T extends RouteHandler>(handler: T): T {
+  return (async (...args: Parameters<T>) => {
+    const { method, path } = reqPath(args[0]);
+    const start = Date.now();
+    try {
+      const res = await handler(...args);
+      handlerLog.info({ method, path, status: res.status, durationMs: Date.now() - start }, 'handler');
+      return res;
+    } catch (e) {
+      const errRes = apiCatch(e);
+      handlerLog.info({ method, path, status: errRes.status, durationMs: Date.now() - start }, 'handler');
+      return errRes;
+    }
+  }) as T;
+}
+
 export function withAuth<T extends RouteHandler>(handler: T): T {
   return (async (...args: Parameters<T>) => {
+    const { method, path } = reqPath(args[0]);
+    const start = Date.now();
+
     try {
       const auth = await requireApiAuth();
-      if (auth) return auth;
-      return await handler(...args);
+      if (auth) {
+        handlerLog.info({ method, path, status: auth.status, durationMs: Date.now() - start }, 'handler');
+        return auth;
+      }
+      const res = await handler(...args);
+      handlerLog.info({ method, path, status: res.status, durationMs: Date.now() - start }, 'handler');
+      return res;
     } catch (e) {
-      return apiCatch(e);
+      const errRes = apiCatch(e);
+      handlerLog.info({ method, path, status: errRes.status, durationMs: Date.now() - start }, 'handler');
+      return errRes;
     }
   }) as T;
 }
