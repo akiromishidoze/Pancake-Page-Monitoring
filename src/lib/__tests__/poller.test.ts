@@ -126,27 +126,26 @@ vi.mock('@/lib/pancake', () => ({
 describe('startPoller / stopPoller', () => {
   beforeEach(() => { mocks.resetAll(); vi.clearAllMocks(); });
 
-  it('sets up interval and setTimeout on start, clears on stop', async () => {
+  it('sets up initial setTimeout on start, clears on stop', async () => {
     const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
-    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
-    const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval');
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
 
     const mod = await import('@/lib/poller');
     mod.startPoller();
     expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 30_000);
-    expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 60_000);
 
     mod.stopPoller();
-    expect(clearIntervalSpy).toHaveBeenCalled();
+    expect(clearTimeoutSpy).toHaveBeenCalled();
   });
 
   it('is idempotent — second start does nothing', async () => {
-    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
 
     const mod = await import('@/lib/poller');
     mod.startPoller();
     mod.startPoller();
-    expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+    // Only called once (30_000ms initial delay), second start is no-op
+    expect(setTimeoutSpy).toHaveBeenCalledTimes(1);
   });
 });
 

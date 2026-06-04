@@ -9,25 +9,39 @@ const log = createLogger('poller');
 
 const POLL_INTERVAL_MS = 60_000;
 
-let _pollerInterval: ReturnType<typeof setInterval> | null = null;
+let _pollerTimer: ReturnType<typeof setTimeout> | null = null;
 let _lastPolledAt: string | null = null;
+let _pollerStopped = false;
 
 let _refreshingBotCake = false;
 let _refreshingPancake = false;
 
 export function startPoller() {
-  if (_pollerInterval) return;
+  if (_pollerTimer) return;
+  _pollerStopped = false;
   log.info('starting; interval = %d ms', POLL_INTERVAL_MS);
 
-  const doRefresh = () => void refreshAll();
-  setTimeout(doRefresh, 30_000);
-  _pollerInterval = setInterval(doRefresh, POLL_INTERVAL_MS);
+  // Initial delay then recursive setTimeout (prevents pileups)
+  _pollerTimer = setTimeout(() => scheduleNextRefresh(true), 30_000);
+}
+
+async function scheduleNextRefresh(isFirst: boolean) {
+  if (_pollerStopped) return;
+  if (isFirst) log.info('poller: first refresh');
+  try {
+    await refreshAll();
+  } catch (err) {
+    log.error({ err }, 'poller: refreshAll failed');
+  }
+  if (_pollerStopped) return;
+  _pollerTimer = setTimeout(() => scheduleNextRefresh(false), POLL_INTERVAL_MS);
 }
 
 export function stopPoller() {
-  if (_pollerInterval) {
-    clearInterval(_pollerInterval);
-    _pollerInterval = null;
+  if (_pollerTimer) {
+    clearTimeout(_pollerTimer);
+    _pollerTimer = null;
+    _pollerStopped = true;
     log.info('stopped');
   }
 }

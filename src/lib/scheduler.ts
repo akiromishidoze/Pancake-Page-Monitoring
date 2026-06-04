@@ -18,6 +18,7 @@ const POLLER_STALE_THRESHOLD_MS = 3 * 60_000;
 let _started = false;
 let _serverStartTime = Date.now();
 const _intervals: NodeJS.Timeout[] = [];
+const _timers: ReturnType<typeof setTimeout>[] = [];
 
 // In-memory cache for schedule settings to avoid 17k DB reads/day
 let _cachedInterval: number | null = null;
@@ -57,9 +58,18 @@ export async function startScheduler() {
     log.info('default retention_days set to 90');
   }
 
-  _intervals.push(setInterval(() => {
-    checkAndRun().catch(err => log.error({ err }, 'Error in checkAndRun'));
-  }, SCHEDULER_POLL_MS));
+  // Recursive setTimeout (not setInterval) — never piles up if a cycle hangs
+  async function runCheckLoop() {
+    try {
+      await checkAndRun();
+    } catch (err) {
+      log.error({ err }, 'Error in checkAndRun');
+    }
+    const t = setTimeout(runCheckLoop, SCHEDULER_POLL_MS);
+    _timers.push(t);
+  }
+  const initTimer = setTimeout(runCheckLoop, SCHEDULER_POLL_MS);
+  _timers.push(initTimer);
 
   _intervals.push(setInterval(() => {
     checkBackup().catch(err => log.error({ err }, 'Backup error'));
@@ -88,9 +98,11 @@ export async function startScheduler() {
 }
 
 export function stopScheduler() {
-  if (_intervals.length > 0) {
+  if (_intervals.length > 0 || _timers.length > 0) {
     for (const id of _intervals) clearInterval(id);
+    for (const t of _timers) clearTimeout(t);
     _intervals.length = 0;
+    _timers.length = 0;
     _started = false;
     log.info('stopped');
   }

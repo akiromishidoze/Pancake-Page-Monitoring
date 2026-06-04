@@ -54,6 +54,11 @@ export async function register() {
   const { initHttpAgent } = await import('./lib/http');
   initHttpAgent();
 
+  // Catch unhandled rejections from poller/scheduler to prevent process crashes
+  process.on('unhandledRejection', (reason) => {
+    log.error({ err: reason instanceof Error ? reason : String(reason) }, 'unhandledRejection');
+  });
+
   setTimeout(async () => {
     try {
       const [{ ensureCredentials }, { startScheduler }] = await Promise.all([
