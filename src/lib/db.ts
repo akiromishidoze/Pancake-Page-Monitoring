@@ -57,207 +57,267 @@ function q(sql: string, params?: Record<string, unknown>): { text: string; value
 
 // ──── Schema ──────────────────────────────────────────────────────────
 
-async function migrate() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS endpoints (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      url TEXT,
-      api_key TEXT NOT NULL,
-      access_token TEXT,
-      shop_label TEXT,
-      token_expires_at TIMESTAMPTZ,
-      is_active BOOLEAN NOT NULL DEFAULT TRUE,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      last_used_at TIMESTAMPTZ
-    );
-    CREATE TABLE IF NOT EXISTS runs (
-      run_id TEXT PRIMARY KEY,
-      endpoint_id TEXT REFERENCES endpoints(id) ON DELETE SET NULL,
-      generated_at TIMESTAMPTZ NOT NULL,
-      received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      heartbeat_ok BOOLEAN,
-      run_quality TEXT,
-      severity TEXT,
-      canary_status TEXT,
-      canary_alert BOOLEAN,
-      outage_suspected BOOLEAN,
-      alert_count INTEGER,
-      rule_version INTEGER,
-      in_maintenance_window BOOLEAN,
-      total_pages INTEGER,
-      active_pages INTEGER,
-      inactive_pages INTEGER,
-      receiver_sd_size_bytes INTEGER,
-      raw_summary TEXT
-    );
-    CREATE INDEX IF NOT EXISTS runs_endpoint_id_idx ON runs(endpoint_id);
-    CREATE INDEX IF NOT EXISTS runs_generated_at_idx ON runs(generated_at DESC);
-    CREATE TABLE IF NOT EXISTS page_states (
-      id SERIAL PRIMARY KEY,
-      run_id TEXT NOT NULL REFERENCES runs(run_id) ON DELETE CASCADE,
-      page_id TEXT NOT NULL,
-      shop_label TEXT,
-      page_name TEXT,
-      activity_kind TEXT,
-      is_activated BOOLEAN,
-      is_canary BOOLEAN,
-      activation_reason TEXT,
-      state_change TEXT,
-      activity_kind_change TEXT,
-      hours_since_last_order REAL,
-      hours_since_last_customer_activity REAL,
-      response_ms REAL,
-      fetch_errors INTEGER,
-      customer_count INTEGER,
-      generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS page_states_page_id_time ON page_states(page_id, generated_at DESC);
-    CREATE INDEX IF NOT EXISTS page_states_run_id ON page_states(run_id);
-    CREATE INDEX IF NOT EXISTS page_states_kind_time ON page_states(activity_kind, generated_at DESC);
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS platform_pages (
-      id TEXT PRIMARY KEY,
-      endpoint_id TEXT NOT NULL REFERENCES endpoints(id) ON DELETE CASCADE,
-      page_name TEXT NOT NULL,
-      page_url TEXT,
-      is_active BOOLEAN NOT NULL DEFAULT TRUE,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS platform_pages_endpoint_idx ON platform_pages(endpoint_id);
-    CREATE TABLE IF NOT EXISTS platform_connectors (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      platform_type TEXT NOT NULL,
-      api_url TEXT NOT NULL,
-      auth_header TEXT,
-      auth_token TEXT,
-      json_path TEXT,
-      interval_ms INTEGER NOT NULL DEFAULT 60000,
-      is_active BOOLEAN NOT NULL DEFAULT TRUE,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS platform_connectors_active ON platform_connectors(is_active);
-    CREATE TABLE IF NOT EXISTS sessions (
-      token TEXT PRIMARY KEY,
-      role TEXT NOT NULL DEFAULT 'admin',
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      expires_at TIMESTAMPTZ NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS sessions_expires_at ON sessions(expires_at);
-    CREATE TABLE IF NOT EXISTS botcake_overrides (
-      page_id TEXT PRIMARY KEY,
-      is_active BOOLEAN NOT NULL DEFAULT TRUE,
-      reason TEXT NOT NULL DEFAULT '',
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE TABLE IF NOT EXISTS audit_log (
-      id SERIAL PRIMARY KEY,
-      action TEXT NOT NULL,
-      entity_type TEXT,
-      entity_id TEXT,
-      detail TEXT,
-      ip_address TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS audit_log_created_at ON audit_log(created_at DESC);
-    CREATE TABLE IF NOT EXISTS notifications (
-      id SERIAL PRIMARY KEY,
-      type TEXT NOT NULL,
-      severity TEXT NOT NULL DEFAULT 'info',
-      title TEXT NOT NULL,
-      message TEXT,
-      metadata JSONB DEFAULT '{}',
-      is_read BOOLEAN NOT NULL DEFAULT false,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS notifications_created_at ON notifications(created_at DESC);
-    CREATE INDEX IF NOT EXISTS notifications_is_read ON notifications(is_read);
-    `);
-  try { await pool.query(`ALTER TABLE page_states ADD COLUMN IF NOT EXISTS customer_count INTEGER`); } catch {
-    // Column may already exist, safe to ignore
-  }
-  try { await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'admin'`); } catch {
-    // Column may already exist, safe to ignore
-  }
-  try { await pool.query(`ALTER TABLE endpoints ADD COLUMN IF NOT EXISTS fb_page_id TEXT`); } catch {
-    // Column may already exist, safe to ignore
-  }
-  try { await pool.query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'`); } catch {
-    // Column may already exist, safe to ignore
-  }
-  try { await pool.query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS severity TEXT NOT NULL DEFAULT 'info'`); } catch {
-    // Column may already exist, safe to ignore
-  }
-  try { await pool.query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS is_read BOOLEAN NOT NULL DEFAULT false`); } catch {
-    // Column may already exist, safe to ignore
-  }
-  await migrateTimestampTypes();
-  await migrateBooleanTypes();
-  await migrateBotCakeOverrides();
-}
-
-async function migrateTimestampTypes() {
-  const conversions: { table: string; column: string }[] = [
-    { table: 'endpoints', column: 'token_expires_at' },
-    { table: 'endpoints', column: 'created_at' },
-    { table: 'endpoints', column: 'last_used_at' },
-    { table: 'runs', column: 'generated_at' },
-    { table: 'runs', column: 'received_at' },
-    { table: 'platform_pages', column: 'created_at' },
-    { table: 'platform_pages', column: 'updated_at' },
-    { table: 'platform_connectors', column: 'created_at' },
-    { table: 'platform_connectors', column: 'updated_at' },
-    { table: 'sessions', column: 'created_at' },
-    { table: 'sessions', column: 'expires_at' },
-  ];
-  for (const { table, column } of conversions) {
-    try {
-      await pool.query(
-        `ALTER TABLE ${table} ALTER COLUMN ${column} TYPE TIMESTAMPTZ USING ${column}::timestamptz`,
-      );
-    } catch {
-      // Column may already be TIMESTAMPTZ or not exist — skip
-    }
-  }
-}
-
-async function migrateBooleanTypes() {
-  const conversions: { table: string; column: string }[] = [
-    { table: 'endpoints', column: 'is_active' },
-    { table: 'runs', column: 'heartbeat_ok' },
-    { table: 'runs', column: 'canary_alert' },
-    { table: 'runs', column: 'outage_suspected' },
-    { table: 'runs', column: 'in_maintenance_window' },
-    { table: 'page_states', column: 'is_activated' },
-    { table: 'page_states', column: 'is_canary' },
-    { table: 'platform_pages', column: 'is_active' },
-    { table: 'platform_connectors', column: 'is_active' },
-  ];
-  for (const { table, column } of conversions) {
-    try {
-      await pool.query(
-        `ALTER TABLE ${table} ALTER COLUMN ${column} TYPE BOOLEAN USING ${column}::boolean`,
-      );
-    } catch {
-      // Column may already be BOOLEAN or not exist — skip
-    }
-  }
-}
+// Versioned migration runner — tracks applied versions in _migrations table.
+// If a deployment adds a new migration, only that step runs.
+// If it fails, the error surfaces immediately and the version is NOT recorded,
+// so the old deployment can still start without issue.
 
 let _migrated = false;
+
 async function ensureMigrated() {
   if (_migrated) return;
   _migrated = true;
-  await migrate();
+  await runPendingMigrations();
   await migratePageStatesPartitioning();
   await migratePartitionColumnTypes();
 }
+
+async function runPendingMigrations() {
+  // Bootstrap the tracking table (must be first, before any version check)
+  await pool.query(`CREATE TABLE IF NOT EXISTS _migrations (version TEXT PRIMARY KEY, name TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+
+  const applied = new Set(
+    (await queryRows<{ version: string }>('SELECT version FROM _migrations ORDER BY version')).map(r => r.version),
+  );
+
+  for (const m of MIGRATIONS) {
+    if (applied.has(m.version)) continue;
+    log.info('running migration %s: %s', m.version, m.name);
+    try {
+      await m.up();
+      await pool.query('INSERT INTO _migrations (version, name) VALUES ($1, $2)', [m.version, m.name]);
+      log.info('migration %s applied', m.version);
+    } catch (err) {
+      log.error({ err }, 'migration %s (%s) FAILED', m.version, m.name);
+      throw err;
+    }
+  }
+}
+
+interface Migration {
+  version: string;
+  name: string;
+  up: () => Promise<void>;
+}
+
+const MIGRATIONS: Migration[] = [
+  {
+    version: 'v1', name: 'core tables',
+    up: async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS endpoints (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          url TEXT,
+          api_key TEXT NOT NULL,
+          access_token TEXT,
+          shop_label TEXT,
+          token_expires_at TIMESTAMPTZ,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          last_used_at TIMESTAMPTZ
+        );
+        CREATE TABLE IF NOT EXISTS runs (
+          run_id TEXT PRIMARY KEY,
+          endpoint_id TEXT REFERENCES endpoints(id) ON DELETE SET NULL,
+          generated_at TIMESTAMPTZ NOT NULL,
+          received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          heartbeat_ok BOOLEAN,
+          run_quality TEXT,
+          severity TEXT,
+          canary_status TEXT,
+          canary_alert BOOLEAN,
+          outage_suspected BOOLEAN,
+          alert_count INTEGER,
+          rule_version INTEGER,
+          in_maintenance_window BOOLEAN,
+          total_pages INTEGER,
+          active_pages INTEGER,
+          inactive_pages INTEGER,
+          receiver_sd_size_bytes INTEGER,
+          raw_summary TEXT
+        );
+        CREATE INDEX IF NOT EXISTS runs_endpoint_id_idx ON runs(endpoint_id);
+        CREATE INDEX IF NOT EXISTS runs_generated_at_idx ON runs(generated_at DESC);
+        CREATE TABLE IF NOT EXISTS page_states (
+          id SERIAL PRIMARY KEY,
+          run_id TEXT NOT NULL REFERENCES runs(run_id) ON DELETE CASCADE,
+          page_id TEXT NOT NULL,
+          shop_label TEXT,
+          page_name TEXT,
+          activity_kind TEXT,
+          is_activated BOOLEAN,
+          is_canary BOOLEAN,
+          activation_reason TEXT,
+          state_change TEXT,
+          activity_kind_change TEXT,
+          hours_since_last_order REAL,
+          hours_since_last_customer_activity REAL,
+          response_ms REAL,
+          fetch_errors INTEGER,
+          customer_count INTEGER,
+          generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS page_states_page_id_time ON page_states(page_id, generated_at DESC);
+        CREATE INDEX IF NOT EXISTS page_states_run_id ON page_states(run_id);
+        CREATE INDEX IF NOT EXISTS page_states_kind_time ON page_states(activity_kind, generated_at DESC);
+        CREATE TABLE IF NOT EXISTS settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS platform_pages (
+          id TEXT PRIMARY KEY,
+          endpoint_id TEXT NOT NULL REFERENCES endpoints(id) ON DELETE CASCADE,
+          page_name TEXT NOT NULL,
+          page_url TEXT,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS platform_pages_endpoint_idx ON platform_pages(endpoint_id);
+        CREATE TABLE IF NOT EXISTS platform_connectors (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          platform_type TEXT NOT NULL,
+          api_url TEXT NOT NULL,
+          auth_header TEXT,
+          auth_token TEXT,
+          json_path TEXT,
+          interval_ms INTEGER NOT NULL DEFAULT 60000,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS platform_connectors_active ON platform_connectors(is_active);
+        CREATE TABLE IF NOT EXISTS sessions (
+          token TEXT PRIMARY KEY,
+          role TEXT NOT NULL DEFAULT 'admin',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          expires_at TIMESTAMPTZ NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS sessions_expires_at ON sessions(expires_at);
+        CREATE TABLE IF NOT EXISTS botcake_overrides (
+          page_id TEXT PRIMARY KEY,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          reason TEXT NOT NULL DEFAULT '',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS audit_log (
+          id SERIAL PRIMARY KEY,
+          action TEXT NOT NULL,
+          entity_type TEXT,
+          entity_id TEXT,
+          detail TEXT,
+          ip_address TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS audit_log_created_at ON audit_log(created_at DESC);
+        CREATE TABLE IF NOT EXISTS notifications (
+          id SERIAL PRIMARY KEY,
+          type TEXT NOT NULL,
+          severity TEXT NOT NULL DEFAULT 'info',
+          title TEXT NOT NULL,
+          message TEXT,
+          metadata JSONB DEFAULT '{}',
+          is_read BOOLEAN NOT NULL DEFAULT false,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS notifications_created_at ON notifications(created_at DESC);
+        CREATE INDEX IF NOT EXISTS notifications_is_read ON notifications(is_read);
+      `);
+    },
+  },
+  {
+    version: 'v2', name: 'column extensions',
+    up: async () => {
+      await pool.query(`ALTER TABLE page_states ADD COLUMN IF NOT EXISTS customer_count INTEGER`);
+      await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'admin'`);
+      await pool.query(`ALTER TABLE endpoints ADD COLUMN IF NOT EXISTS fb_page_id TEXT`);
+      await pool.query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'`);
+      await pool.query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS severity TEXT NOT NULL DEFAULT 'info'`);
+      await pool.query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS is_read BOOLEAN NOT NULL DEFAULT false`);
+    },
+  },
+  {
+    version: 'v3', name: 'sessions password_version column',
+    up: async () => {
+      await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS password_version INTEGER NOT NULL DEFAULT 1`);
+    },
+  },
+  {
+    version: 'v4', name: 'timestamp type conversions',
+    up: async () => {
+      const conversions: { table: string; column: string }[] = [
+        { table: 'endpoints', column: 'token_expires_at' },
+        { table: 'endpoints', column: 'created_at' },
+        { table: 'endpoints', column: 'last_used_at' },
+        { table: 'runs', column: 'generated_at' },
+        { table: 'runs', column: 'received_at' },
+        { table: 'platform_pages', column: 'created_at' },
+        { table: 'platform_pages', column: 'updated_at' },
+        { table: 'platform_connectors', column: 'created_at' },
+        { table: 'platform_connectors', column: 'updated_at' },
+        { table: 'sessions', column: 'created_at' },
+        { table: 'sessions', column: 'expires_at' },
+      ];
+      for (const { table, column } of conversions) {
+        try {
+          await pool.query(`ALTER TABLE ${table} ALTER COLUMN ${column} TYPE TIMESTAMPTZ USING ${column}::timestamptz`);
+        } catch {
+          // Column may already be TIMESTAMPTZ or not exist — skip
+        }
+      }
+    },
+  },
+  {
+    version: 'v5', name: 'boolean type conversions',
+    up: async () => {
+      const conversions: { table: string; column: string }[] = [
+        { table: 'endpoints', column: 'is_active' },
+        { table: 'runs', column: 'heartbeat_ok' },
+        { table: 'runs', column: 'canary_alert' },
+        { table: 'runs', column: 'outage_suspected' },
+        { table: 'runs', column: 'in_maintenance_window' },
+        { table: 'page_states', column: 'is_activated' },
+        { table: 'page_states', column: 'is_canary' },
+        { table: 'platform_pages', column: 'is_active' },
+        { table: 'platform_connectors', column: 'is_active' },
+      ];
+      for (const { table, column } of conversions) {
+        try {
+          await pool.query(`ALTER TABLE ${table} ALTER COLUMN ${column} TYPE BOOLEAN USING ${column}::boolean`);
+        } catch {
+          // Column may already be BOOLEAN or not exist — skip
+        }
+      }
+    },
+  },
+  {
+    version: 'v6', name: 'botcake_overrides data migration',
+    up: async () => {
+      const raw = await getSetting('botcake_overrides');
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return;
+        const arr = parsed as { page_id: string; is_active: boolean; reason: string; created_at: string }[];
+        if (arr.length === 0) return;
+        for (const o of arr) {
+          await pool.query(
+            `INSERT INTO botcake_overrides (page_id, is_active, reason, created_at)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (page_id) DO NOTHING`,
+            [o.page_id, o.is_active, o.reason, o.created_at],
+          );
+        }
+        await setSetting('botcake_overrides', '');
+        log.info(`migrated ${arr.length} botcake overrides from settings to botcake_overrides table`);
+      } catch {
+        // If migration fails, leave old data in settings for manual recovery
+      }
+    },
+  },
+];
 
 // ──── Partitioning ──────────────────────────────────────────────────────
 
@@ -1060,30 +1120,6 @@ export type BotCakeOverride = {
   reason: string;
   created_at: string;
 };
-
-async function migrateBotCakeOverrides() {
-  const raw = await getSetting('botcake_overrides');
-  if (!raw) return;
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return;
-    const arr = parsed as BotCakeOverride[];
-    if (arr.length === 0) return;
-    for (const o of arr) {
-      await pool.query(
-        `INSERT INTO botcake_overrides (page_id, is_active, reason, created_at)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (page_id) DO NOTHING`,
-        [o.page_id, o.is_active, o.reason, o.created_at],
-      );
-    }
-    // Clear the old JSON blob from settings
-    await setSetting('botcake_overrides', '');
-    log.info(`migrated ${arr.length} botcake overrides from settings to botcake_overrides table`);
-  } catch {
-    // If migration fails, leave old data in settings for manual recovery
-  }
-}
 
 export async function getBotCakeOverrides(): Promise<Map<string, BotCakeOverride>> {
   await ensureMigrated();
