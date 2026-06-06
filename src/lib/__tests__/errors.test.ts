@@ -179,4 +179,5 @@ describe('errors module', () => {
       expect(body.error).toBe('undefined');
     });
   });
+
 });

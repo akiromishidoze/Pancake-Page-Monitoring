@@ -43,7 +43,7 @@ export function requireJson(req: Request): NextResponse | null {
   return null;
 }
 
-export function apiCatch(e: unknown, status: number = 500): NextResponse {
+export function apiCatch(e: unknown, status: number = 500, _request?: Request): NextResponse {
   const message = e instanceof Error ? e.message : String(e);
   const errInfo = e instanceof Error ? { err: e, stack: e.stack } : { err: String(e) };
   if (status >= 500) {
