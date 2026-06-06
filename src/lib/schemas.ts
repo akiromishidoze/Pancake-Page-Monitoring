@@ -175,6 +175,19 @@ export const IngestSummarySchema = z.object({
   in_maintenance_window: z.boolean().optional(),
 });
 
+export const TotpSetupSchema = z.object({
+  code: z.string().regex(/^\d{6}$/, 'Code must be 6 digits'),
+});
+
+export const TotpDisableSchema = z.object({
+  password: z.string().min(1, 'password is required'),
+});
+
+export const TotpLoginSchema = z.object({
+  totp_token: z.string().min(1, 'totp_token is required'),
+  code: z.string().regex(/^\d{6}$/, 'Code must be 6 digits'),
+});
+
 export const IngestBodySchema = z.object({
   run_id: z.string().optional(),
   generated_at: z.string().optional(),

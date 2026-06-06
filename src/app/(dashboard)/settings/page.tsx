@@ -6,6 +6,7 @@ import { ChangeCredentials } from '@/components/ChangeCredentials';
 import { NotificationSettings } from '@/components/NotificationSettings';
 import { ConnectorsSettings } from '@/components/ConnectorsSettings';
 import { DataRetentionSettings } from '@/components/DataRetentionSettings';
+import { TwoFactorSetup } from '@/components/TwoFactorSetup';
 
 export default async function SettingsPage({
   searchParams,
@@ -43,6 +44,8 @@ export default async function SettingsPage({
       <NotificationSettings />
 
       <DataRetentionSettings />
+
+      <TwoFactorSetup />
 
       <ChangeCredentials force={resolvedSearch?.change_password === '1'} />
     </div>

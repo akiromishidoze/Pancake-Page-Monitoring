@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch, requireJson } from '@/lib/errors';
 import { cookies } from 'next/headers';
 import { validateCredentials, createSession, isDefaultPassword } from '@/lib/auth';
+import { getSetting } from '@/lib/db';
+import { createTotpTempToken } from '@/lib/totp';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { LoginSchema } from '@/lib/schemas';
 import { recordFailedAttempt, resetAttempts, getLockoutStatus, MAX_ATTEMPTS } from '@/lib/lockout';
@@ -48,6 +50,12 @@ export async function POST(req: Request) {
 
     resetAttempts(identifier);
     void logAuditEntry('login', 'auth', identifier, `Successful login from ${ip}`, ip);
+
+    const totpEnabled = await getSetting('totp_enabled');
+    if (totpEnabled === 'true') {
+      const totpToken = createTotpTempToken(identifier);
+      return NextResponse.json({ requires_2fa: true, totp_token: totpToken });
+    }
 
     const token = await createSession();
     const cookieStore = await cookies();

@@ -138,6 +138,22 @@ vi.mock('@/lib/auth', () => ({
   withAuth: vi.fn(<T extends (...args: any[]) => any>(handler: T) => handler),
 }));
 
+vi.mock('@/lib/totp', () => ({
+  generateSecret: vi.fn(() => 'JBSWY3DPEHPK3PXP'),
+  generateTOTPUri: vi.fn((secret: string, account: string, issuer?: string) =>
+    `otpauth://totp/${encodeURIComponent(issuer || 'App')}:${encodeURIComponent(account)}?secret=${secret}&algorithm=SHA1&digits=6&period=30`
+  ),
+  verifyTOTP: vi.fn((code: string, _secret: string) => code === '123456'),
+  createTotpTempToken: vi.fn((_id: string) => 'test-totp-token'),
+  consumeTotpTempToken: vi.fn((token: string) => token === 'test-totp-token' ? 'admin' : null),
+  generateToken: vi.fn(() => 123456),
+}));
+
+vi.mock('qrcode', () => ({
+  default: { toDataURL: vi.fn(async () => 'data:image/png;base64,test') },
+  toDataURL: vi.fn(async () => 'data:image/png;base64,test'),
+}));
+
 describe('GET /api/audit-log', () => {
   beforeEach(() => { mocks.resetAll(); vi.clearAllMocks(); });
 
@@ -475,5 +491,94 @@ describe('POST /api/ingest', () => {
     const { status, body } = await jsonResponse(res);
     expect(status).toBe(400);
     expect(body).toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+});
+
+describe('TOTP login flow', () => {
+  beforeEach(() => {
+    mocks.resetAll();
+    vi.clearAllMocks();
+    mocks.dbSettings.set('totp_secret', 'JBSWY3DPEHPK3PXP');
+  });
+
+  it('returns totp_required when totp_enabled is true', async () => {
+    mocks.dbSettings.set('totp_enabled', 'true');
+    const mod = await import('@/app/api/login/route');
+    const req = mockRequest('POST', 'http://localhost/api/login', { body: { email: 'admin', password: 'admin' } });
+    const { body } = await jsonResponse(await mod.POST(req));
+    expect(body).toMatchObject({ requires_2fa: true, totp_token: 'test-totp-token' });
+  });
+
+  it('creates session cookie after TOTP verification', async () => {
+    const mod = await import('@/app/api/login/totp/route');
+    const req = mockRequest('POST', 'http://localhost/api/login/totp', { body: { totp_token: 'test-totp-token', code: '123456' } });
+    const { status, body } = await jsonResponse(await mod.POST(req));
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ ok: true });
+    expect(mocks.cookieStore.has('session')).toBe(true);
+  });
+
+  it('rejects invalid TOTP code', async () => {
+    const mod = await import('@/app/api/login/totp/route');
+    const req = mockRequest('POST', 'http://localhost/api/login/totp', { body: { totp_token: 'test-totp-token', code: '000000' } });
+    const { status, body } = await jsonResponse(await mod.POST(req));
+    expect(status).toBe(401);
+    expect(body).toMatchObject({ code: 'AUTH_TOTP_INVALID' });
+  });
+
+  it('rejects expired or invalid totp_token', async () => {
+    const { consumeTotpTempToken } = await import('@/lib/totp');
+    vi.mocked(consumeTotpTempToken).mockReturnValue(null);
+    const mod = await import('@/app/api/login/totp/route');
+    const req = mockRequest('POST', 'http://localhost/api/login/totp', { body: { totp_token: 'bad-token', code: '123456' } });
+    const { status, body } = await jsonResponse(await mod.POST(req));
+    expect(status).toBe(401);
+    expect(body).toMatchObject({ code: 'AUTH_TOTP_INVALID' });
+  });
+});
+
+describe('GET /api/totp/setup', () => {
+  beforeEach(() => { mocks.resetAll(); vi.clearAllMocks(); });
+
+  it('returns secret, URI and QR code', async () => {
+    const mod = await import('@/app/api/totp/setup/route');
+    const req = mockRequest('GET', 'http://localhost/api/totp/setup');
+    const { status, body } = await jsonResponse(await mod.GET());
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ ok: true, secret: 'JBSWY3DPEHPK3PXP' });
+    expect(body.uri).toContain('otpauth://totp/');
+    expect(body.qr).toContain('data:image');
+  });
+
+  it('requires authentication', async () => {
+    const { requireApiAuth } = await import('@/lib/auth');
+    vi.mocked(requireApiAuth).mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: false, error: 'Unauthorized' }), { status: 401, headers: { 'content-type': 'application/json' } }) as any,
+    );
+    const mod = await import('@/app/api/totp/setup/route');
+    const res = await mod.GET();
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('POST /api/totp/setup', () => {
+  beforeEach(() => { mocks.resetAll(); vi.clearAllMocks(); });
+
+  it('enables TOTP with valid code', async () => {
+    mocks.dbSettings.set('totp_secret', 'JBSWY3DPEHPK3PXP');
+    const mod = await import('@/app/api/totp/setup/route');
+    const req = mockRequest('POST', 'http://localhost/api/totp/setup', { body: { code: '123456' } });
+    const { status, body } = await jsonResponse(await mod.POST(req));
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ ok: true });
+    expect(mocks.dbSettings.get('totp_enabled')).toBe('true');
+  });
+
+  it('rejects invalid code', async () => {
+    mocks.dbSettings.set('totp_secret', 'JBSWY3DPEHPK3PXP');
+    const mod = await import('@/app/api/totp/setup/route');
+    const req = mockRequest('POST', 'http://localhost/api/totp/setup', { body: { code: '000000' } });
+    const { status } = await jsonResponse(await mod.POST(req));
+    expect(status).toBe(400);
   });
 });
