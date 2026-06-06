@@ -54,4 +54,5 @@ ROADMAP.md
 /backups
 *.sql
 
-
+# generated documentation
+/docs
