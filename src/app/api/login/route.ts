@@ -4,6 +4,8 @@ import { cookies } from 'next/headers';
 import { validateCredentials, createSession, isDefaultPassword } from '@/lib/auth';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { LoginSchema } from '@/lib/schemas';
+import { recordFailedAttempt, resetAttempts, getLockoutStatus, MAX_ATTEMPTS } from '@/lib/lockout';
+import { addNotification } from '@/lib/notifications';
 
 export async function POST(req: Request) {
   try {
@@ -29,9 +31,20 @@ export async function POST(req: Request) {
     const { email, username, password } = parsed.data;
     const identifier = email || username || 'admin';
 
+    const lockout = getLockoutStatus(identifier);
+    if (lockout.locked) {
+      return apiError(ErrorCodes.AUTH_ACCOUNT_LOCKED, `Account locked. Try again in ${Math.ceil(lockout.remainingMs / 60000)} minutes.`, 429);
+    }
+
     if (!(await validateCredentials(identifier, password))) {
+      const result = recordFailedAttempt(identifier, ip);
+      if (result.locked) {
+        void addNotification('external_error', 'critical', 'Account Locked', `Account "${identifier}" locked due to ${MAX_ATTEMPTS} failed login attempts from ${ip}. Unlocks in ${Math.ceil(result.remainingMs / 60000)} minutes.`);
+      }
       return apiError(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'Invalid credentials', 401);
     }
+
+    resetAttempts(identifier);
 
     const token = await createSession();
     const cookieStore = await cookies();
