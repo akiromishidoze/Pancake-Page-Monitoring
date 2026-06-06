@@ -33,6 +33,7 @@ export function BotCakePageList({ pages, overrides = new Map() }: { pages: BotCa
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
   const [overriding, setOverriding] = useState<string | null>(null);
   const [localOverrides, setLocalOverrides] = useState<Map<string, boolean>>(new Map(overrides));
+  const pendingRef = useRef(false);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -41,6 +42,13 @@ export function BotCakePageList({ pages, overrides = new Map() }: { pages: BotCa
     }, 200);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [rawQuery]);
+
+  // Sync local overrides from server-provided prop when no local operation is in-flight.
+  // This ensures cross-tab overrides appear immediately after SSE-triggered re-render.
+  useEffect(() => {
+    if (pendingRef.current) return;
+    setLocalOverrides(new Map(overrides));
+  }, [overrides]);
 
   function getEffectiveActive(p: BotCakePage): boolean {
     if (localOverrides.has(p.page_id)) return localOverrides.get(p.page_id)!;
@@ -51,6 +59,7 @@ export function BotCakePageList({ pages, overrides = new Map() }: { pages: BotCa
     setOverriding(pageId);
     const newActive = !isActive;
     setLocalOverrides(prev => new Map(prev).set(pageId, newActive));
+    pendingRef.current = true;
     try {
       const res = await fetch('/api/botcake-override', {
         method: 'POST',
@@ -61,6 +70,7 @@ export function BotCakePageList({ pages, overrides = new Map() }: { pages: BotCa
         setLocalOverrides(prev => { const next = new Map(prev); next.set(pageId, isActive); return next; });
       }
     } finally {
+      pendingRef.current = false;
       setOverriding(null);
     }
   }, []);
@@ -69,6 +79,7 @@ export function BotCakePageList({ pages, overrides = new Map() }: { pages: BotCa
     setOverriding(pageId);
     const prev = localOverrides.get(pageId);
     setLocalOverrides(prev => { const next = new Map(prev); next.delete(pageId); return next; });
+    pendingRef.current = true;
     try {
       const res = await fetch('/api/botcake-override', {
         method: 'POST',
@@ -79,6 +90,7 @@ export function BotCakePageList({ pages, overrides = new Map() }: { pages: BotCa
         setLocalOverrides(prevMap => new Map(prevMap).set(pageId, prev));
       }
     } finally {
+      pendingRef.current = false;
       setOverriding(null);
     }
   }, [localOverrides]);
