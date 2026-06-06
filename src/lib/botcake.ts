@@ -31,7 +31,7 @@ async function fetchWithRetry(url: string, token: string, retries = 2, method: '
     try {
       const res = await fetchWithTimeout(url, {
         method,
-        headers: { 'user-access-token': token },
+        headers: { Authorization: `Bearer ${token}`, 'user-access-token': token },
         timeout: 20_000,
       });
       if (res.ok) return res;
@@ -441,8 +441,18 @@ export async function fetchBotCakePageIds(token: string, fbPageId: string): Prom
   while (true) {
     const res = await fetchWithRetry(`${API_BASE}/integration_page/${fbPageId}/list_page_id?page=${page}`, token);
     if (!res) break;
-    const data: string[] = await res.json();
-    if (!Array.isArray(data) || data.length === 0) break;
+    const raw: unknown = await res.json();
+    let data: string[];
+    if (Array.isArray(raw)) {
+      data = raw;
+    } else if (raw && typeof raw === 'object') {
+      const obj = raw as Record<string, unknown>;
+      data = (obj.data ?? obj.page_ids ?? obj.pages ?? obj.results ?? []) as string[];
+      if (!Array.isArray(data)) break;
+    } else {
+      break;
+    }
+    if (data.length === 0) break;
     all.push(...data);
     if (data.length < 200) break;
     page++;
