@@ -4,6 +4,7 @@ import { insertSnapshot, setSetting, listEndpoints, getPancakeActivePageIds, get
 import { broadcastSSE } from './sse';
 import { createLogger } from './logger';
 import { addNotification } from './notifications';
+import { shouldAttempt, recordSuccess as cbRecordSuccess, recordFailure, getBreakerState } from './circuit-breaker';
 
 const log = createLogger('poller');
 
@@ -61,27 +62,56 @@ export async function refreshBotCake() {
   let botCakeEndpoints: EndpointRow[] = [];
   try {
     botCakeEndpoints = (await listEndpoints()).filter(isBotCakeEndpoint);
-    await Promise.all(botCakeEndpoints.map(ep => refreshSingleBotCake(ep)));
+
+    const active = botCakeEndpoints.filter(ep => shouldAttempt('botcake:' + ep.id));
+    for (const ep of botCakeEndpoints) {
+      if (getBreakerState('botcake:' + ep.id)?.state === 'OPEN') {
+        const st = getBreakerState('botcake:' + ep.id)!;
+        const remaining = Math.max(0, st.cooldownMs - (Date.now() - st.lastFailureTime));
+        log.warn('circuit open for botcake endpoint %s, skipping (retry in %dms)', ep.name, remaining);
+      }
+    }
+
+    await Promise.all(active.map(async (ep) => {
+      const key = 'botcake:' + ep.id;
+      try {
+        const ok = await refreshSingleBotCake(ep);
+        if (ok) {
+          cbRecordSuccess(key);
+        } else {
+          recordFailure(key);
+        }
+      } catch (err) {
+        recordFailure(key);
+        log.error({ err, ep: ep.name }, 'botcake: endpoint refresh failed');
+        void addNotification('external_error', 'warning', `BotCake Refresh Failed: ${ep.name}`, err instanceof Error ? err.message : String(err));
+      }
+    }));
   } catch (err) {
-    log.error({ err }, 'botcake: refresh failed');
-    const epNames = botCakeEndpoints.length > 0 ? botCakeEndpoints.map(e => e.name).join(', ') : 'unknown';
-    void addNotification('external_error', 'warning', 'BotCake Refresh Failed', `BotCake refresh error for [${epNames}]: ${err instanceof Error ? err.message : String(err)}`);
+    log.error({ err }, 'botcake: unexpected error in refreshBotCake');
   } finally {
     _refreshingBotCake = false;
   }
 }
 
-async function refreshSingleBotCake(endpoint: EndpointRow) {
+async function refreshSingleBotCake(endpoint: EndpointRow): Promise<boolean> {
   const fbPageId = endpoint.fb_page_id!;
-  if (!endpoint.access_token) return;
+  if (!endpoint.access_token) return true;
 
   void probeBotCakeApiHealth(endpoint.id, endpoint.access_token, fbPageId);
 
-  const pages = await fetchBotCakePages(endpoint.access_token, fbPageId);
+  let pages;
+  try {
+    pages = await fetchBotCakePages(endpoint.access_token, fbPageId);
+  } catch (err) {
+    log.error({ err, ep: endpoint.name }, 'botcake: fetchBotCakePages failed');
+    void addNotification('external_error', 'warning', `BotCake API Error: ${endpoint.name}`, err instanceof Error ? err.message : String(err));
+    return false;
+  }
   if (pages.length === 0) {
     log.warn({ ep: endpoint.name }, 'botcake: API returned 0 pages — skipping insert');
     void addNotification('external_error', 'warning', 'BotCake API Returned 0 Pages', `Endpoint "${endpoint.name}" returned 0 pages during refresh. Skipping insert.`);
-    return;
+    return false;
   }
   const runId = `botcake_refresh_${Date.now()}_${endpoint.id}`;
   const ts = new Date().toISOString();
@@ -237,16 +267,26 @@ async function refreshSingleBotCake(endpoint: EndpointRow) {
     const na = inactivePages.length;
     log.info('botcake %s: %dA (%dorders+%dconv+%dtools) / %dI — %d total, run %s', endpoint.name, activePages.length, pa, hc, ht, na, pages.length, runId);
   }
+  return true;
 }
 
 async function refreshPancake() {
   if (_refreshingPancake) return;
+
+  if (!shouldAttempt('pancake')) {
+    const st = getBreakerState('pancake');
+    const remaining = st ? Math.max(0, st.cooldownMs - (Date.now() - st.lastFailureTime)) : 0;
+    log.warn('circuit open for pancake, skipping (retry in %dms)', remaining);
+    return;
+  }
+
   _refreshingPancake = true;
   let endpoints: EndpointRow[] = [];
+  let overallSuccess = false;
   try {
   const allEndpoints = await listEndpoints();
   endpoints = allEndpoints.filter(ep => !isBotCakeEndpoint(ep) && ep.url && ep.access_token && ep.is_active);
-  if (endpoints.length === 0) return;
+  if (endpoints.length === 0) { overallSuccess = true; return; }
 
   const token = endpoints[0].access_token!;
   let shops: PancakeShop[];
@@ -261,6 +301,7 @@ async function refreshPancake() {
     shops = await fetchCachedPancakeShops();
     if (shops.length === 0) {
       log.error('pancake: no cached shops data available either, skipping');
+      overallSuccess = false;
       return;
     }
     log.info('pancake: using cached shops data (%d shops)', shops.length);
@@ -377,12 +418,18 @@ async function refreshPancake() {
       log.info('pancake %s: %d active / %d inactive (%d total), run %s', ep.name, activePages.length, inactivePages.length, shop.pages.length, runId);
     }
   }
+  overallSuccess = true;
   } catch (err) {
     log.error({ err }, 'pancake: refresh failed');
     const epNames = endpoints.length > 0 ? endpoints.map(e => e.name).join(', ') : 'unknown';
     void addNotification('external_error', 'warning', 'Pancake Refresh Failed', `Pancake refresh error for [${epNames}]: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
     _refreshingPancake = false;
+    if (overallSuccess) {
+      cbRecordSuccess('pancake');
+    } else {
+      recordFailure('pancake');
+    }
   }
 }
 

@@ -6,6 +6,7 @@ const log = createLogger('notifications');
 export type NotificationType =
   | 'internal_error'
   | 'external_error'
+  | 'info'
   | 'credential_change'
   | 'run_error'
   | 'down_page'
