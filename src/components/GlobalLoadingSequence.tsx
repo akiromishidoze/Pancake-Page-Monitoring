@@ -24,11 +24,13 @@ export function GlobalLoadingSequence() {
     }
 
     checkStatus();
-    window.addEventListener('run-started', () => document.body.classList.add('is-fetching-data'));
+    function onRunStarted() { document.body.classList.add('is-fetching-data'); }
+    window.addEventListener('run-started', onRunStarted);
 
     return () => {
       stopped = true;
       clearTimeout(timeoutId);
+      window.removeEventListener('run-started', onRunStarted);
       document.body.classList.remove('is-fetching-data');
     };
   }, []);

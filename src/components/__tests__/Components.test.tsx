@@ -8,6 +8,13 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+// ──── Helpers ──────────────────────────────────────────────────────────
+
+async function renderWithProvider(ui: React.ReactElement) {
+  const { ToastProvider } = await import('../Toast');
+  return render(<ToastProvider>{ui}</ToastProvider>);
+}
+
 // ──── Mocks ──────────────────────────────────────────────────────────
 
 const mockPush = vi.fn();
@@ -244,5 +251,389 @@ describe('EndpointFilter', () => {
     const select = screen.getByRole('combobox');
     fireEvent.change(select, { target: { value: '' } });
     expect(mockPush).toHaveBeenCalledWith('/');
+  });
+});
+
+// ──── PlatformFilter ──────────────────────────────────────────────────
+
+describe('PlatformFilter', () => {
+  const platforms = [
+    { id: 'p1', name: 'Platform A' },
+    { id: 'p2', name: 'Platform B' },
+  ];
+
+  beforeEach(() => { mockPush.mockClear(); });
+  afterEach(cleanup);
+
+  it('renders "All platforms" as default option', async () => {
+    const { PlatformFilter } = await import('../PlatformFilter');
+    render(<PlatformFilter endpoints={platforms} />);
+    expect(screen.getByText('All platforms')).toBeInTheDocument();
+  });
+
+  it('renders all platform options', async () => {
+    const { PlatformFilter } = await import('../PlatformFilter');
+    render(<PlatformFilter endpoints={platforms} />);
+    for (const p of platforms) {
+      expect(screen.getByText(p.name)).toBeInTheDocument();
+    }
+  });
+
+  it('applies the selected default value', async () => {
+    const { PlatformFilter } = await import('../PlatformFilter');
+    render(<PlatformFilter endpoints={platforms} selected="p1" />);
+    const select = screen.getByRole('combobox');
+    expect(select).toHaveValue('p1');
+  });
+
+  it('navigates to filtered runs URL on selection change', async () => {
+    const { PlatformFilter } = await import('../PlatformFilter');
+    render(<PlatformFilter endpoints={platforms} />);
+    const select = screen.getByRole('combobox');
+    fireEvent.change(select, { target: { value: 'p2' } });
+    expect(mockPush).toHaveBeenCalledWith('/runs?endpoint_id=p2');
+  });
+
+  it('navigates to /runs when selecting "All platforms"', async () => {
+    const { PlatformFilter } = await import('../PlatformFilter');
+    render(<PlatformFilter endpoints={platforms} selected="p1" />);
+    const select = screen.getByRole('combobox');
+    fireEvent.change(select, { target: { value: '' } });
+    expect(mockPush).toHaveBeenCalledWith('/runs');
+  });
+});
+
+// ──── ChunkReload ─────────────────────────────────────────────────────
+
+describe('ChunkReload', () => {
+  const originalLocation = window.location;
+  let reloadMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    reloadMock = vi.fn();
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...originalLocation, reload: reloadMock },
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: originalLocation,
+    });
+  });
+
+  it('renders null', async () => {
+    const { ChunkReload } = await import('../ChunkReload');
+    const { container } = render(<ChunkReload />);
+    expect(container.innerHTML).toBe('');
+  });
+
+  it('reloads page on chunk loading error', async () => {
+    const { ChunkReload } = await import('../ChunkReload');
+    render(<ChunkReload />);
+    const event = new ErrorEvent('error', { message: 'Failed to load chunk chunk-abc.js' });
+    window.dispatchEvent(event);
+    expect(reloadMock).toHaveBeenCalledOnce();
+  });
+
+  it('reloads page on uppercase chunk loading error', async () => {
+    const { ChunkReload } = await import('../ChunkReload');
+    render(<ChunkReload />);
+    const event = new ErrorEvent('error', { message: 'Loading chunk main.js failed' });
+    window.dispatchEvent(event);
+    expect(reloadMock).toHaveBeenCalledOnce();
+  });
+
+  it('does not reload on non-chunk error', async () => {
+    const { ChunkReload } = await import('../ChunkReload');
+    render(<ChunkReload />);
+    const event = new ErrorEvent('error', { message: 'NetworkError: Failed to fetch' });
+    window.dispatchEvent(event);
+    expect(reloadMock).not.toHaveBeenCalled();
+  });
+
+  it('reloads on unhandled rejection with chunk error', async () => {
+    const { ChunkReload } = await import('../ChunkReload');
+    render(<ChunkReload />);
+    const rejection = Promise.reject(new Error('failed to load chunk x'));
+    rejection.catch(() => {});
+    window.dispatchEvent(new PromiseRejectionEvent('unhandledrejection', {
+      promise: rejection,
+      reason: new Error('failed to load chunk x'),
+    }));
+    expect(reloadMock).toHaveBeenCalledOnce();
+  });
+
+  it('does not reload on non-chunk rejection', async () => {
+    const { ChunkReload } = await import('../ChunkReload');
+    render(<ChunkReload />);
+    const rejection = Promise.reject(new Error('generic error'));
+    rejection.catch(() => {});
+    window.dispatchEvent(new PromiseRejectionEvent('unhandledrejection', {
+      promise: rejection,
+      reason: new Error('generic error'),
+    }));
+    expect(reloadMock).not.toHaveBeenCalled();
+  });
+
+  it('removes event listeners on unmount', async () => {
+    const addErrorSpy = vi.spyOn(window, 'addEventListener');
+    const removeErrorSpy = vi.spyOn(window, 'removeEventListener');
+    const { ChunkReload } = await import('../ChunkReload');
+    const { unmount } = render(<ChunkReload />);
+    expect(addErrorSpy).toHaveBeenCalledTimes(2);
+    unmount();
+    expect(removeErrorSpy).toHaveBeenCalledTimes(2);
+    addErrorSpy.mockRestore();
+    removeErrorSpy.mockRestore();
+  });
+});
+
+// ──── SearchablePageTable ─────────────────────────────────────────────
+
+describe('SearchablePageTable', () => {
+  const rows = [
+    { page_id: 'abc123', shop: 'Shop One', name: 'My Page', kind: 'funnel_converting', is_activated: true, is_canary: false, reason: null },
+    { page_id: 'def456', shop: 'Shop Two', name: 'Another Page', kind: 'chat_only', is_activated: false, is_canary: true, reason: 'flagged' },
+    { page_id: 'ghi789', shop: null, name: null, kind: null, is_activated: true, is_canary: false, reason: 'manual override' },
+  ];
+
+  afterEach(cleanup);
+
+  it('renders all rows', async () => {
+    const { SearchablePageTable } = await import('../SearchablePageTable');
+    render(<SearchablePageTable rows={rows} hasShops={true} showKinds={true} />);
+    expect(screen.getByText('My Page')).toBeInTheDocument();
+    expect(screen.getByText('Another Page')).toBeInTheDocument();
+    const dashes = screen.getAllByText('—');
+    expect(dashes.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('renders correct column headers', async () => {
+    const { SearchablePageTable } = await import('../SearchablePageTable');
+    render(<SearchablePageTable rows={rows} hasShops={true} showKinds={true} />);
+    expect(screen.getByText('Page')).toBeInTheDocument();
+    expect(screen.getByText('Activity')).toBeInTheDocument();
+    expect(screen.getByText('Status')).toBeInTheDocument();
+    expect(screen.getByText('Reason')).toBeInTheDocument();
+    expect(screen.queryByText('Shop ID')).not.toBeInTheDocument();
+  });
+
+  it('shows Shop ID column when hasShops is false', async () => {
+    const { SearchablePageTable } = await import('../SearchablePageTable');
+    render(<SearchablePageTable rows={rows} hasShops={false} showKinds={true} />);
+    expect(screen.getByText('Shop ID')).toBeInTheDocument();
+    expect(screen.getByText('abc123')).toBeInTheDocument();
+  });
+
+  it('hides Activity column when showKinds is false', async () => {
+    const { SearchablePageTable } = await import('../SearchablePageTable');
+    render(<SearchablePageTable rows={rows} hasShops={true} showKinds={false} />);
+    expect(screen.queryByText('Activity')).not.toBeInTheDocument();
+  });
+
+  it('filters rows based on search query', async () => {
+    const { SearchablePageTable } = await import('../SearchablePageTable');
+    render(<SearchablePageTable rows={rows} hasShops={true} showKinds={true} />);
+    const input = screen.getByPlaceholderText('Search pages...');
+    fireEvent.change(input, { target: { value: 'Another' } });
+    expect(screen.getByText('Another Page')).toBeInTheDocument();
+    expect(screen.queryByText('My Page')).not.toBeInTheDocument();
+  });
+
+  it('filters by page_id', async () => {
+    const { SearchablePageTable } = await import('../SearchablePageTable');
+    render(<SearchablePageTable rows={rows} hasShops={true} showKinds={true} />);
+    const input = screen.getByPlaceholderText('Search pages...');
+    fireEvent.change(input, { target: { value: 'def456' } });
+    expect(screen.getByText('Another Page')).toBeInTheDocument();
+    expect(screen.queryByText('My Page')).not.toBeInTheDocument();
+  });
+
+  it('filters by shop', async () => {
+    const { SearchablePageTable } = await import('../SearchablePageTable');
+    render(<SearchablePageTable rows={rows} hasShops={true} showKinds={true} />);
+    const input = screen.getByPlaceholderText('Search pages...');
+    fireEvent.change(input, { target: { value: 'Shop Two' } });
+    expect(screen.getByText('Another Page')).toBeInTheDocument();
+    expect(screen.queryByText('My Page')).not.toBeInTheDocument();
+  });
+
+  it('filters by reason', async () => {
+    const { SearchablePageTable } = await import('../SearchablePageTable');
+    render(<SearchablePageTable rows={rows} hasShops={true} showKinds={true} />);
+    const input = screen.getByPlaceholderText('Search pages...');
+    fireEvent.change(input, { target: { value: 'manual' } });
+    expect(screen.getByText('—')).toBeInTheDocument();
+    const match = screen.getAllByText('—');
+    expect(match.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('shows empty state when no rows match', async () => {
+    const { SearchablePageTable } = await import('../SearchablePageTable');
+    render(<SearchablePageTable rows={rows} hasShops={true} showKinds={true} />);
+    const input = screen.getByPlaceholderText('Search pages...');
+    fireEvent.change(input, { target: { value: 'zzznonexistent' } });
+    expect(screen.getByText(/No pages match/)).toBeInTheDocument();
+  });
+
+  it('displays active/inactive status badges', async () => {
+    const { SearchablePageTable } = await import('../SearchablePageTable');
+    render(<SearchablePageTable rows={rows} hasShops={true} showKinds={true} />);
+    const activeBadges = screen.getAllByText('active');
+    expect(activeBadges.length).toBe(2);
+    expect(screen.getByText('inactive')).toBeInTheDocument();
+  });
+
+  it('displays canary badge for canary pages', async () => {
+    const { SearchablePageTable } = await import('../SearchablePageTable');
+    render(<SearchablePageTable rows={rows} hasShops={true} showKinds={true} />);
+    expect(screen.getByText('canary')).toBeInTheDocument();
+  });
+
+  it('renders kind badges with correct labels', async () => {
+    const { SearchablePageTable } = await import('../SearchablePageTable');
+    render(<SearchablePageTable rows={rows} hasShops={true} showKinds={true} />);
+    expect(screen.getByText('funnel_converting')).toBeInTheDocument();
+    expect(screen.getByText('chat_only')).toBeInTheDocument();
+    expect(screen.getByText('unknown')).toBeInTheDocument();
+  });
+});
+
+// ──── RunStatusIndicator ──────────────────────────────────────────────
+
+describe('RunStatusIndicator', () => {
+  afterEach(() => {
+    cleanup();
+    if ((global as any).fetch) delete (global as any).fetch;
+    vi.useRealTimers();
+  });
+
+  it('renders null when not running', async () => {
+    global.fetch = vi.fn(async () => new Response(JSON.stringify({ ok: true, isRunning: false }), { status: 200 }));
+    const { RunStatusIndicator } = await import('../RunStatusIndicator');
+    await renderWithProvider(<RunStatusIndicator />);
+    await vi.waitFor(() => {
+      expect(screen.queryByText('Fetching latest data...')).not.toBeInTheDocument();
+    });
+  });
+
+  it('shows fetching indicator when status returns isRunning', async () => {
+    global.fetch = vi.fn(async () => new Response(JSON.stringify({ ok: true, isRunning: true }), { status: 200 }));
+    const { RunStatusIndicator } = await import('../RunStatusIndicator');
+    await renderWithProvider(<RunStatusIndicator />);
+    await vi.waitFor(() => {
+      expect(screen.getByText('Fetching latest data...')).toBeInTheDocument();
+    });
+  });
+
+  it('displays status role and aria-live', async () => {
+    global.fetch = vi.fn(async () => new Response(JSON.stringify({ ok: true, isRunning: true }), { status: 200 }));
+    const { RunStatusIndicator } = await import('../RunStatusIndicator');
+    await renderWithProvider(<RunStatusIndicator />);
+    await vi.waitFor(() => {
+      const statusEl = screen.getByRole('status');
+      expect(statusEl).toBeInTheDocument();
+      expect(statusEl).toHaveAttribute('aria-live', 'polite');
+    });
+  });
+
+  it('handles fetch error and calls toast', async () => {
+    global.fetch = vi.fn(async () => { throw new Error('Network error'); });
+    const { RunStatusIndicator } = await import('../RunStatusIndicator');
+    await renderWithProvider(<RunStatusIndicator />);
+    await vi.waitFor(() => {
+      expect(screen.getByText('Failed to fetch run status')).toBeInTheDocument();
+    });
+  });
+
+  it('polls repeatedly with setTimeout', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true, isRunning: false }), { status: 200 }));
+    global.fetch = fetchMock;
+    const { RunStatusIndicator } = await import('../RunStatusIndicator');
+    await renderWithProvider(<RunStatusIndicator />);
+    // Initial call runs synchronously on mount
+    await vi.advanceTimersToNextTimerAsync();
+    // After initial fetch + first scheduled timer
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ──── GlobalLoadingSequence ───────────────────────────────────────────
+
+describe('GlobalLoadingSequence', () => {
+  beforeEach(() => {
+    document.body.className = '';
+  });
+
+  afterEach(() => {
+    cleanup();
+    if ((global as any).fetch) delete (global as any).fetch;
+    vi.useRealTimers();
+    document.body.className = '';
+  });
+
+  it('renders null', async () => {
+    global.fetch = vi.fn(async () => new Response(JSON.stringify({ ok: true, isRunning: false }), { status: 200 }));
+    const { GlobalLoadingSequence } = await import('../GlobalLoadingSequence');
+    await renderWithProvider(<GlobalLoadingSequence />);
+    // Component returns null, render nothing visible
+    expect(document.body.classList.contains('is-fetching-data')).toBe(false);
+  });
+
+  it('adds is-fetching-data class when status returns isRunning', async () => {
+    global.fetch = vi.fn(async () => new Response(JSON.stringify({ ok: true, isRunning: true }), { status: 200 }));
+    const { GlobalLoadingSequence } = await import('../GlobalLoadingSequence');
+    await renderWithProvider(<GlobalLoadingSequence />);
+    await vi.waitFor(() => {
+      expect(document.body.classList.contains('is-fetching-data')).toBe(true);
+    });
+  });
+
+  it('removes is-fetching-data class when status returns not running', async () => {
+    document.body.classList.add('is-fetching-data');
+    global.fetch = vi.fn(async () => new Response(JSON.stringify({ ok: true, isRunning: false }), { status: 200 }));
+    const { GlobalLoadingSequence } = await import('../GlobalLoadingSequence');
+    await renderWithProvider(<GlobalLoadingSequence />);
+    await vi.waitFor(() => {
+      expect(document.body.classList.contains('is-fetching-data')).toBe(false);
+    });
+  });
+
+  it('handles fetch error and calls toast', async () => {
+    global.fetch = vi.fn(async () => { throw new Error('Poll error'); });
+    const { GlobalLoadingSequence } = await import('../GlobalLoadingSequence');
+    await renderWithProvider(<GlobalLoadingSequence />);
+    await vi.waitFor(() => {
+      expect(screen.getByText('Failed to poll status')).toBeInTheDocument();
+    });
+  });
+
+  it('adds is-fetching-data class on run-started custom event', async () => {
+    global.fetch = vi.fn(async () => new Response(JSON.stringify({ ok: true, isRunning: false }), { status: 200 }));
+    const { GlobalLoadingSequence } = await import('../GlobalLoadingSequence');
+    await renderWithProvider(<GlobalLoadingSequence />);
+    // Wait for initial fetch to settle
+    await vi.waitFor(() => {
+      expect(document.body.classList.contains('is-fetching-data')).toBe(false);
+    });
+    fireEvent(window, new CustomEvent('run-started'));
+    expect(document.body.classList.contains('is-fetching-data')).toBe(true);
+  });
+
+  it('cleans up event listener on unmount', async () => {
+    global.fetch = vi.fn(async () => new Response(JSON.stringify({ ok: true, isRunning: false }), { status: 200 }));
+    const { GlobalLoadingSequence } = await import('../GlobalLoadingSequence');
+    const { unmount } = await renderWithProvider(<GlobalLoadingSequence />);
+    await vi.waitFor(() => {
+      expect(document.body.classList.contains('is-fetching-data')).toBe(false);
+    });
+    unmount();
+    fireEvent(window, new CustomEvent('run-started'));
+    expect(document.body.classList.contains('is-fetching-data')).toBe(false);
   });
 });
