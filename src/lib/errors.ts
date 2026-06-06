@@ -38,7 +38,7 @@ export function apiError(code: ErrorCode, message: string, status: number = 400,
 export function requireJson(req: Request): NextResponse | null {
   const ct = req.headers.get('content-type') || '';
   if (!ct.includes('application/json')) {
-    return NextResponse.json({ ok: false, error: 'Content-Type must be application/json' }, { status: 415 });
+    return NextResponse.json({ ok: false, error: 'Content-Type must be application/json', code: ErrorCodes.VALIDATION_INVALID_JSON }, { status: 415 });
   }
   return null;
 }

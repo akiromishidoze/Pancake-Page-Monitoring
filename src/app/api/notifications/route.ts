@@ -42,18 +42,18 @@ export const PATCH = withAuth(async (req: Request) => {
     return NextResponse.json({ ok: true });
   }
 
-  return NextResponse.json({ ok: false, error: 'Missing id or all' }, { status: 400 });
+  return apiError(ErrorCodes.MISSING_FIELD, 'Missing id or all', 400);
 });
 
 export const DELETE = withAuth(async (req: Request) => {
   const url = new URL(req.url);
   const idStr = url.searchParams.get('id');
   if (!idStr) {
-    return NextResponse.json({ ok: false, error: 'Missing id' }, { status: 400 });
+    return apiError(ErrorCodes.MISSING_FIELD, 'Missing id', 400);
   }
   const id = parseInt(idStr, 10);
   if (isNaN(id)) {
-    return NextResponse.json({ ok: false, error: 'Invalid id' }, { status: 400 });
+    return apiError(ErrorCodes.INVALID_VALUE, 'Invalid id', 400);
   }
   await dismissNotification(id);
   return NextResponse.json({ ok: true });

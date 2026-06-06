@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { getSetting, setSetting, createSessionToken, validateSessionToken, clearSessionToken } from './db';
-import { apiCatch, requireJson } from './errors';
+import { ErrorCodes, apiCatch, requireJson } from './errors';
 import { createLogger } from './logger';
 
 const log = createLogger('auth');
@@ -98,7 +98,7 @@ export async function requireApiAuth(): Promise<NextResponse | null> {
   const cookieStore = await cookies();
   const session = cookieStore.get('session')?.value;
   if (!(await validateSession(session))) {
-    return NextResponse.json({ ok: false, error: 'Not authenticated' }, { status: 401 });
+    return NextResponse.json({ ok: false, error: 'Not authenticated', code: ErrorCodes.AUTH_REQUIRED }, { status: 401 });
   }
   return null;
 }

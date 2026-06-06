@@ -13,9 +13,23 @@ vi.mock('next/headers', () => ({
 }));
 
 vi.mock('@/lib/errors', () => ({
+  ErrorCodes: {
+    AUTH_REQUIRED: 'AUTH_REQUIRED',
+    AUTH_INVALID_CREDENTIALS: 'AUTH_INVALID_CREDENTIALS',
+    VALIDATION_ERROR: 'VALIDATION_ERROR',
+    VALIDATION_INVALID_JSON: 'VALIDATION_INVALID_JSON',
+    NOT_FOUND: 'NOT_FOUND',
+    MISSING_FIELD: 'MISSING_FIELD',
+    INVALID_VALUE: 'INVALID_VALUE',
+    INTERNAL_ERROR: 'INTERNAL_ERROR',
+  },
   apiCatch: vi.fn((e: unknown) =>
-    new Response(JSON.stringify({ ok: false, error: String(e) }), { status: 500, headers: { 'content-type': 'application/json' } })
+    new Response(JSON.stringify({ ok: false, error: String(e), code: 'INTERNAL_ERROR' }), { status: 500, headers: { 'content-type': 'application/json' } })
   ),
+  apiError: vi.fn((code: string, message: string, status: number) =>
+    new Response(JSON.stringify({ ok: false, error: message, code }), { status, headers: { 'content-type': 'application/json' } })
+  ),
+  requireJson: vi.fn(() => null),
 }));
 
 vi.mock('@/lib/db', () => {
