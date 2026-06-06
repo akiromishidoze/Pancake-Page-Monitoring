@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { formatWithTz } from '@/lib/format';
 
 type AuditEntry = {
@@ -21,34 +21,48 @@ export default function AuditLogPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionFilter, setActionFilter] = useState('');
+  const [entityTypeFilter, setEntityTypeFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [actions, setActions] = useState<string[]>([]);
+  const [entityTypes, setEntityTypes] = useState<string[]>([]);
 
-  useEffect(() => {
+  const fetchLogs = useCallback(async () => {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
     if (actionFilter) params.set('action', actionFilter);
+    if (entityTypeFilter) params.set('entity_type', entityTypeFilter);
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo);
     setLoading(true);
-    (async () => {
-      try {
-        const r = await fetch(`/api/audit-log?${params}`);
-        const body = await r.json();
-        if (body.ok) {
-          setEntries(body.entries);
-          setTotal(body.total);
-          const unique = [...new Set(body.entries.map((e: AuditEntry) => e.action))] as string[];
-          setActions(prev => {
-            const merged = new Set([...prev, ...unique]);
-            return [...merged].sort();
-          });
-        } else {
-          setError(body.error || 'Failed to load audit log');
-        }
-      } catch {
-        setError('Failed to load audit log');
-      } finally {
-        setLoading(false);
+    try {
+      const r = await fetch(`/api/audit-log?${params}`);
+      const body = await r.json();
+      if (body.ok) {
+        setEntries(body.entries);
+        setTotal(body.total);
+        if (body.actions) setActions(body.actions);
+        if (body.entity_types) setEntityTypes(body.entity_types);
+      } else {
+        setError(body.error || 'Failed to load audit log');
       }
-    })();
-  }, [offset, actionFilter, limit]);
+    } catch {
+      setError('Failed to load audit log');
+    } finally {
+      setLoading(false);
+    }
+  }, [offset, actionFilter, entityTypeFilter, dateFrom, dateTo, limit]);
+
+  useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+  const resetFilters = () => {
+    setActionFilter('');
+    setEntityTypeFilter('');
+    setDateFrom('');
+    setDateTo('');
+    setOffset(0);
+  };
+
+  const hasFilters = actionFilter || entityTypeFilter || dateFrom || dateTo;
 
   return (
     <div className="space-y-6">
@@ -63,7 +77,7 @@ export default function AuditLogPage() {
         <div className="rounded-lg border border-red-800 bg-red-900/20 p-3 text-sm text-red-300">{error}</div>
       )}
 
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-3">
         <select
           value={actionFilter}
           onChange={e => { setActionFilter(e.target.value); setOffset(0); }}
@@ -74,7 +88,43 @@ export default function AuditLogPage() {
             <option key={a} value={a}>{a}</option>
           ))}
         </select>
+
+        <select
+          value={entityTypeFilter}
+          onChange={e => { setEntityTypeFilter(e.target.value); setOffset(0); }}
+          className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-200"
+        >
+          <option value="">All entities</option>
+          {entityTypes.map(t => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={e => { setDateFrom(e.target.value); setOffset(0); }}
+          className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-200"
+          title="From date"
+        />
+        <input
+          type="date"
+          value={dateTo}
+          onChange={e => { setDateTo(e.target.value); setOffset(0); }}
+          className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-200"
+          title="To date"
+        />
+
         <span className="text-xs text-slate-500">{total} total entries</span>
+
+        {hasFilters && (
+          <button
+            onClick={resetFilters}
+            className="text-xs px-3 py-1.5 rounded border border-slate-700 text-slate-400 hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
       <div className="rounded-lg border border-slate-800 bg-slate-900 overflow-hidden">

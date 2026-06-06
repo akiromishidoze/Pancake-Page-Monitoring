@@ -92,6 +92,15 @@ vi.mock('@/lib/db', () => ({
   insertSnapshot: vi.fn(async () => ({ inserted: true })),
   touchEndpoint: vi.fn(async () => {}),
   logAuditEntry: vi.fn(async () => {}),
+  queryRows: vi.fn(async (sql: string, _params?: unknown[]) => {
+    if (sql.includes('SELECT COUNT(*)')) return [{ c: '2' }];
+    if (sql.includes('SELECT DISTINCT action')) return [{ action: 'login' }, { action: 'logout' }, { action: 'update_retention' }];
+    if (sql.includes('SELECT DISTINCT entity_type')) return [{ entity_type: 'auth' }, { entity_type: 'settings' }];
+    return [
+      { id: 1, action: 'login', entity_type: 'auth', entity_id: 'admin', detail: 'Successful login', ip_address: '127.0.0.1', created_at: '2025-01-01T00:00:00Z' },
+      { id: 2, action: 'logout', entity_type: 'auth', entity_id: 'admin', detail: 'User logged out', ip_address: '127.0.0.1', created_at: '2025-01-02T00:00:00Z' },
+    ];
+  }),
   pool: { query: vi.fn() },
 }));
 
@@ -128,6 +137,93 @@ vi.mock('@/lib/auth', () => ({
   requireApiAuth: vi.fn(async () => null),
   withAuth: vi.fn(<T extends (...args: any[]) => any>(handler: T) => handler),
 }));
+
+describe('GET /api/audit-log', () => {
+  beforeEach(() => { mocks.resetAll(); vi.clearAllMocks(); });
+
+  it('returns paginated entries', async () => {
+    const mod = await import('@/app/api/audit-log/route');
+    const req = mockRequest('GET', 'http://localhost/api/audit-log?limit=10&offset=0');
+    const res = await mod.GET(req);
+    const { status, body } = await jsonResponse(res);
+    expect(status).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(body.entries).toHaveLength(2);
+    expect(body.total).toBe(2);
+    expect(body.limit).toBe(10);
+    expect(body.offset).toBe(0);
+  });
+
+  it('returns distinct actions and entity_types', async () => {
+    const mod = await import('@/app/api/audit-log/route');
+    const req = mockRequest('GET', 'http://localhost/api/audit-log');
+    const { body } = await jsonResponse(await mod.GET(req));
+    expect(body.actions).toContain('login');
+    expect(body.actions).toContain('logout');
+    expect(body.entity_types).toContain('auth');
+    expect(body.entity_types).toContain('settings');
+  });
+
+  it('filters by action', async () => {
+    const { queryRows } = await import('@/lib/db');
+    const mod = await import('@/app/api/audit-log/route');
+    const req = mockRequest('GET', 'http://localhost/api/audit-log?action=login');
+    await mod.GET(req);
+    const callParams = vi.mocked(queryRows).mock.calls.find(c =>
+      String(c[0]).includes('SELECT * FROM audit_log')
+    );
+    expect(callParams).toBeDefined();
+    expect(String(callParams![1]?.[0])).toBe('login');
+  });
+
+  it('filters by entity_type', async () => {
+    const { queryRows } = await import('@/lib/db');
+    const mod = await import('@/app/api/audit-log/route');
+    const req = mockRequest('GET', 'http://localhost/api/audit-log?entity_type=settings');
+    await mod.GET(req);
+    const callParams = vi.mocked(queryRows).mock.calls.find(c =>
+      String(c[0]).includes('SELECT * FROM audit_log')
+    );
+    expect(callParams).toBeDefined();
+    expect(String(callParams![1]?.[0])).toBe('settings');
+  });
+
+  it('filters by date range', async () => {
+    const { queryRows } = await import('@/lib/db');
+    const mod = await import('@/app/api/audit-log/route');
+    const req = mockRequest('GET', 'http://localhost/api/audit-log?date_from=2025-01-01&date_to=2025-01-31');
+    await mod.GET(req);
+    const callParams = vi.mocked(queryRows).mock.calls.find(c =>
+      String(c[0]).includes('SELECT * FROM audit_log')
+    );
+    expect(callParams).toBeDefined();
+    expect(String(callParams![1]?.[0])).toBe('2025-01-01');
+    expect(String(callParams![1]?.[1])).toBe('2025-01-31');
+  });
+
+  it('enforces max limit of 500', async () => {
+    const mod = await import('@/app/api/audit-log/route');
+    const req = mockRequest('GET', 'http://localhost/api/audit-log?limit=9999');
+    const { body } = await jsonResponse(await mod.GET(req));
+    expect(body.limit).toBe(500);
+  });
+
+  it('returns empty arrays when no data', async () => {
+    const { queryRows } = await import('@/lib/db');
+    vi.mocked(queryRows).mockImplementation(async (sql: string) => {
+      if (sql.includes('SELECT COUNT(*)')) return [{ c: '0' }];
+      if (sql.includes('SELECT DISTINCT')) return [];
+      return [];
+    });
+    const mod = await import('@/app/api/audit-log/route');
+    const req = mockRequest('GET', 'http://localhost/api/audit-log');
+    const { body } = await jsonResponse(await mod.GET(req));
+    expect(body.entries).toHaveLength(0);
+    expect(body.total).toBe(0);
+    expect(body.actions).toEqual([]);
+    expect(body.entity_types).toEqual([]);
+  });
+});
 
 describe('GET /api/health', () => {
   beforeEach(() => { mocks.resetAll(); vi.clearAllMocks(); });
