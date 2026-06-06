@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { listEndpoints } from '@/lib/db';
+import { SectionErrorBoundary } from '@/components/SectionErrorBoundary';
 import { SettingsForm } from './SettingsForm';
 import { ChangeCredentials } from '@/components/ChangeCredentials';
 import { NotificationSettings } from '@/components/NotificationSettings';
@@ -37,17 +38,29 @@ export default async function SettingsPage({
         </p>
       </div>
 
-      <SettingsForm initialEndpoints={endpoints} />
+      <SectionErrorBoundary title="Endpoints">
+        <SettingsForm initialEndpoints={endpoints} />
+      </SectionErrorBoundary>
 
-      <ConnectorsSettings />
+      <SectionErrorBoundary title="Connectors">
+        <ConnectorsSettings />
+      </SectionErrorBoundary>
 
-      <NotificationSettings />
+      <SectionErrorBoundary title="Notifications">
+        <NotificationSettings />
+      </SectionErrorBoundary>
 
-      <DataRetentionSettings />
+      <SectionErrorBoundary title="Data Retention">
+        <DataRetentionSettings />
+      </SectionErrorBoundary>
 
-      <TwoFactorSetup />
+      <SectionErrorBoundary title="Two-Factor Authentication">
+        <TwoFactorSetup />
+      </SectionErrorBoundary>
 
-      <ChangeCredentials force={resolvedSearch?.change_password === '1'} />
+      <SectionErrorBoundary title="Credentials">
+        <ChangeCredentials force={resolvedSearch?.change_password === '1'} />
+      </SectionErrorBoundary>
     </div>
   );
 }

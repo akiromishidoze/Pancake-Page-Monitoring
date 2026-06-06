@@ -1,6 +1,7 @@
 import { listEndpoints, slugify, isPancakeEndpoint } from '@/lib/db';
 import { getRunCount, getLatestPageStates } from '@/lib/db';
 import Link from 'next/link';
+import { SectionErrorBoundary } from '@/components/SectionErrorBoundary';
 import { formatDateWithTz } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -39,36 +40,38 @@ export default async function PlatformsPage() {
         </p>
       </div>
 
-      {endpoints.length === 0 ? (
-        <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 text-slate-400 text-center">
-          No platforms configured yet.{' '}
-          <Link href="/settings" className="text-blue-400 hover:underline">Add one in Settings</Link>.
-        </div>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {endpoints.map((ep) => {
-            const slug = slugify(ep.name);
-            return (
-              <Link
-                key={ep.id}
-                href={`/pages/platform/${slug}`}
-                className="rounded-lg border border-slate-800 bg-slate-900 p-5 hover:border-slate-600 hover:bg-slate-800/50 transition-all block"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-base font-semibold text-slate-100">{ep.name}</h3>
-                  <span className="text-xs text-slate-500">{ep.url ? new URL(ep.url).hostname : '—'}</span>
-                </div>
-                <div className="flex gap-3 text-sm text-slate-500">
-                  <span className="text-green-400 font-medium">{ep.is_active ? 'active' : 'inactive'}</span>
-                  {ep.last_used_at && (
-                    <span>Last used: {formatDateWithTz(ep.last_used_at)}</span>
-                  )}
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      )}
+      <SectionErrorBoundary title="Platforms List">
+        {endpoints.length === 0 ? (
+          <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 text-slate-400 text-center">
+            No platforms configured yet.{' '}
+            <Link href="/settings" className="text-blue-400 hover:underline">Add one in Settings</Link>.
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {endpoints.map((ep) => {
+              const slug = slugify(ep.name);
+              return (
+                <Link
+                  key={ep.id}
+                  href={`/pages/platform/${slug}`}
+                  className="rounded-lg border border-slate-800 bg-slate-900 p-5 hover:border-slate-600 hover:bg-slate-800/50 transition-all block"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-base font-semibold text-slate-100">{ep.name}</h3>
+                    <span className="text-xs text-slate-500">{ep.url ? new URL(ep.url).hostname : '—'}</span>
+                  </div>
+                  <div className="flex gap-3 text-sm text-slate-500">
+                    <span className="text-green-400 font-medium">{ep.is_active ? 'active' : 'inactive'}</span>
+                    {ep.last_used_at && (
+                      <span>Last used: {formatDateWithTz(ep.last_used_at)}</span>
+                    )}
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </SectionErrorBoundary>
     </div>
   );
 }

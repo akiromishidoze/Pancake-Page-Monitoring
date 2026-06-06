@@ -1,6 +1,7 @@
 import { pool, listEndpoints, isBotCakeEndpoint, type RunRow } from '@/lib/db';
 import { PlatformFilter } from '@/components/PlatformFilter';
 import { Pagination } from '@/components/Pagination';
+import { SectionErrorBoundary } from '@/components/SectionErrorBoundary';
 import { formatWithTz } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -82,62 +83,64 @@ export default async function RunsPage({
         </a>
       </div>
 
-      {rows.length === 0 ? (
-        <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 text-slate-400 text-center">
-          No runs found.
-        </div>
-      ) : (
-        <div className="dashboard-data rounded-lg border border-slate-800 bg-slate-900 overflow-hidden">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-800/50">
-              <tr className="text-left text-xs uppercase text-slate-400">
-                <th className="px-4 py-3 font-medium">Run ID</th>
-                <th className="px-4 py-3 font-medium">Platform</th>
-                <th className="px-4 py-3 font-medium">Generated</th>
-                <th className="px-4 py-3 font-medium">Quality</th>
-                <th className="px-4 py-3 font-medium">Canary</th>
-                <th className="px-4 py-3 font-medium">Alerts</th>
-                <th className="px-4 py-3 font-medium">Heartbeat</th>
-                <th className="px-4 py-3 font-medium">Pages</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800">
-              {rows.map((r: RunRow) => (
-                <tr key={r.run_id} className="hover:bg-slate-800/30">
-                  <td className="px-4 py-3 font-mono text-xs text-slate-300" title={r.run_id}>
-                    {r.run_id.length > 24 ? r.run_id.slice(0, 24) + '…' : r.run_id}
-                  </td>
-                  <td className="px-4 py-3 text-slate-300">
-                    {r.endpoint_id && endpointMap.get(r.endpoint_id) ? (isBotCakeEndpoint(endpointMap.get(r.endpoint_id)!) ? 'BotCake' : r.endpoint_id) : 'Legacy'}
-                  </td>
-                  <td className="px-4 py-3 text-slate-400 text-xs">
-                    {formatWithTz(r.generated_at)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-mono border ${tone(r.run_quality)}`}>
-                      {r.run_quality || '—'}
-                    </span>
-                  </td>
-                  <td className={`px-4 py-3 text-xs font-mono ${canaryTone(r.canary_status)}`}>
-                    {r.canary_status || '—'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`font-mono text-xs ${(r.alert_count || 0) > 0 ? 'text-red-400' : 'text-slate-500'}`}>
-                      {r.alert_count ?? 0}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-block w-2 h-2 rounded-full ${r.heartbeat_ok ? 'bg-green-500' : 'bg-red-500'}`} />
-                  </td>
-                  <td className="px-4 py-3 text-slate-400 text-xs">
-                    {r.total_pages ?? '—'}
-                  </td>
+      <SectionErrorBoundary title="Run History Table">
+        {rows.length === 0 ? (
+          <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 text-slate-400 text-center">
+            No runs found.
+          </div>
+        ) : (
+          <div className="dashboard-data rounded-lg border border-slate-800 bg-slate-900 overflow-hidden">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-800/50">
+                <tr className="text-left text-xs uppercase text-slate-400">
+                  <th className="px-4 py-3 font-medium">Run ID</th>
+                  <th className="px-4 py-3 font-medium">Platform</th>
+                  <th className="px-4 py-3 font-medium">Generated</th>
+                  <th className="px-4 py-3 font-medium">Quality</th>
+                  <th className="px-4 py-3 font-medium">Canary</th>
+                  <th className="px-4 py-3 font-medium">Alerts</th>
+                  <th className="px-4 py-3 font-medium">Heartbeat</th>
+                  <th className="px-4 py-3 font-medium">Pages</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {rows.map((r: RunRow) => (
+                  <tr key={r.run_id} className="hover:bg-slate-800/30">
+                    <td className="px-4 py-3 font-mono text-xs text-slate-300" title={r.run_id}>
+                      {r.run_id.length > 24 ? r.run_id.slice(0, 24) + '…' : r.run_id}
+                    </td>
+                    <td className="px-4 py-3 text-slate-300">
+                      {r.endpoint_id && endpointMap.get(r.endpoint_id) ? (isBotCakeEndpoint(endpointMap.get(r.endpoint_id)!) ? 'BotCake' : r.endpoint_id) : 'Legacy'}
+                    </td>
+                    <td className="px-4 py-3 text-slate-400 text-xs">
+                      {formatWithTz(r.generated_at)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-mono border ${tone(r.run_quality)}`}>
+                        {r.run_quality || '—'}
+                      </span>
+                    </td>
+                    <td className={`px-4 py-3 text-xs font-mono ${canaryTone(r.canary_status)}`}>
+                      {r.canary_status || '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`font-mono text-xs ${(r.alert_count || 0) > 0 ? 'text-red-400' : 'text-slate-500'}`}>
+                        {r.alert_count ?? 0}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block w-2 h-2 rounded-full ${r.heartbeat_ok ? 'bg-green-500' : 'bg-red-500'}`} />
+                    </td>
+                    <td className="px-4 py-3 text-slate-400 text-xs">
+                      {r.total_pages ?? '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionErrorBoundary>
 
       {totalPages > 1 && (
         <Pagination page={page} totalPages={totalPages} endpointId={endpointId} />

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { SectionErrorBoundary } from '@/components/SectionErrorBoundary';
 import { formatWithTz } from '@/lib/format';
 
 type AuditEntry = {
@@ -127,54 +128,56 @@ export default function AuditLogPage() {
         )}
       </div>
 
-      <div className="rounded-lg border border-slate-800 bg-slate-900 overflow-hidden">
-        {loading ? (
-          <div className="p-6 text-sm text-slate-400 text-center">Loading...</div>
-        ) : entries.length === 0 ? (
-          <div className="p-6 text-sm text-slate-400 text-center">No audit entries found.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-800 bg-slate-800/40">
-                  <th className="text-left px-4 py-2 text-xs font-medium text-slate-400">Time</th>
-                  <th className="text-left px-4 py-2 text-xs font-medium text-slate-400">Action</th>
-                  <th className="text-left px-4 py-2 text-xs font-medium text-slate-400">Entity</th>
-                  <th className="text-left px-4 py-2 text-xs font-medium text-slate-400">Detail</th>
-                  <th className="text-left px-4 py-2 text-xs font-medium text-slate-400">IP</th>
-                </tr>
-              </thead>
-              <tbody>
-                {entries.map(entry => (
-                  <tr key={entry.id} className="border-b border-slate-800 last:border-0 hover:bg-slate-800/20">
-                    <td className="px-4 py-2 text-xs font-mono text-slate-400 whitespace-nowrap">
-                      {formatWithTz(entry.created_at)}
-                    </td>
-                    <td className="px-4 py-2">
-                      <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300">
-                        {entry.action}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-slate-300">
-                      {entry.entity_type && (
-                        <span className="text-xs">
-                          {entry.entity_type}{entry.entity_id ? ` / ${entry.entity_id}` : ''}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-slate-400 text-xs max-w-xs truncate">
-                      {entry.detail || '—'}
-                    </td>
-                    <td className="px-4 py-2 text-xs font-mono text-slate-500">
-                      {entry.ip_address || '—'}
-                    </td>
+      <SectionErrorBoundary title="Audit Log Entries">
+        <div className="rounded-lg border border-slate-800 bg-slate-900 overflow-hidden">
+          {loading ? (
+            <div className="p-6 text-sm text-slate-400 text-center">Loading...</div>
+          ) : entries.length === 0 ? (
+            <div className="p-6 text-sm text-slate-400 text-center">No audit entries found.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-800 bg-slate-800/40">
+                    <th className="text-left px-4 py-2 text-xs font-medium text-slate-400">Time</th>
+                    <th className="text-left px-4 py-2 text-xs font-medium text-slate-400">Action</th>
+                    <th className="text-left px-4 py-2 text-xs font-medium text-slate-400">Entity</th>
+                    <th className="text-left px-4 py-2 text-xs font-medium text-slate-400">Detail</th>
+                    <th className="text-left px-4 py-2 text-xs font-medium text-slate-400">IP</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                </thead>
+                <tbody>
+                  {entries.map(entry => (
+                    <tr key={entry.id} className="border-b border-slate-800 last:border-0 hover:bg-slate-800/20">
+                      <td className="px-4 py-2 text-xs font-mono text-slate-400 whitespace-nowrap">
+                        {formatWithTz(entry.created_at)}
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300">
+                          {entry.action}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-slate-300">
+                        {entry.entity_type && (
+                          <span className="text-xs">
+                            {entry.entity_type}{entry.entity_id ? ` / ${entry.entity_id}` : ''}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-slate-400 text-xs max-w-xs truncate">
+                        {entry.detail || '—'}
+                      </td>
+                      <td className="px-4 py-2 text-xs font-mono text-slate-500">
+                        {entry.ip_address || '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </SectionErrorBoundary>
 
       {total > limit && (
         <div className="flex items-center justify-center gap-4">
