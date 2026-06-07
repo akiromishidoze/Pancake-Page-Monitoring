@@ -393,72 +393,75 @@ async function refreshPancake() {
     }
   }
 
-  for (const ep of endpoints) {
+  await Promise.all(endpoints.map(async (ep) => {
     const shopId = parseInt(ep.id, 10);
     const shop = shopById.get(shopId);
-    if (!shop) continue;
+    if (!shop) return;
+    try {
+      const orderPageIds = activePageIdsByShop.get(shopId) ?? new Set<string>();
 
-    const orderPageIds = activePageIdsByShop.get(shopId) ?? new Set<string>();
+      const ts = new Date().toISOString();
+      const runId = `pancake_refresh_${Date.now()}_${ep.id}`;
 
-    const ts = new Date().toISOString();
-    const runId = `pancake_refresh_${Date.now()}_${ep.id}`;
-
-    const activePages: SlimPage[] = [];
-    const inactivePages: SlimPage[] = [];
-    for (const p of shop.pages) {
-      const hasOrders = orderPageIds.has(p.id);
-      const apiActive = p.is_activated === true;
-      const base = {
-        shop_label: ep.shop_label ?? null, shop: ep.shop_label ?? null,
-        name: p.name,
-        page_id: p.id, id: p.id,
-        activity_kind: null, kind: null,
-        activation_reason: null, reason: null,
-        last_order_at: null, last_customer_activity_at: null,
-        state_change: null, activity_kind_change: null,
-        is_canary: false,
-        response_ms: null,
-        fetch_errors: 0,
-      };
-      (hasOrders || apiActive ? activePages : inactivePages).push(base);
-    }
-
-    const prevActive = await getPreviousRunActiveCount(ep.id);
-    let alertCount = 0;
-    let outageSuspected = false;
-    if (prevActive !== null && prevActive > 0) {
-      const dropRatio = (prevActive - activePages.length) / prevActive;
-      if (dropRatio >= ALERT_DROP_THRESHOLD_PCT) {
-        alertCount = activePages.length === 0 ? 2 : 1;
-        outageSuspected = true;
-        log.warn({ dropPct: Math.round(dropRatio * 100), prevActive, current: activePages.length, epName: ep.name }, 'ALERT %s: active pages dropped %d%% (%d → %d)', ep.name, Math.round(dropRatio * 100), prevActive, activePages.length);
-        broadcastSSE('alert', JSON.stringify({
-          endpoint_id: ep.id, shop: ep.name,
-          previous: prevActive, current: activePages.length,
-          drop_pct: Math.round(dropRatio * 100),
-        }));
-        void addNotification('down_page', 'critical', `Active Pages Dropped: ${ep.name}`, `${activePages.length === 0 ? 'All' : 'Significant'} pages dropped on ${ep.name}: ${prevActive} → ${activePages.length} active (${Math.round(dropRatio * 100)}% drop)`);
+      const activePages: SlimPage[] = [];
+      const inactivePages: SlimPage[] = [];
+      for (const p of shop.pages) {
+        const hasOrders = orderPageIds.has(p.id);
+        const apiActive = p.is_activated === true;
+        const base = {
+          shop_label: ep.shop_label ?? null, shop: ep.shop_label ?? null,
+          name: p.name,
+          page_id: p.id, id: p.id,
+          activity_kind: null, kind: null,
+          activation_reason: null, reason: null,
+          last_order_at: null, last_customer_activity_at: null,
+          state_change: null, activity_kind_change: null,
+          is_canary: false,
+          response_ms: null,
+          fetch_errors: 0,
+        };
+        (hasOrders || apiActive ? activePages : inactivePages).push(base);
       }
-    }
 
-    const result = await insertSnapshot({
-      run_id: runId, endpoint_id: ep.id, generated_at: ts,
-      heartbeat_ok: true, run_quality: 'full', severity: null,
-      canary_status: 'ok', canary_alert: false,
-      outage_suspected: outageSuspected, alert_count: alertCount,
-      rule_version: null, in_maintenance_window: false,
-      total_pages: shop.pages.length,
-      active_pages_count: activePages.length, inactive_pages_count: inactivePages.length,
-      receiver_sd_size_bytes: null,
-      raw_summary: { source: 'pancake-shops-poller', endpoint: ep.name, page_count: shop.pages.length },
-      active_pages: activePages, inactive_pages: inactivePages,
-    });
+      const prevActive = await getPreviousRunActiveCount(ep.id);
+      let alertCount = 0;
+      let outageSuspected = false;
+      if (prevActive !== null && prevActive > 0) {
+        const dropRatio = (prevActive - activePages.length) / prevActive;
+        if (dropRatio >= ALERT_DROP_THRESHOLD_PCT) {
+          alertCount = activePages.length === 0 ? 2 : 1;
+          outageSuspected = true;
+          log.warn({ dropPct: Math.round(dropRatio * 100), prevActive, current: activePages.length, epName: ep.name }, 'ALERT %s: active pages dropped %d%% (%d → %d)', ep.name, Math.round(dropRatio * 100), prevActive, activePages.length);
+          broadcastSSE('alert', JSON.stringify({
+            endpoint_id: ep.id, shop: ep.name,
+            previous: prevActive, current: activePages.length,
+            drop_pct: Math.round(dropRatio * 100),
+          }));
+          void addNotification('down_page', 'critical', `Active Pages Dropped: ${ep.name}`, `${activePages.length === 0 ? 'All' : 'Significant'} pages dropped on ${ep.name}: ${prevActive} → ${activePages.length} active (${Math.round(dropRatio * 100)}% drop)`);
+        }
+      }
 
-    if (result.inserted) {
-      await setSetting(`poller_ok_${ep.id}`, Date.now().toString());
-      log.info('pancake %s: %d active / %d inactive (%d total), run %s', ep.name, activePages.length, inactivePages.length, shop.pages.length, runId);
+      const result = await insertSnapshot({
+        run_id: runId, endpoint_id: ep.id, generated_at: ts,
+        heartbeat_ok: true, run_quality: 'full', severity: null,
+        canary_status: 'ok', canary_alert: false,
+        outage_suspected: outageSuspected, alert_count: alertCount,
+        rule_version: null, in_maintenance_window: false,
+        total_pages: shop.pages.length,
+        active_pages_count: activePages.length, inactive_pages_count: inactivePages.length,
+        receiver_sd_size_bytes: null,
+        raw_summary: { source: 'pancake-shops-poller', endpoint: ep.name, page_count: shop.pages.length },
+        active_pages: activePages, inactive_pages: inactivePages,
+      });
+
+      if (result.inserted) {
+        await setSetting(`poller_ok_${ep.id}`, Date.now().toString());
+        log.info('pancake %s: %d active / %d inactive (%d total), run %s', ep.name, activePages.length, inactivePages.length, shop.pages.length, runId);
+      }
+    } catch (err) {
+      log.error({ err, ep: ep.name }, 'pancake: endpoint refresh failed');
     }
-  }
+  }));
   overallSuccess = true;
   } catch (err) {
     log.error({ err }, 'pancake: refresh failed');
