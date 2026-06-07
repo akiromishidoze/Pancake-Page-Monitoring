@@ -9,6 +9,9 @@ import { shouldAttempt, recordSuccess as cbRecordSuccess, recordFailure, getBrea
 const log = createLogger('poller');
 
 const POLL_INTERVAL_MS = 60_000;
+const STALE_INTERVAL_MIN = 30_000;
+const STALE_INTERVAL_MAX = 480_000;
+const STALE_BACKOFF_CAP = 3;
 
 let _pollerTimer: ReturnType<typeof setTimeout> | null = null;
 let _lastPolledAt: string | null = null;
@@ -17,10 +20,40 @@ let _pollerStopped = false;
 let _refreshingBotCake = false;
 let _refreshingPancake = false;
 
+let _stableCycles = 0;
+let _lastTotalActivePages = -1;
+
+function computeAdaptiveInterval(): number {
+  const multiplier = Math.min(Math.pow(2, _stableCycles), Math.pow(2, STALE_BACKOFF_CAP));
+  const interval = Math.round(POLL_INTERVAL_MS * multiplier);
+  return Math.min(Math.max(interval, STALE_INTERVAL_MIN), STALE_INTERVAL_MAX);
+}
+
+async function checkActivityChange(): Promise<boolean> {
+  try {
+    const result = await pool.query(`
+      SELECT COALESCE(SUM(r.active_pages_count), 0) AS total
+      FROM runs r
+      WHERE r.generated_at = (
+        SELECT MAX(r2.generated_at) FROM runs r2 WHERE r2.endpoint_id = r.endpoint_id
+      )
+    `);
+    const total = Number(result.rows[0]?.total ?? 0);
+    if (_lastTotalActivePages >= 0 && total !== _lastTotalActivePages) {
+      _lastTotalActivePages = total;
+      return true;
+    }
+    _lastTotalActivePages = total;
+  } catch {
+    // If query fails, assume no change
+  }
+  return false;
+}
+
 export function startPoller() {
   if (_pollerTimer) return;
   _pollerStopped = false;
-  log.info('starting; interval = %d ms', POLL_INTERVAL_MS);
+  log.info('starting; base interval = %d ms', POLL_INTERVAL_MS);
 
   // Initial delay then recursive setTimeout (prevents pileups)
   _pollerTimer = setTimeout(() => scheduleNextRefresh(true), 30_000);
@@ -35,7 +68,17 @@ async function scheduleNextRefresh(isFirst: boolean) {
     log.error({ err }, 'poller: refreshAll failed');
   }
   if (_pollerStopped) return;
-  _pollerTimer = setTimeout(() => scheduleNextRefresh(false), POLL_INTERVAL_MS);
+
+  const changed = await checkActivityChange();
+  if (changed) {
+    _stableCycles = 0;
+  } else {
+    _stableCycles++;
+  }
+
+  const nextInterval = computeAdaptiveInterval();
+  log.info('next poll in %d ms (stableCycles=%d)', nextInterval, _stableCycles);
+  _pollerTimer = setTimeout(() => scheduleNextRefresh(false), nextInterval);
 }
 
 export function stopPoller() {
