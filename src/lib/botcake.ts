@@ -39,9 +39,10 @@ async function fetchWithRetry(url: string, token: string, retries = 2, method: '
       if (res.status === 429) {
         const retryAfter = parseRetryAfter(res.headers.get('Retry-After'));
         if (retryAfter !== null) {
-          log.warn({ url, waitMs: retryAfter }, 'botcake rate-limited (429), waiting %dms', retryAfter);
+          const jittered = retryAfter + Math.random() * retryAfter;
+          log.warn({ url, waitMs: Math.round(jittered) }, 'botcake rate-limited (429), waiting %dms', Math.round(jittered));
           if (attempt < retries) {
-            await new Promise(r => setTimeout(r, retryAfter));
+            await new Promise(r => setTimeout(r, jittered));
             continue;
           }
         }
@@ -53,7 +54,7 @@ async function fetchWithRetry(url: string, token: string, retries = 2, method: '
       if (attempt === retries) return null;
     }
     const delay = Math.min(1000 * Math.pow(2, attempt), 30_000);
-    await new Promise(r => setTimeout(r, delay));
+    await new Promise(r => setTimeout(r, delay * Math.random()));
   }
   return null;
 }
