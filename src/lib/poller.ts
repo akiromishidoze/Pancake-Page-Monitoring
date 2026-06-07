@@ -119,10 +119,10 @@ async function refreshSingleBotCake(endpoint: EndpointRow): Promise<boolean> {
   const pancakeActive = await getPancakeActivePageIds();
 
   const noOrders = pages.filter(p => !pancakeActive.has(p.page_id)).map(p => p.page_id);
-  const convResult = await checkBotCakeConversations(noOrders, endpoint.access_token, fbPageId);
-
-  const noOrdersNoConv = pages.filter(p => !pancakeActive.has(p.page_id) && !convResult.has(p.page_id)).map(p => p.page_id);
-  const toolsActive = await checkBotCakeToolsFlows(noOrdersNoConv, endpoint.access_token, fbPageId);
+  const [convResult, toolsActive] = await Promise.all([
+    checkBotCakeConversations(noOrders, endpoint.access_token, fbPageId),
+    checkBotCakeToolsFlows(noOrders, endpoint.access_token, fbPageId),
+  ]);
 
   let activePages: SlimPage[] = [];
   let inactivePages: SlimPage[] = [];
