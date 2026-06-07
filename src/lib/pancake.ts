@@ -84,6 +84,15 @@ export function mergePagesActivation(
   }));
 }
 
+function parseRetryAfter(value: string | null): number | null {
+  if (!value) return null;
+  const seconds = parseInt(value, 10);
+  if (!isNaN(seconds) && seconds >= 0) return seconds * 1000;
+  const parsed = Date.parse(value);
+  if (!isNaN(parsed)) return Math.max(0, parsed - Date.now());
+  return null;
+}
+
 async function fetchWithRetry(url: string, retries = 2, timeoutMs = 30_000): Promise<Response> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -91,6 +100,25 @@ async function fetchWithRetry(url: string, retries = 2, timeoutMs = 30_000): Pro
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timer);
+
+      if (res.status === 429) {
+        const retryAfter = parseRetryAfter(res.headers.get('Retry-After'));
+        if (retryAfter !== null) {
+          const jittered = retryAfter + Math.random() * retryAfter;
+          log.warn({ url, waitMs: Math.round(jittered) }, 'pancake rate-limited (429), waiting %dms', Math.round(jittered));
+          if (attempt < retries) {
+            await new Promise(r => setTimeout(r, jittered));
+            continue;
+          }
+        }
+      }
+
+      if (!res.ok && attempt < retries) {
+        const delay = Math.min(1000 * Math.pow(2, attempt), 30_000);
+        await new Promise(r => setTimeout(r, delay + Math.random() * delay));
+        continue;
+      }
+
       return res;
     } catch (err) {
       if (attempt === retries) throw err;
