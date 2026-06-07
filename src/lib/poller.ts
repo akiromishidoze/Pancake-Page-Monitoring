@@ -1,4 +1,4 @@
-import { fetchBotCakePages, checkBotCakeConversations, checkBotCakeToolsFlows, recordBotCakeApiHealth, invalidateBotCakeCaches } from './botcake';
+import { fetchBotCakePages, checkBotCakeConversations, checkBotCakeToolsFlows, recordBotCakeApiHealth, invalidateBotCakeCaches, type BotCakePage } from './botcake';
 import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, fetchPancakeActivePageIdsFromCustomers, fetchCachedPancakeShops, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop, type PancakePage } from './pancake';
 import { insertSnapshot, setSetting, listEndpoints, getPancakeActivePageIds, getPreviousRunActiveCount, pool, getBotCakeOverrides, isBotCakeEndpoint, type SlimPage, type EndpointRow } from './db';
 import { broadcastSSE } from './sse';
@@ -141,10 +141,13 @@ async function refreshSingleBotCake(endpoint: EndpointRow): Promise<boolean> {
   const fbPageId = endpoint.fb_page_id!;
   if (!endpoint.access_token) return true;
 
-  let pages;
   const fetchStart = Date.now();
+  let bcResult: { pages: BotCakePage[]; authFailure: boolean };
   try {
-    pages = await fetchBotCakePages(endpoint.access_token, fbPageId);
+    bcResult = await fetchBotCakePages(endpoint.access_token, fbPageId);
+    if (bcResult.authFailure) {
+      void addNotification('credential_change', 'critical', `BotCake Token Expired: ${endpoint.name}`, `The access token for "${endpoint.name}" returned 401. Generate a new token and update it in Settings > Endpoints.`);
+    }
     recordBotCakeApiHealth(endpoint.id, true, Date.now() - fetchStart, null);
   } catch (err) {
     recordBotCakeApiHealth(endpoint.id, false, Date.now() - fetchStart, err instanceof Error ? err.message : String(err));
@@ -152,9 +155,10 @@ async function refreshSingleBotCake(endpoint: EndpointRow): Promise<boolean> {
     void addNotification('external_error', 'warning', `BotCake API Error: ${endpoint.name}`, err instanceof Error ? err.message : String(err));
     return false;
   }
-  if (pages.length === 0) {
-    log.warn({ ep: endpoint.name }, 'botcake: API returned 0 pages — skipping insert. Check access token.');
-    void addNotification('external_error', 'warning', 'BotCake API Returned 0 Pages', `Endpoint "${endpoint.name}" returned 0 pages during refresh. Check the access token in Settings > Endpoints.`);
+  if (bcResult.pages.length === 0) {
+    if (bcResult.authFailure) return false;
+    log.warn({ ep: endpoint.name }, 'botcake: API returned 0 pages — skipping insert');
+    void addNotification('external_error', 'warning', 'BotCake API Returned 0 Pages', `Endpoint "${endpoint.name}" returned 0 pages during refresh. Skipping insert.`);
     return false;
   }
   const runId = `botcake_refresh_${Date.now()}_${endpoint.id}`;
@@ -162,7 +166,7 @@ async function refreshSingleBotCake(endpoint: EndpointRow): Promise<boolean> {
 
   const pancakeActive = await getPancakeActivePageIds();
 
-  const noOrders = pages.filter(p => !pancakeActive.has(p.page_id)).map(p => p.page_id);
+  const noOrders = bcResult.pages.filter(p => !pancakeActive.has(p.page_id)).map(p => p.page_id);
   const [convResult, toolsActive] = await Promise.all([
     checkBotCakeConversations(noOrders, endpoint.access_token, fbPageId),
     checkBotCakeToolsFlows(noOrders, endpoint.access_token, fbPageId),
@@ -171,7 +175,7 @@ async function refreshSingleBotCake(endpoint: EndpointRow): Promise<boolean> {
   let activePages: SlimPage[] = [];
   let inactivePages: SlimPage[] = [];
 
-  for (const p of pages) {
+  for (const p of bcResult.pages) {
     if (pancakeActive.has(p.page_id)) {
       activePages.push({
         page_id: p.page_id, id: p.page_id,
@@ -287,13 +291,13 @@ async function refreshSingleBotCake(endpoint: EndpointRow): Promise<boolean> {
     alert_count: alertCount,
     rule_version: null,
     in_maintenance_window: false,
-    total_pages: pages.length,
+    total_pages: bcResult.pages.length,
     active_pages_count: activePages.length,
     inactive_pages_count: inactivePages.length,
     receiver_sd_size_bytes: null,
     raw_summary: {
       source: 'botcake-refresh',
-      page_count: pages.length,
+      page_count: bcResult.pages.length,
       pancake_activity: activePages.filter(p => p.activation_reason === 'pancake-activity').length,
       has_conversations: activePages.filter(p => p.activation_reason === 'has-conversations').length,
       has_tools: activePages.filter(p => p.activation_reason === 'has-tools').length,
@@ -309,7 +313,7 @@ async function refreshSingleBotCake(endpoint: EndpointRow): Promise<boolean> {
     const hc = activePages.filter(p => p.activation_reason === 'has-conversations').length;
     const ht = activePages.filter(p => p.activation_reason === 'has-tools').length;
     const na = inactivePages.length;
-    log.info('botcake %s: %dA (%dorders+%dconv+%dtools) / %dI — %d total, run %s', endpoint.name, activePages.length, pa, hc, ht, na, pages.length, runId);
+    log.info('botcake %s: %dA (%dorders+%dconv+%dtools) / %dI — %d total, run %s', endpoint.name, activePages.length, pa, hc, ht, na, bcResult.pages.length, runId);
   }
   return true;
 }

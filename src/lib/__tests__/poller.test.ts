@@ -96,10 +96,11 @@ vi.mock('@/lib/db', () => ({
 }));
 
 vi.mock('@/lib/botcake', () => ({
-  fetchBotCakePages: vi.fn(async () => [...mocks.botCakePages]),
+  fetchBotCakePages: vi.fn(async () => ({ pages: [...mocks.botCakePages], authFailure: false })),
   checkBotCakeConversations: vi.fn(async () => new Map(mocks.convResult)),
   checkBotCakeToolsFlows: vi.fn(async () => new Map(mocks.toolsResult)),
   recordBotCakeApiHealth: vi.fn(),
+  invalidateBotCakeCaches: vi.fn(),
 }));
 
 vi.mock('@/lib/pancake', () => ({

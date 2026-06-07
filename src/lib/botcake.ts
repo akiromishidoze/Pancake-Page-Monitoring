@@ -29,7 +29,11 @@ async function fetchWithTimeout(url: string, options: RequestInit & { timeout?: 
   }
 }
 
-async function fetchWithRetry(url: string, token: string, retries = 2, method: 'GET' | 'POST' = 'GET'): Promise<Response | null> {
+type FetchResult =
+  | { ok: true; response: Response }
+  | { ok: false; authFailure: boolean };
+
+async function fetchWithRetry(url: string, token: string, retries = 2, method: 'GET' | 'POST' = 'GET'): Promise<FetchResult> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const res = await fetchWithTimeout(url, {
@@ -37,7 +41,7 @@ async function fetchWithRetry(url: string, token: string, retries = 2, method: '
         headers: { Authorization: `Bearer ${token}`, 'user-access-token': token },
         timeout: 20_000,
       });
-      if (res.ok) return res;
+      if (res.ok) return { ok: true, response: res };
 
       log.warn({ url, status: res.status }, 'botcake API returned status %d on attempt %d', res.status, attempt + 1);
 
@@ -53,15 +57,15 @@ async function fetchWithRetry(url: string, token: string, retries = 2, method: '
         }
       }
 
-      if (attempt === retries) return null;
+      if (attempt === retries) return { ok: false, authFailure: res.status === 401 };
     } catch (e) {
       log.warn({ err: e }, 'botcake fetch attempt %d failed', attempt);
-      if (attempt === retries) return null;
+      if (attempt === retries) return { ok: false, authFailure: false };
     }
     const delay = Math.min(1000 * Math.pow(2, attempt), 30_000);
     await new Promise(r => setTimeout(r, delay * Math.random()));
   }
-  return null;
+  return { ok: false, authFailure: false };
 }
 
 function parseRetryAfter(value: string | null): number | null {
@@ -80,9 +84,9 @@ async function getBotCakePageTokens(userToken: string, fbPageId: string): Promis
     return _pageTokenCache.tokens;
   }
   const url = `${API_BASE}/integration_page/list_access_token/${fbPageId}`;
-  const res = await fetchWithRetry(url, userToken, 1, 'POST');
-  if (!res) return new Map();
-  const data = BotCakePageTokenSchema.array().parse(await res.json());
+  const pageTokenResult = await fetchWithRetry(url, userToken, 1, 'POST');
+  if (!pageTokenResult.ok) return new Map();
+  const data = BotCakePageTokenSchema.array().parse(await pageTokenResult.response.json());
   const tokens = new Map(data.map(d => [d.page_id, d.public_token]));
   _pageTokenCache = { tokens, fetchedAt: Date.now() };
   return tokens;
@@ -322,9 +326,9 @@ async function resolveBotCakePageNames(
 
   try {
     const url = `${API_BASE}/integration_page/list_access_token/${fbPageId}`;
-    const res = await fetchWithRetry(url, token, 1, 'POST');
-    if (res) {
-      const data = BotCakePageTokenSchema.array().parse(await res.json());
+    const nameResult = await fetchWithRetry(url, token, 1, 'POST');
+    if (nameResult.ok) {
+      const data = BotCakePageTokenSchema.array().parse(await nameResult.response.json());
       for (const entry of data) {
         if (entry.name && unnamedIds.includes(entry.page_id) && !result.has(entry.page_id)) {
           result.set(entry.page_id, entry.name);
@@ -392,13 +396,13 @@ async function setCachedPageNames(entries: Map<string, string>): Promise<void> {
   }
 }
 
-export async function fetchBotCakePages(token: string, fbPageId: string): Promise<BotCakePage[]> {
-  const ids = await fetchBotCakePageIds(token, fbPageId);
-  if (ids.length === 0) return [];
+export async function fetchBotCakePages(token: string, fbPageId: string): Promise<{ pages: BotCakePage[]; authFailure: boolean }> {
+  const { ids, authFailure } = await fetchBotCakePageIds(token, fbPageId);
+  if (ids.length === 0) return { pages: [], authFailure };
 
   const cached = await getCachedPageNames(ids);
   if (cached.size === ids.length) {
-    return ids.map(id => ({ page_id: id, name: cached.get(id) ?? `Page ${id}` }));
+    return { pages: ids.map(id => ({ page_id: id, name: cached.get(id) ?? `Page ${id}` })), authFailure }; 
   }
 
   const nameMap = new Map(cached);
@@ -440,10 +444,13 @@ export async function fetchBotCakePages(token: string, fbPageId: string): Promis
     void setCachedPageNames(newEntries);
   }
 
-  return ids.map((id) => ({
-    page_id: id,
-    name: nameMap.get(id) ?? `Page ${id}`,
-  }));
+  return {
+    pages: ids.map((id) => ({
+      page_id: id,
+      name: nameMap.get(id) ?? `Page ${id}`,
+    })),
+    authFailure,
+  };
 }
 
 // ─── BotCake API health probe ──────────────────────────────────────────
@@ -487,19 +494,23 @@ function pageListHash(ids: string[]): string {
   return createHash('md5').update(JSON.stringify([...ids].sort())).digest('hex');
 }
 
-async function fetchPageIdsRaw(token: string, fbPageId: string): Promise<string[]> {
+async function fetchPageIdsRaw(token: string, fbPageId: string): Promise<{ ids: string[]; authFailure: boolean }> {
   const all: string[] = [];
   const BATCH = 5;
+  let authFailure = false;
 
   for (let batch = 0; ; batch++) {
     const pageOffset = batch * BATCH;
     const pageNumbers = Array.from({ length: BATCH }, (_, i) => pageOffset + i + 1);
 
     const results = await Promise.all(pageNumbers.map(async pageNum => {
-      const res = await fetchWithRetry(`${API_BASE}/integration_page/${fbPageId}/list_page_id?page=${pageNum}`, token);
-      if (!res) return null;
+      const result = await fetchWithRetry(`${API_BASE}/integration_page/${fbPageId}/list_page_id?page=${pageNum}`, token);
+      if (!result.ok) {
+        if (result.authFailure) authFailure = true;
+        return null;
+      }
       try {
-        const raw: unknown = await res.json();
+        const raw: unknown = await result.response.json();
         let data: string[];
         if (Array.isArray(raw)) {
           data = raw;
@@ -528,25 +539,25 @@ async function fetchPageIdsRaw(token: string, fbPageId: string): Promise<string[
     if (!hasAny) break;
     if (anyShort) break;
   }
-  return all;
+  return { ids: all, authFailure };
 }
 
-export async function fetchBotCakePageIds(token: string, fbPageId: string): Promise<string[]> {
+export async function fetchBotCakePageIds(token: string, fbPageId: string): Promise<{ ids: string[]; authFailure: boolean }> {
   const cacheKey = `page_ids:${fbPageId}`;
   const cached = _pageListCache.get(cacheKey);
 
   if (cached && Date.now() - cached.fetchedAt < PAGE_LIST_CACHE_TTL) {
-    return cached.ids;
+    return { ids: cached.ids, authFailure: false };
   }
 
-  const ids = await fetchPageIdsRaw(token, fbPageId);
+  const { ids, authFailure } = await fetchPageIdsRaw(token, fbPageId);
   const hash = pageListHash(ids);
 
   if (cached && cached.hash === hash) {
     _pageListCache.set(cacheKey, { ...cached, fetchedAt: Date.now() });
-    return cached.ids;
+    return { ids: cached.ids, authFailure };
   }
 
   _pageListCache.set(cacheKey, { hash, ids, fetchedAt: Date.now() });
-  return ids;
+  return { ids, authFailure };
 }
