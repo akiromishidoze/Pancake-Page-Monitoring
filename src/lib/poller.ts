@@ -313,42 +313,83 @@ async function refreshPancake() {
 
   const activePageIdsByShop = new Map<number, Set<string>>();
   let anyShopHadData = false;
+
+  async function restoreFromPreviousRun(sid: number, target: Map<number, Set<string>>): Promise<Set<string>> {
+    const prevRun = (await pool.query(`
+      SELECT run_id FROM runs
+      WHERE endpoint_id = $1 AND (active_pages > 0 OR active_pages IS NULL)
+      ORDER BY generated_at DESC LIMIT 1
+    `, [String(sid)])).rows[0] as { run_id: string } | undefined;
+    if (!prevRun) {
+      const empty = new Set<string>();
+      target.set(sid, empty);
+      return empty;
+    }
+    const prevActive = (await pool.query('SELECT page_id FROM page_states WHERE run_id = $1 AND is_activated IS TRUE', [prevRun.run_id])).rows as { page_id: string }[];
+    const ids = new Set(prevActive.map(p => p.page_id));
+    if (ids.size > 0) {
+      target.set(sid, ids);
+      log.info('pancake: restored %d active pages from previous run for shop %d', ids.size, sid);
+    } else {
+      target.set(sid, new Set<string>());
+    }
+    return ids;
+  }
+
   await Promise.all(TARGET_SHOP_IDS.map(async (sid) => {
+    const shopKey = `pancake:shop:${sid}`;
     const combined = new Set<string>();
+
+    // Per-shop circuit breaker: skip API calls if circuit is OPEN, use fallback data
+    if (!shouldAttempt(shopKey)) {
+      const st = getBreakerState(shopKey);
+      const remaining = st ? Math.max(0, st.cooldownMs - (Date.now() - st.lastFailureTime)) : 0;
+      log.warn('circuit open for pancake shop %d, falling back to previous run data (retry in %dms)', sid, remaining);
+      const ids = await restoreFromPreviousRun(sid, activePageIdsByShop);
+      if (ids.size > 0) anyShopHadData = true;
+      return;
+    }
+
+    let shopFailed = false;
     try {
       const orderIds = await fetchPancakeActivePageIds(token, sid);
       for (const id of orderIds) combined.add(id);
     } catch (err) {
+      shopFailed = true;
       log.error({ err, shopId: sid }, 'pancake: orders failed for shop %d', sid);
-      void addNotification('external_error', 'info', `Orders Fetch Failed for Shop ${sid}`, err instanceof Error ? err.message : String(err));
     }
     try {
       const customerIds = await fetchPancakeActivePageIdsFromCustomers(token, sid);
       for (const id of customerIds) combined.add(id);
     } catch (err) {
+      shopFailed = true;
       log.error({ err, shopId: sid }, 'pancake: customers failed for shop %d', sid);
-      void addNotification('external_error', 'info', `Customers Fetch Failed for Shop ${sid}`, err instanceof Error ? err.message : String(err));
     }
+
+    if (shopFailed) {
+      const prevState = getBreakerState(shopKey);
+      recordFailure(shopKey);
+      // Only notify on transition (CLOSED→failing or HALF_OPEN→failing), not on repeated OPEN failures
+      if (!prevState || prevState.state === 'CLOSED' || prevState.state === 'HALF_OPEN') {
+        void addNotification('external_error', 'info', `Shop Fetch Failed: ${sid}`, 'Failed to fetch orders/customers from Pancake API for this shop.');
+      }
+      // Restore previous run data so the dashboard shows continuity instead of 0 active pages
+      const ids = await restoreFromPreviousRun(sid, activePageIdsByShop);
+      if (ids.size > 0) anyShopHadData = true;
+      return;
+    }
+
+    cbRecordSuccess(shopKey);
     if (combined.size > 0) anyShopHadData = true;
     activePageIdsByShop.set(sid, combined);
   }));
 
+  // Global fallback: if every shop returned 0 data (not from circuit fallback), restore from previous runs
   if (!anyShopHadData) {
     log.warn('pancake: all shops returned 0 active pages — likely network/DNS issue, falling back to previous good run data');
     void addNotification('external_error', 'warning', 'Pancake API Returned 0 Active Pages', 'All shops returned 0 active pages — falling back to previous run data');
-      for (const sid of TARGET_SHOP_IDS) {
-        const prevRun = (await pool.query(`
-          SELECT run_id FROM runs
-          WHERE endpoint_id = $1 AND (active_pages > 0 OR active_pages IS NULL)
-          ORDER BY generated_at DESC LIMIT 1
-        `, [String(sid)])).rows[0] as { run_id: string } | undefined;
-        if (!prevRun) continue;
-        const prevActive = (await pool.query('SELECT page_id FROM page_states WHERE run_id = $1 AND is_activated IS TRUE', [prevRun.run_id])).rows as { page_id: string }[];
-      const ids = new Set(prevActive.map(p => p.page_id));
-      if (ids.size > 0) {
-        activePageIdsByShop.set(sid, ids);
-        log.info('pancake: restored %d active pages from previous run for shop %d', ids.size, sid);
-      }
+    for (const sid of TARGET_SHOP_IDS) {
+      await restoreFromPreviousRun(sid, activePageIdsByShop);
     }
   }
 
