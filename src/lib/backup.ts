@@ -8,13 +8,20 @@ const BACKUPS_DIR = path.join(process.cwd(), 'backups');
 export async function backup(): Promise<string> {
   await fs.mkdir(BACKUPS_DIR, { recursive: true });
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const backupFile = path.join(BACKUPS_DIR, `monitor_${timestamp}.sql`);
+  const backupFile = path.join(BACKUPS_DIR, `monitor_${timestamp}.dump`);
 
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error('DATABASE_URL not set');
 
   await new Promise<void>((resolve, reject) => {
-    const dump = spawn('pg_dump', ['--clean', '--no-owner', '--no-privileges', dbUrl], {
+    const dump = spawn('pg_dump', [
+      '--clean', '--if-exists',
+      '--no-owner', '--no-privileges',
+      '--no-comments', '--no-security-labels',
+      '--no-password',
+      '--format=custom', '--compress=9',
+      '--dbname=' + dbUrl,
+    ], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const writeStream = createWriteStream(backupFile);
@@ -37,7 +44,7 @@ export async function backup(): Promise<string> {
   });
 
   const files = (await fs.readdir(BACKUPS_DIR))
-    .filter(f => f.startsWith('monitor_') && f.endsWith('.sql'))
+    .filter(f => f.startsWith('monitor_') && f.endsWith('.dump'))
     .sort()
     .reverse();
   for (const old of files.slice(30)) {

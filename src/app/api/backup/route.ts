@@ -29,7 +29,7 @@ export async function GET() {
   if (!fs.existsSync(BACKUPS_DIR)) fs.mkdirSync(BACKUPS_DIR, { recursive: true });
 
   const files = fs.readdirSync(BACKUPS_DIR)
-    .filter(f => f.startsWith('monitor_') && f.endsWith('.sql'))
+    .filter(f => f.startsWith('monitor_') && f.endsWith('.dump'))
     .sort()
     .reverse()
     .map((f: string) => {
