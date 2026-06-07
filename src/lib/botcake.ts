@@ -462,25 +462,44 @@ function pageListHash(ids: string[]): string {
 
 async function fetchPageIdsRaw(token: string, fbPageId: string): Promise<string[]> {
   const all: string[] = [];
-  let page = 1;
-  while (true) {
-    const res = await fetchWithRetry(`${API_BASE}/integration_page/${fbPageId}/list_page_id?page=${page}`, token);
-    if (!res) break;
-    const raw: unknown = await res.json();
-    let data: string[];
-    if (Array.isArray(raw)) {
-      data = raw;
-    } else if (raw && typeof raw === 'object') {
-      const obj = raw as Record<string, unknown>;
-      data = (obj.data ?? obj.page_ids ?? obj.pages ?? obj.results ?? []) as string[];
-      if (!Array.isArray(data)) break;
-    } else {
-      break;
+  const BATCH = 5;
+
+  for (let batch = 0; ; batch++) {
+    const pageOffset = batch * BATCH;
+    const pageNumbers = Array.from({ length: BATCH }, (_, i) => pageOffset + i + 1);
+
+    const results = await Promise.all(pageNumbers.map(async pageNum => {
+      const res = await fetchWithRetry(`${API_BASE}/integration_page/${fbPageId}/list_page_id?page=${pageNum}`, token);
+      if (!res) return null;
+      try {
+        const raw: unknown = await res.json();
+        let data: string[];
+        if (Array.isArray(raw)) {
+          data = raw;
+        } else if (raw && typeof raw === 'object') {
+          const obj = raw as Record<string, unknown>;
+          data = (obj.data ?? obj.page_ids ?? obj.pages ?? obj.results ?? []) as string[];
+          if (!Array.isArray(data)) return null;
+        } else {
+          return null;
+        }
+        return data;
+      } catch {
+        return null;
+      }
+    }));
+
+    let hasAny = false;
+    let anyShort = false;
+    for (const data of results) {
+      if (!data || data.length === 0) continue;
+      hasAny = true;
+      all.push(...data);
+      if (data.length < 200) anyShort = true;
     }
-    if (data.length === 0) break;
-    all.push(...data);
-    if (data.length < 200) break;
-    page++;
+
+    if (!hasAny) break;
+    if (anyShort) break;
   }
   return all;
 }
