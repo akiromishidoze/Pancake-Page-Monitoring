@@ -31,7 +31,7 @@ async function fetchWithTimeout(url: string, options: RequestInit & { timeout?: 
 
 type FetchResult =
   | { ok: true; response: Response }
-  | { ok: false; authFailure: boolean };
+  | { ok: false; authFailure: boolean; status?: number };
 
 async function fetchWithRetry(url: string, token: string, retries = 2, method: 'GET' | 'POST' = 'GET'): Promise<FetchResult> {
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -57,10 +57,10 @@ async function fetchWithRetry(url: string, token: string, retries = 2, method: '
         }
       }
 
-      if (attempt === retries) return { ok: false, authFailure: res.status === 401 };
+      if (attempt === retries) return { ok: false, authFailure: res.status === 401, status: res.status === 401 ? undefined : res.status };
     } catch (e) {
       log.warn({ err: e }, 'botcake fetch attempt %d failed', attempt);
-      if (attempt === retries) return { ok: false, authFailure: false };
+      if (attempt === retries) return { ok: false, authFailure: false, status: undefined };
     }
     const delay = Math.min(1000 * Math.pow(2, attempt), 30_000);
     await new Promise(r => setTimeout(r, delay * Math.random()));
@@ -502,11 +502,13 @@ async function fetchPageIdsRaw(token: string, fbPageId: string): Promise<{ ids: 
   for (let batch = 0; ; batch++) {
     const pageOffset = batch * BATCH;
     const pageNumbers = Array.from({ length: BATCH }, (_, i) => pageOffset + i + 1);
+    const httpErrors: number[] = [];
 
     const results = await Promise.all(pageNumbers.map(async pageNum => {
       const result = await fetchWithRetry(`${API_BASE}/integration_page/${fbPageId}/list_page_id?page=${pageNum}`, token);
       if (!result.ok) {
         if (result.authFailure) authFailure = true;
+        if (result.status) httpErrors.push(result.status);
         return null;
       }
       try {
@@ -526,6 +528,13 @@ async function fetchPageIdsRaw(token: string, fbPageId: string): Promise<{ ids: 
         return null;
       }
     }));
+
+    // All requests failed with HTTP errors (not auth) — throw to propagate the status
+    if (!authFailure && httpErrors.length === results.length) {
+      const counts = httpErrors.reduce((acc, s) => { acc[s] = (acc[s] || 0) + 1; return acc; }, {} as Record<number, number>);
+      const statusStr = Object.entries(counts).map(([s, c]) => `${s}×${c}`).join(', ');
+      throw new Error(`BotCake API returned error HTTP status: ${statusStr}`);
+    }
 
     let hasAny = false;
     let anyShort = false;

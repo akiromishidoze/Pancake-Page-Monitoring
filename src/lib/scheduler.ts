@@ -205,10 +205,16 @@ async function checkTokenExpiry() {
 
 // ─── BotCake API health alert ─────────────────────────────────────────
 
+const _healthAlerted = new Set<string>();
+
 async function checkBotCakeApiHealthAlert() {
   for (const [epId, h] of getBotCakeApiHealth()) {
     if (!h.ok && h.consecutiveFailures >= 3) {
+      if (_healthAlerted.has(epId)) continue;
+      _healthAlerted.add(epId);
       void addNotification('external_error', 'critical', `BotCake API Unreachable`, `Endpoint ${epId}: ${h.consecutiveFailures} consecutive failures, last error: ${h.lastError ?? 'unknown'}, last checked: ${h.lastCheckedAt}`);
+    } else if (h.ok) {
+      _healthAlerted.delete(epId);
     }
   }
 }
