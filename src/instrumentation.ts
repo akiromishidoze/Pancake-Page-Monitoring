@@ -27,7 +27,8 @@ export async function register() {
   }
 
   if (!process.env['ENCRYPTION_KEY']) {
-    log.warn('ENCRYPTION_KEY is not set — SMTP passwords will not be encryptable. Set it if you use email notifications.');
+    log.error('MISSING REQUIRED ENV VAR: ENCRYPTION_KEY');
+    throw new Error('ENCRYPTION_KEY is required — used for AES-256-GCM encryption of SMTP passwords');
   }
 
   if (process.env['ALLOWED_ORIGINS']) {
