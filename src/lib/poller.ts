@@ -456,12 +456,13 @@ async function refreshPancake() {
       for (const p of shop.pages) {
         const hasOrders = orderPageIds.has(p.id);
         const apiActive = p.is_activated === true;
+        const activation_reason = hasOrders ? 'pancake-activity' : (apiActive ? 'api-active' : 'no-activity');
         const base = {
           shop_label: ep.shop_label ?? null, shop: ep.shop_label ?? null,
           name: p.name,
           page_id: p.id, id: p.id,
           activity_kind: null, kind: null,
-          activation_reason: null, reason: null,
+          activation_reason, reason: null,
           last_order_at: null, last_customer_activity_at: null,
           state_change: null, activity_kind_change: null,
           is_canary: false,
