@@ -41,6 +41,7 @@ export const PUT = withAuth(async (req: Request, { params }: { params: Promise<{
           : tokenChanged && newToken
             ? new Date(Date.now() + 60 * 86400000).toISOString()
             : existing.token_expires_at,
+      fb_page_id: body.fb_page_id !== undefined ? body.fb_page_id : existing.fb_page_id,
       is_active: body.is_active !== undefined ? body.is_active : existing.is_active,
     });
 

@@ -48,6 +48,7 @@ export const EndpointCreateSchema = z.object({
   access_token: z.string().trim().nullable().optional(),
   token_expires_at: z.string().nullable().optional(),
   shop_label: z.string().trim().nullable().optional(),
+  fb_page_id: z.string().trim().nullable().optional(),
   is_active: z.boolean().optional().default(true),
 });
 
@@ -58,6 +59,7 @@ export const EndpointUpdateSchema = z.object({
   access_token: z.string().trim().nullable().optional(),
   token_expires_at: z.string().nullable().optional(),
   shop_label: z.string().trim().nullable().optional(),
+  fb_page_id: z.string().trim().nullable().optional(),
   is_active: z.boolean().optional(),
 });
 

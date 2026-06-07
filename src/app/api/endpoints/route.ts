@@ -43,6 +43,7 @@ export const POST = withAuth(async (req: Request) => {
           : body.access_token
             ? new Date(Date.now() + 60 * 86400000).toISOString()
             : null,
+      fb_page_id: body.fb_page_id ?? null,
       is_active: body.is_active,
     });
 

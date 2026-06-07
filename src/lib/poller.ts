@@ -138,8 +138,12 @@ export async function refreshBotCake() {
 }
 
 async function refreshSingleBotCake(endpoint: EndpointRow): Promise<boolean> {
-  const fbPageId = endpoint.fb_page_id!;
   if (!endpoint.access_token) return true;
+  if (!endpoint.fb_page_id) {
+    log.warn({ ep: endpoint.name }, 'botcake: no fb_page_id configured, skipping');
+    return false;
+  }
+  const fbPageId = endpoint.fb_page_id;
 
   const fetchStart = Date.now();
   let bcResult: { pages: BotCakePage[]; authFailure: boolean };
