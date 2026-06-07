@@ -8,6 +8,7 @@ const log = createLogger('botcake');
 const API_BASE = 'https://botcake.io/api/public_api/v1';
 const FB_GRAPH = 'https://graph.facebook.com/v22.0';
 const CONVERSATION_CACHE_TTL = 2 * 60 * 1000;
+const PAGE_NAME_CACHE_TTL = 24 * 60 * 60 * 1000;
 
 export type BotCakePage = {
   page_id: string;
@@ -335,36 +336,79 @@ async function resolveBotCakePageNames(
   return result;
 }
 
+async function getCachedPageNames(ids: string[]): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  if (ids.length === 0) return result;
+  const cutoff = new Date(Date.now() - PAGE_NAME_CACHE_TTL).toISOString();
+  const placeholders = ids.map((_, i) => `$${i + 1}`).join(',');
+  const rows = await pool.query(
+    `SELECT page_id, page_name FROM page_name_cache WHERE page_id IN (${placeholders}) AND updated_at >= $${ids.length + 1}`,
+    [...ids, cutoff],
+  );
+  for (const r of rows.rows) {
+    result.set(r.page_id, r.page_name);
+  }
+  return result;
+}
+
+async function setCachedPageNames(entries: Map<string, string>): Promise<void> {
+  if (entries.size === 0) return;
+  const now = new Date().toISOString();
+  for (const [pageId, pageName] of entries) {
+    await pool.query(
+      `INSERT INTO page_name_cache (page_id, page_name, updated_at) VALUES ($1, $2, $3)
+       ON CONFLICT (page_id) DO UPDATE SET page_name = EXCLUDED.page_name, updated_at = EXCLUDED.updated_at`,
+      [pageId, pageName, now],
+    );
+  }
+}
+
 export async function fetchBotCakePages(token: string, fbPageId: string): Promise<BotCakePage[]> {
   const ids = await fetchBotCakePageIds(token, fbPageId);
   if (ids.length === 0) return [];
 
-  const nameMap = new Map<string, string>();
-  const fbToken = process.env.FB_ACCESS_TOKEN;
+  const cached = await getCachedPageNames(ids);
+  if (cached.size === ids.length) {
+    return ids.map(id => ({ page_id: id, name: cached.get(id) ?? `Page ${id}` }));
+  }
 
-  if (fbToken) {
-    const fbInfo = await resolveFbPages(ids);
-    for (const [pageId, info] of fbInfo) {
-      if (info.status === 'valid' && info.name) {
-        nameMap.set(pageId, info.name);
+  const nameMap = new Map(cached);
+  const uncachedIds = ids.filter(id => !nameMap.has(id));
+
+  if (uncachedIds.length > 0) {
+    const fbToken = process.env.FB_ACCESS_TOKEN;
+
+    if (fbToken) {
+      const fbInfo = await resolveFbPages(uncachedIds);
+      for (const [pageId, info] of fbInfo) {
+        if (info.status === 'valid' && info.name) {
+          nameMap.set(pageId, info.name);
+        }
       }
     }
-  }
 
-  const placeholders = ids.map((_, i) => `$${i + 1}`).join(',');
-  const known = PageStateRowSchema.array().parse((await pool.query(`SELECT DISTINCT page_id, page_name FROM page_states WHERE page_id IN (${placeholders})`, ids)).rows);
-  for (const r of known) {
-    if (!nameMap.has(r.page_id) && r.page_name) {
-      nameMap.set(r.page_id, r.page_name);
+    const placeholders = uncachedIds.map((_, i) => `$${i + 1}`).join(',');
+    const known = PageStateRowSchema.array().parse((await pool.query(`SELECT DISTINCT page_id, page_name FROM page_states WHERE page_id IN (${placeholders})`, uncachedIds)).rows);
+    for (const r of known) {
+      if (!nameMap.has(r.page_id) && r.page_name) {
+        nameMap.set(r.page_id, r.page_name);
+      }
     }
-  }
 
-  const unnamedIds = ids.filter(id => !nameMap.has(id));
-  if (unnamedIds.length > 0) {
-    const botcakeNames = await resolveBotCakePageNames(unnamedIds, token, fbPageId);
-    for (const [pageId, name] of botcakeNames) {
-      nameMap.set(pageId, name);
+    const stillUnnamed = uncachedIds.filter(id => !nameMap.has(id));
+    if (stillUnnamed.length > 0) {
+      const botcakeNames = await resolveBotCakePageNames(stillUnnamed, token, fbPageId);
+      for (const [pageId, name] of botcakeNames) {
+        nameMap.set(pageId, name);
+      }
     }
+
+    const newEntries = new Map<string, string>();
+    for (const id of uncachedIds) {
+      const name = nameMap.get(id);
+      if (name) newEntries.set(id, name);
+    }
+    void setCachedPageNames(newEntries);
   }
 
   return ids.map((id) => ({

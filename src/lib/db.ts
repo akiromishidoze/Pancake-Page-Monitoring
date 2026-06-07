@@ -320,6 +320,18 @@ const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 'v7', name: 'botcake page name cache',
+    up: async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS page_name_cache (
+          page_id TEXT PRIMARY KEY,
+          page_name TEXT NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+    },
+  },
 ];
 
 // ──── Partitioning ──────────────────────────────────────────────────────
