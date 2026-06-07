@@ -31,7 +31,7 @@ async function fetchWithTimeout(url: string, options: RequestInit & { timeout?: 
 
 type FetchResult =
   | { ok: true; response: Response }
-  | { ok: false; authFailure: boolean; status?: number };
+  | { ok: false; authFailure: boolean; status?: number; errorBody?: string };
 
 async function fetchWithRetry(url: string, token: string, retries = 2, method: 'GET' | 'POST' = 'GET'): Promise<FetchResult> {
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -57,7 +57,14 @@ async function fetchWithRetry(url: string, token: string, retries = 2, method: '
         }
       }
 
-      if (attempt === retries) return { ok: false, authFailure: res.status === 401, status: res.status === 401 ? undefined : res.status };
+      if (attempt === retries) {
+        let errorBody: string | undefined;
+        try {
+          const text = await res.clone().text();
+          if (text) errorBody = text.length > 500 ? text.slice(0, 500) + '…' : text;
+        } catch { /* best-effort */ }
+        return { ok: false, authFailure: res.status === 401, status: res.status === 401 ? undefined : res.status, errorBody };
+      }
     } catch (e) {
       log.warn({ err: e }, 'botcake fetch attempt %d failed', attempt);
       if (attempt === retries) return { ok: false, authFailure: false, status: undefined };
@@ -503,14 +510,17 @@ async function fetchPageIdsRaw(token: string, fbPageId: string): Promise<{ ids: 
     const pageOffset = batch * BATCH;
     const pageNumbers = Array.from({ length: BATCH }, (_, i) => pageOffset + i + 1);
     const httpErrors: number[] = [];
+    const apiResults: (FetchResult | null)[] = [];
 
     const results = await Promise.all(pageNumbers.map(async pageNum => {
       const result = await fetchWithRetry(`${API_BASE}/integration_page/${fbPageId}/list_page_id?page=${pageNum}`, token);
       if (!result.ok) {
         if (result.authFailure) authFailure = true;
         if (result.status) httpErrors.push(result.status);
+        apiResults.push(result);
         return null;
       }
+      apiResults.push(null);
       try {
         const raw: unknown = await result.response.json();
         let data: string[];
@@ -533,7 +543,9 @@ async function fetchPageIdsRaw(token: string, fbPageId: string): Promise<{ ids: 
     if (!authFailure && httpErrors.length === results.length) {
       const counts = httpErrors.reduce((acc, s) => { acc[s] = (acc[s] || 0) + 1; return acc; }, {} as Record<number, number>);
       const statusStr = Object.entries(counts).map(([s, c]) => `${s}×${c}`).join(', ');
-      throw new Error(`BotCake API returned error HTTP status: ${statusStr}`);
+      const errorBodies = apiResults.filter((r): r is FetchResult & { ok: false } => !r?.ok).map(r => r.errorBody).filter(Boolean);
+      const detail = errorBodies.length > 0 ? `: ${errorBodies[0]}` : '';
+      throw new Error(`BotCake API returned error HTTP status: ${statusStr}${detail}`);
     }
 
     let hasAny = false;
