@@ -4,7 +4,7 @@ import { insertSnapshot, setSetting, listEndpoints, getPancakeActivePageIds, get
 import { broadcastSSE } from './sse';
 import { createLogger } from './logger';
 import { addNotification } from './notifications';
-import { shouldAttempt, recordSuccess as cbRecordSuccess, recordFailure, getBreakerState } from './circuit-breaker';
+import { shouldAttempt, recordSuccess as cbRecordSuccess, recordFailure, getBreakerState, resetBreaker } from './circuit-breaker';
 
 const log = createLogger('poller');
 
@@ -98,6 +98,7 @@ export async function refreshAll() {
 }
 
 const ALERT_DROP_THRESHOLD_PCT = 0.50;
+const _missingFbPageIdNotified = new Set<string>();
 
 export async function refreshBotCake() {
   if (_refreshingBotCake) return;
@@ -106,8 +107,22 @@ export async function refreshBotCake() {
   try {
     botCakeEndpoints = (await listEndpoints()).filter(isBotCakeEndpoint);
 
-    const active = botCakeEndpoints.filter(ep => shouldAttempt('botcake:' + ep.id));
+    // Clear stale circuit breaker and health state for endpoints missing config
     for (const ep of botCakeEndpoints) {
+      if (!ep.fb_page_id) {
+        const key = 'botcake:' + ep.id;
+        if (getBreakerState(key)) resetBreaker(key);
+        recordBotCakeApiHealth(ep.id, true, 0, null);
+        if (!_missingFbPageIdNotified.has(ep.id)) {
+          _missingFbPageIdNotified.add(ep.id);
+          void addNotification('credential_change', 'warning', `BotCake Missing Config: ${ep.name}`, `The "${ep.name}" endpoint has no Facebook Page ID configured. Go to Settings > Endpoints, edit this endpoint, and enter the fb_page_id field.`);
+        }
+      }
+    }
+
+    const active = botCakeEndpoints.filter(ep => ep.fb_page_id && shouldAttempt('botcake:' + ep.id));
+    for (const ep of botCakeEndpoints) {
+      if (!ep.fb_page_id) continue;
       if (getBreakerState('botcake:' + ep.id)?.state === 'OPEN') {
         const st = getBreakerState('botcake:' + ep.id)!;
         const remaining = Math.max(0, st.cooldownMs - (Date.now() - st.lastFailureTime));
@@ -139,10 +154,7 @@ export async function refreshBotCake() {
 
 async function refreshSingleBotCake(endpoint: EndpointRow): Promise<boolean> {
   if (!endpoint.access_token) return true;
-  if (!endpoint.fb_page_id) {
-    log.warn({ ep: endpoint.name }, 'botcake: no fb_page_id configured, skipping');
-    return false;
-  }
+  if (!endpoint.fb_page_id) return true;
   const fbPageId = endpoint.fb_page_id;
 
   const fetchStart = Date.now();
