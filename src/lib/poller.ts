@@ -1,4 +1,4 @@
-import { fetchBotCakePages, checkBotCakeConversations, checkBotCakeToolsFlows, probeBotCakeApiHealth } from './botcake';
+import { fetchBotCakePages, checkBotCakeConversations, checkBotCakeToolsFlows, recordBotCakeApiHealth } from './botcake';
 import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, fetchPancakeActivePageIdsFromCustomers, fetchCachedPancakeShops, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop, type PancakePage } from './pancake';
 import { insertSnapshot, setSetting, listEndpoints, getPancakeActivePageIds, getPreviousRunActiveCount, pool, getBotCakeOverrides, isBotCakeEndpoint, type SlimPage, type EndpointRow } from './db';
 import { broadcastSSE } from './sse';
@@ -98,12 +98,13 @@ async function refreshSingleBotCake(endpoint: EndpointRow): Promise<boolean> {
   const fbPageId = endpoint.fb_page_id!;
   if (!endpoint.access_token) return true;
 
-  void probeBotCakeApiHealth(endpoint.id, endpoint.access_token, fbPageId);
-
   let pages;
+  const fetchStart = Date.now();
   try {
     pages = await fetchBotCakePages(endpoint.access_token, fbPageId);
+    recordBotCakeApiHealth(endpoint.id, true, Date.now() - fetchStart, null);
   } catch (err) {
+    recordBotCakeApiHealth(endpoint.id, false, Date.now() - fetchStart, err instanceof Error ? err.message : String(err));
     log.error({ err, ep: endpoint.name }, 'botcake: fetchBotCakePages failed');
     void addNotification('external_error', 'warning', `BotCake API Error: ${endpoint.name}`, err instanceof Error ? err.message : String(err));
     return false;

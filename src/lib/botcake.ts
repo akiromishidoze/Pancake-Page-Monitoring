@@ -435,49 +435,21 @@ export function getBotCakeApiHealth(): Map<string, BotCakeApiHealth> {
   return _botCakeApiHealth;
 }
 
-export async function probeBotCakeApiHealth(
+export function recordBotCakeApiHealth(
   endpointId: string,
-  token: string,
-  fbPageId: string,
-): Promise<BotCakeApiHealth> {
-  const start = Date.now();
-  let ok = false;
-  let latencyMs: number | null = null;
-  let lastError: string | null = null;
-
-  try {
-    const url = `${API_BASE}/integration_page/${fbPageId}/list_page_id?page=1`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10_000);
-
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${token}` },
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-
-    latencyMs = Date.now() - start;
-    ok = res.ok;
-    if (!ok) lastError = `HTTP ${res.status}`;
-  } catch (e) {
-    latencyMs = Date.now() - start;
-    lastError = e instanceof Error ? e.message : String(e);
-  }
-
+  ok: boolean,
+  latencyMs: number,
+  lastError: string | null,
+): void {
   const prev = _botCakeApiHealth.get(endpointId);
   const consecutive = ok ? 0 : (prev ? prev.consecutiveFailures + 1 : 1);
-
-  const health: BotCakeApiHealth = {
+  _botCakeApiHealth.set(endpointId, {
     ok,
     latencyMs,
     lastCheckedAt: new Date().toISOString(),
     lastError,
     consecutiveFailures: consecutive,
-  };
-
-  _botCakeApiHealth.set(endpointId, health);
-  return health;
+  });
 }
 
 // ─── Page ID fetcher with hash caching ────────────────────────────────

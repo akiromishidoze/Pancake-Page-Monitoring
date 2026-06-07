@@ -99,7 +99,7 @@ vi.mock('@/lib/botcake', () => ({
   fetchBotCakePages: vi.fn(async () => [...mocks.botCakePages]),
   checkBotCakeConversations: vi.fn(async () => new Map(mocks.convResult)),
   checkBotCakeToolsFlows: vi.fn(async () => new Map(mocks.toolsResult)),
-  probeBotCakeApiHealth: vi.fn(async () => ({ ok: true, latencyMs: 50, lastCheckedAt: new Date().toISOString(), lastError: null, consecutiveFailures: 0 })),
+  recordBotCakeApiHealth: vi.fn(),
 }));
 
 vi.mock('@/lib/pancake', () => ({
