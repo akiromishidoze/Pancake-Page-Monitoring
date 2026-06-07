@@ -8,7 +8,7 @@ import { addNotification } from '@/lib/notifications';
 
 export const POST = withAuth(async (req: Request) => {
     const ip = getClientIp(req);
-    const rateLimited = rateLimit(ip, { store: 'change-password', max: 5 });
+    const rateLimited = rateLimit(ip, { store: 'change-password', max: 3 });
     if (rateLimited) return rateLimited;
 
     let raw: unknown;

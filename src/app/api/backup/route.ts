@@ -9,7 +9,7 @@ import { requireApiAuth, withAuth } from '@/lib/auth';
 import { backup } from '@/lib/backup';
 
 export const POST = withAuth(async (req: Request) => {
-    const rateLimited = rateLimit(getClientIp(req), { store: 'backup', max: 2 });
+    const rateLimited = rateLimit(getClientIp(req), { store: 'backup', windowMs: 120_000, max: 2 });
     if (rateLimited) return rateLimited;
 
     const backupFile = await backup();

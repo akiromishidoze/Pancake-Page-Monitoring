@@ -42,7 +42,11 @@ export function rateLimit(
   }
   entry.count++;
   if (entry.count > max) {
-    return NextResponse.json({ ok: false, error: 'Too many requests', code: ErrorCodes.RATE_LIMITED }, { status: 429 });
+    const retryAfter = Math.ceil((entry.resetAt - Date.now()) / 1000);
+    return NextResponse.json(
+      { ok: false, error: 'Too many requests', code: ErrorCodes.RATE_LIMITED },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+    );
   }
   return null;
 }
