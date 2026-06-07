@@ -20,14 +20,20 @@ function resolveAllowedOrigin(requestOrigin: string | null): string {
   return list[0];
 }
 
-export function cors(res: NextResponse, origin?: string | null): NextResponse {
-  const allowOrigin = resolveAllowedOrigin(origin ?? null);
+function setCorsHeaders(res: NextResponse, allowOrigin: string): void {
   res.headers.set('Access-Control-Allow-Origin', allowOrigin);
   res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key');
+  res.headers.set('Access-Control-Max-Age', '7200');
   if (allowOrigin !== '*') {
+    res.headers.set('Access-Control-Allow-Credentials', 'true');
     res.headers.set('Vary', 'Origin');
   }
+}
+
+export function cors(res: NextResponse, origin?: string | null): NextResponse {
+  const allowOrigin = resolveAllowedOrigin(origin ?? null);
+  setCorsHeaders(res, allowOrigin);
   return res;
 }
 
@@ -36,12 +42,7 @@ export function corsReflectOrigin(res: NextResponse, origin: string | null): Nex
     const list = getAllowedOrigins();
     const allowed = list.length === 0 || list.includes(origin);
     const allowOrigin = allowed ? origin : (list.length > 0 ? list[0] : '*');
-    res.headers.set('Access-Control-Allow-Origin', allowOrigin);
-    res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key');
-    if (allowOrigin !== '*') {
-      res.headers.set('Vary', 'Origin');
-    }
+    setCorsHeaders(res, allowOrigin);
   }
   return res;
 }
