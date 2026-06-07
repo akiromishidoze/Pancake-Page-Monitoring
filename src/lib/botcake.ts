@@ -88,9 +88,21 @@ async function getBotCakePageTokens(userToken: string, fbPageId: string): Promis
 
 export type ConversationResult = Map<string, { ts: string | null; count: number }>;
 
+const INCREMENTAL_BACKOFF_MAX = 16;
+
 type CacheEntry<T> =
-  | { hasMatch: true; data: T; checkedAt: number }
-  | { hasMatch: false; checkedAt: number };
+  | { hasMatch: true; data: T; checkedAt: number; staleChecks: number }
+  | { hasMatch: false; checkedAt: number; staleChecks: number };
+
+function effectiveIncrementalTtl(baseTtl: number, staleChecks: number): number {
+  return baseTtl * Math.min(Math.pow(2, staleChecks), INCREMENTAL_BACKOFF_MAX);
+}
+
+function dataUnchanged<T>(a: { hasMatch: boolean; data: T }, b: CacheEntry<T>): boolean {
+  if (a.hasMatch !== b.hasMatch) return false;
+  if (!a.hasMatch) return true;
+  return b.hasMatch && JSON.stringify(a.data) === JSON.stringify(b.data);
+}
 
 async function batchCheckWithCache<T>(
   pageIds: string[],
@@ -107,11 +119,12 @@ async function batchCheckWithCache<T>(
 
   const needsCheck = pageIds.filter(id => {
     const cached = cache.get(id);
-    return !cached || Date.now() - cached.checkedAt > ttl;
+    if (!cached) return true;
+    return Date.now() - cached.checkedAt > effectiveIncrementalTtl(ttl, cached.staleChecks);
   });
   for (const id of pageIds) {
     const c = cache.get(id);
-    if (c && Date.now() - c.checkedAt <= ttl && c.hasMatch) {
+    if (c && Date.now() - c.checkedAt <= effectiveIncrementalTtl(ttl, c.staleChecks) && c.hasMatch) {
       result.set(id, c.data);
     }
   }
@@ -126,20 +139,26 @@ async function batchCheckWithCache<T>(
       const pageId = needsCheck[idx++];
       const token = tokens.get(pageId);
       if (!token) {
-        cache.set(pageId, { hasMatch: false, checkedAt: Date.now() });
+        cache.set(pageId, { hasMatch: false, checkedAt: Date.now(), staleChecks: 0 });
         continue;
       }
       try {
         const checkResult = await checkPage(pageId, token);
-        if (checkResult.hasMatch) {
-          cache.set(pageId, { hasMatch: true, data: checkResult.data, checkedAt: Date.now() });
+        const existing = cache.get(pageId);
+        if (existing && dataUnchanged(checkResult, existing)) {
+          cache.set(pageId, { ...existing, checkedAt: Date.now(), staleChecks: existing.staleChecks + 1 });
+          if (existing.hasMatch) {
+            result.set(pageId, existing.data);
+          }
+        } else if (checkResult.hasMatch) {
+          cache.set(pageId, { hasMatch: true, data: checkResult.data, checkedAt: Date.now(), staleChecks: 0 });
           result.set(pageId, checkResult.data);
         } else {
-          cache.set(pageId, { hasMatch: false, checkedAt: Date.now() });
+          cache.set(pageId, { hasMatch: false, checkedAt: Date.now(), staleChecks: 0 });
         }
       } catch (e) {
         log.warn({ err: e }, 'batchCheckWithCache failed for page %s', pageId);
-        cache.set(pageId, { hasMatch: false, checkedAt: Date.now() });
+        cache.set(pageId, { hasMatch: false, checkedAt: Date.now(), staleChecks: 0 });
       }
     }
   }
