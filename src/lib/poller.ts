@@ -153,8 +153,8 @@ async function refreshSingleBotCake(endpoint: EndpointRow): Promise<boolean> {
     return false;
   }
   if (pages.length === 0) {
-    log.warn({ ep: endpoint.name }, 'botcake: API returned 0 pages — skipping insert');
-    void addNotification('external_error', 'warning', 'BotCake API Returned 0 Pages', `Endpoint "${endpoint.name}" returned 0 pages during refresh. Skipping insert.`);
+    log.warn({ ep: endpoint.name }, 'botcake: API returned 0 pages — skipping insert. Check access token.');
+    void addNotification('external_error', 'warning', 'BotCake API Returned 0 Pages', `Endpoint "${endpoint.name}" returned 0 pages during refresh. Check the access token in Settings > Endpoints.`);
     return false;
   }
   const runId = `botcake_refresh_${Date.now()}_${endpoint.id}`;

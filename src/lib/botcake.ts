@@ -39,6 +39,8 @@ async function fetchWithRetry(url: string, token: string, retries = 2, method: '
       });
       if (res.ok) return res;
 
+      log.warn({ url, status: res.status }, 'botcake API returned status %d on attempt %d', res.status, attempt + 1);
+
       if (res.status === 429) {
         const retryAfter = parseRetryAfter(res.headers.get('Retry-After'));
         if (retryAfter !== null) {
