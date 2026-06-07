@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { getSetting, setSetting, queryRow, type RunRow } from './db';
+import { getSetting, queryRow, type RunRow } from './db';
 import { decrypt, encrypt } from './crypto';
 import { createLogger } from './logger';
 import { addNotification } from './notifications';
@@ -98,67 +98,22 @@ async function sendEmail(event: AlertEvent): Promise<boolean> {
   }
 }
 
-// ─── Dedup cache (persisted to settings table) ────────────────────────
+// ─── In-memory dedup cache (30-minute TTL, lost on restart) ────────────
 
 const CACHE_TTL_MS = 30 * 60 * 1000;
-const SETTINGS_KEY = 'notify_dedup';
 
-let dedupCache: Map<string, number> | null = null;
+const dedupCache = new Map<string, number>();
 
-async function loadDedupCache(): Promise<Map<string, number>> {
-  if (dedupCache !== null) return dedupCache;
-  const raw = await getSetting(SETTINGS_KEY);
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw) as Record<string, number>;
-      const map = new Map<string, number>();
-      const now = Date.now();
-      for (const [key, expiry] of Object.entries(parsed)) {
-        if (expiry > now) map.set(key, expiry);
-      }
-      dedupCache = map;
-    } catch (e) {
-      log.warn({ err: e }, 'failed to parse dedup cache from settings');
-      dedupCache = new Map();
-    }
-  } else {
-    dedupCache = new Map();
-  }
-  return dedupCache;
-}
-
-let persistTimer: ReturnType<typeof setTimeout> | null = null;
-
-async function persistDedupCache(): Promise<void> {
-  if (dedupCache === null) return;
-  if (persistTimer) return; // debounce: already scheduled
-  const snapshot = dedupCache;
-  persistTimer = setTimeout(async () => {
-    persistTimer = null;
-    try {
-      const obj: Record<string, number> = {};
-      for (const [key, expiry] of snapshot.entries()) {
-        obj[key] = expiry;
-      }
-      await setSetting(SETTINGS_KEY, JSON.stringify(obj));
-    } catch (e) {
-      log.warn({ err: e }, 'failed to persist dedup cache');
-    }
-  }, 30_000);
-}
-
-async function isDuplicate(dedupKey: string): Promise<boolean> {
-  const cache = await loadDedupCache();
+function isDuplicate(dedupKey: string): boolean {
   const now = Date.now();
-  const expiry = cache.get(dedupKey);
+  const expiry = dedupCache.get(dedupKey);
   if (expiry !== undefined && expiry > now) return true;
+  dedupCache.delete(dedupKey);
   return false;
 }
 
-async function markSent(dedupKey: string): Promise<void> {
-  const cache = await loadDedupCache();
-  cache.set(dedupKey, Date.now() + CACHE_TTL_MS);
-  void persistDedupCache();
+function markSent(dedupKey: string): void {
+  dedupCache.set(dedupKey, Date.now() + CACHE_TTL_MS);
 }
 
 // ─── Dispatch ─────────────────────────────────────────────────────────
@@ -169,8 +124,8 @@ export async function sendAlert(event: AlertEvent): Promise<void> {
   ]);
 
   const dedupKey = `${event.title}|${event.message}`;
-  if (await isDuplicate(dedupKey)) return;
-  await markSent(dedupKey);
+  if (isDuplicate(dedupKey)) return;
+  markSent(dedupKey);
 
   if (slackUrl) {
     const ok = await sendSlack(slackUrl, event);
