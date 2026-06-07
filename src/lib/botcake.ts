@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { z } from 'zod';
 import { pool } from '@/lib/db';
 import { BotCakePageTokenSchema, BotCakeCustomerDataSchema, BotCakeToolsResponseSchema, BotCakeFlowsResponseSchema, FbPageInfoSchema, PageStateRowSchema } from './schemas';
@@ -9,6 +10,7 @@ const API_BASE = 'https://botcake.io/api/public_api/v1';
 const FB_GRAPH = 'https://graph.facebook.com/v22.0';
 const CONVERSATION_CACHE_TTL = 2 * 60 * 1000;
 const PAGE_NAME_CACHE_TTL = 24 * 60 * 60 * 1000;
+const PAGE_LIST_CACHE_TTL = 5 * 60 * 1000;
 
 export type BotCakePage = {
   page_id: string;
@@ -478,9 +480,15 @@ export async function probeBotCakeApiHealth(
   return health;
 }
 
-// ─── Page ID fetcher ───────────────────────────────────────────────────
+// ─── Page ID fetcher with hash caching ────────────────────────────────
 
-export async function fetchBotCakePageIds(token: string, fbPageId: string): Promise<string[]> {
+const _pageListCache = new Map<string, { hash: string; ids: string[]; fetchedAt: number }>();
+
+function pageListHash(ids: string[]): string {
+  return createHash('md5').update(JSON.stringify([...ids].sort())).digest('hex');
+}
+
+async function fetchPageIdsRaw(token: string, fbPageId: string): Promise<string[]> {
   const all: string[] = [];
   let page = 1;
   while (true) {
@@ -503,4 +511,24 @@ export async function fetchBotCakePageIds(token: string, fbPageId: string): Prom
     page++;
   }
   return all;
+}
+
+export async function fetchBotCakePageIds(token: string, fbPageId: string): Promise<string[]> {
+  const cacheKey = `page_ids:${fbPageId}`;
+  const cached = _pageListCache.get(cacheKey);
+
+  if (cached && Date.now() - cached.fetchedAt < PAGE_LIST_CACHE_TTL) {
+    return cached.ids;
+  }
+
+  const ids = await fetchPageIdsRaw(token, fbPageId);
+  const hash = pageListHash(ids);
+
+  if (cached && cached.hash === hash) {
+    _pageListCache.set(cacheKey, { ...cached, fetchedAt: Date.now() });
+    return cached.ids;
+  }
+
+  _pageListCache.set(cacheKey, { hash, ids, fetchedAt: Date.now() });
+  return ids;
 }
