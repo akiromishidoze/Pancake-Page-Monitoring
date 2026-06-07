@@ -140,10 +140,13 @@ async function batchFetchPageIds(
       }
     }
 
+    let allFull = true;
+    for (const data of results) {
+      if (data && extractItems(data).length < pageSize) { allFull = false; break; }
+    }
     const last = results[results.length - 1];
     if (!last) break;
-    const lastItems = extractItems(last);
-    if (lastItems.length < pageSize) break;
+    if (!allFull) break;
     if (!hasRecent) break;
   }
   return allIds;
