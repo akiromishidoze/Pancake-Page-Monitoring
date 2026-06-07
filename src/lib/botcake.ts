@@ -171,6 +171,12 @@ async function batchCheckWithCache<T>(
   return result;
 }
 
+export function invalidateBotCakeCaches(): void {
+  _pageListCache.clear();
+  _conversationCache.clear();
+  _toolsFlowsCache.clear();
+}
+
 const _conversationCache = new Map<string, CacheEntry<{ ts: string | null; count: number }>>();
 
 export async function checkBotCakeConversations(pageIds: string[], userToken: string, fbPageId: string): Promise<ConversationResult> {

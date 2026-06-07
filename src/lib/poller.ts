@@ -1,4 +1,4 @@
-import { fetchBotCakePages, checkBotCakeConversations, checkBotCakeToolsFlows, recordBotCakeApiHealth } from './botcake';
+import { fetchBotCakePages, checkBotCakeConversations, checkBotCakeToolsFlows, recordBotCakeApiHealth, invalidateBotCakeCaches } from './botcake';
 import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, fetchPancakeActivePageIdsFromCustomers, fetchCachedPancakeShops, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop, type PancakePage } from './pancake';
 import { insertSnapshot, setSetting, listEndpoints, getPancakeActivePageIds, getPreviousRunActiveCount, pool, getBotCakeOverrides, isBotCakeEndpoint, type SlimPage, type EndpointRow } from './db';
 import { broadcastSSE } from './sse';
@@ -491,4 +491,23 @@ export async function pollIfNeeded() {
   } finally {
     _isPolling = false;
   }
+}
+
+export async function triggerBotCakeRefresh(endpointId: string): Promise<boolean> {
+  invalidateBotCakeCaches();
+  const endpoints = (await listEndpoints()).filter(ep => ep.id === endpointId);
+  for (const ep of endpoints) {
+    const ok = await refreshSingleBotCake(ep);
+    if (ok) {
+      cbRecordSuccess('botcake:' + ep.id);
+    }
+    log.info('webhook: botcake refresh for %s completed', ep.name);
+    return ok;
+  }
+  return false;
+}
+
+export async function triggerPancakeRefresh(): Promise<void> {
+  await refreshPancake();
+  log.info('webhook: pancake refresh triggered');
 }
