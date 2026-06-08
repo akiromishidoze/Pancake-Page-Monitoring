@@ -40,14 +40,15 @@ export function SettingsForm({ initialEndpoints }: { initialEndpoints: Endpoint[
     setSuccess('');
     const isNew = !data.id;
     try {
-      const res = await fetch('/api/endpoints', {
-        method: 'POST',
+      const res = await fetch(isNew ? '/api/endpoints' : `/api/endpoints/${data.id}`, {
+        method: isNew ? 'POST' : 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
       const body = await res.json();
       if (!body.ok) {
-        setError(body.error || 'Save failed');
+        const detail = body.details ? ' ' + JSON.stringify(body.details) : '';
+        setError((body.error || 'Save failed') + detail);
         return;
       }
       setSuccess(isNew ? 'Endpoint created' : 'Endpoint updated');
