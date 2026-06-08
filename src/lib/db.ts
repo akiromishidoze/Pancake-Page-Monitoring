@@ -362,6 +362,42 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 'v9', name: 'users table',
+    up: async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          email TEXT UNIQUE NOT NULL,
+          username TEXT,
+          password_hash TEXT NOT NULL,
+          role TEXT NOT NULL DEFAULT 'admin',
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      const existing = await pool.query('SELECT COUNT(*)::int AS cnt FROM users');
+      if (existing.rows[0].cnt === 0) {
+        const emailRow = await pool.query(`SELECT value FROM settings WHERE key = 'auth_email'`);
+        const pwRow = await pool.query(`SELECT value FROM settings WHERE key = 'auth_password'`);
+        const email = emailRow.rows.length > 0 ? emailRow.rows[0].value : 'admin';
+        const pwHash = pwRow.rows.length > 0 ? pwRow.rows[0].value : null;
+        if (pwHash) {
+          await pool.query(
+            'INSERT INTO users (email, username, password_hash, role) VALUES ($1, $2, $3, $4)',
+            [email, email, pwHash, 'admin'],
+          );
+        }
+      }
+    },
+  },
+  {
+    version: 'v10', name: 'sessions user_id column',
+    up: async () => {
+      await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`);
+    },
+  },
 ];
 
 // ──── Partitioning ──────────────────────────────────────────────────────
@@ -1224,19 +1260,29 @@ export async function logAuditEntry(action: string, entityType?: string, entityI
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
-export async function createSessionToken(role?: string): Promise<string> {
+export async function createSessionToken(role?: string, userId?: number): Promise<string> {
   await ensureMigrated();
   const token = crypto.randomUUID();
   const now = new Date().toISOString();
   const expires = new Date(Date.now() + SESSION_TTL_MS).toISOString();
   const pwv = await getCurrentPasswordVersion();
   await pool.query(
-    'INSERT INTO sessions (token, role, password_version, created_at, expires_at) VALUES ($1, $2, $3, $4, $5)',
-    [token, role || 'admin', pwv, now, expires],
+    'INSERT INTO sessions (token, role, password_version, created_at, expires_at, user_id) VALUES ($1, $2, $3, $4, $5, $6)',
+    [token, role || 'admin', pwv, now, expires, userId ?? null],
   );
-  // Prune expired sessions on each new login (lazy cleanup)
   void pruneExpiredSessions();
   return token;
+}
+
+export async function getSessionTokenUser(token: string): Promise<{ id: number; email: string; role: string } | null> {
+  await ensureMigrated();
+  const r = await pool.query<{ id: number; email: string; role: string }>(
+    `SELECT u.id, u.email, u.role FROM sessions s
+     JOIN users u ON u.id = s.user_id
+     WHERE s.token = $1 AND s.expires_at > NOW()`,
+    [token],
+  );
+  return r.rows[0] ?? null;
 }
 
 export async function getSessionRole(token: string | null | undefined): Promise<string | null> {
@@ -1293,5 +1339,95 @@ export async function incrementPasswordVersion(): Promise<void> {
 export async function clearAllSessions(): Promise<void> {
   await ensureMigrated();
   await pool.query('DELETE FROM sessions');
+}
+
+// ──── User CRUD ────────────────────────────────────────────────────────────
+
+export type UserRow = {
+  id: number;
+  email: string;
+  username: string | null;
+  password_hash: string;
+  role: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function listUsers(): Promise<UserRow[]> {
+  await ensureMigrated();
+  const r = await pool.query<UserRow>('SELECT * FROM users ORDER BY created_at ASC');
+  return r.rows;
+}
+
+export async function getUserByEmail(email: string): Promise<UserRow | undefined> {
+  await ensureMigrated();
+  const r = await pool.query<UserRow>('SELECT * FROM users WHERE email = $1', [email]);
+  return r.rows[0];
+}
+
+export async function getUserById(id: number): Promise<UserRow | undefined> {
+  await ensureMigrated();
+  const r = await pool.query<UserRow>('SELECT * FROM users WHERE id = $1', [id]);
+  return r.rows[0];
+}
+
+export async function createUser(email: string, username: string | undefined, passwordHash: string, role: string = 'admin'): Promise<UserRow> {
+  await ensureMigrated();
+  const r = await pool.query<UserRow>(
+    'INSERT INTO users (email, username, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING *',
+    [email, username || email, passwordHash, role],
+  );
+  return r.rows[0];
+}
+
+export async function updateUserPassword(id: number, passwordHash: string): Promise<void> {
+  await ensureMigrated();
+  await pool.query(
+    "UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2",
+    [passwordHash, id],
+  );
+}
+
+export async function updateUserEmail(id: number, email: string): Promise<void> {
+  await ensureMigrated();
+  await pool.query(
+    "UPDATE users SET email = $1, updated_at = NOW() WHERE id = $2",
+    [email, id],
+  );
+}
+
+export async function updateUserRole(id: number, role: string): Promise<void> {
+  await ensureMigrated();
+  await pool.query(
+    "UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2",
+    [role, id],
+  );
+}
+
+export async function setUserActive(id: number, isActive: boolean): Promise<void> {
+  await ensureMigrated();
+  await pool.query(
+    "UPDATE users SET is_active = $1, updated_at = NOW() WHERE id = $2",
+    [isActive, id],
+  );
+}
+
+export async function deleteUser(id: number): Promise<boolean> {
+  await ensureMigrated();
+  const r = await pool.query('DELETE FROM users WHERE id = $1', [id]);
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function getUserCount(): Promise<number> {
+  await ensureMigrated();
+  const r = await pool.query('SELECT COUNT(*)::int AS cnt FROM users');
+  return r.rows[0].cnt;
+}
+
+export async function getAdminCount(): Promise<number> {
+  await ensureMigrated();
+  const r = await pool.query("SELECT COUNT(*)::int AS cnt FROM users WHERE role = 'admin' AND is_active = TRUE");
+  return r.rows[0].cnt;
 }
 

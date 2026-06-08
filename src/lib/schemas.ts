@@ -190,6 +190,21 @@ export const TotpLoginSchema = z.object({
   code: z.string().regex(/^\d{6}$/, 'Code must be 6 digits'),
 });
 
+export const UserCreateSchema = z.object({
+  email: z.string().trim().min(1, 'email is required').email('invalid email'),
+  username: z.string().trim().optional(),
+  password: z.string().min(8, 'password must be at least 8 characters'),
+  role: z.enum(['admin', 'viewer']).optional().default('viewer'),
+});
+
+export const UserUpdateSchema = z.object({
+  email: z.string().trim().email('invalid email').optional(),
+  username: z.string().trim().optional(),
+  password: z.string().min(8, 'password must be at least 8 characters').optional(),
+  role: z.enum(['admin', 'viewer']).optional(),
+  is_active: z.coerce.boolean().optional(),
+});
+
 export const IngestBodySchema = z.object({
   run_id: z.string().optional(),
   generated_at: z.string().optional(),

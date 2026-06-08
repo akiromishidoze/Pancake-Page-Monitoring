@@ -8,6 +8,7 @@ import { NotificationSettings } from '@/components/NotificationSettings';
 import { ConnectorsSettings } from '@/components/ConnectorsSettings';
 import { DataRetentionSettings } from '@/components/DataRetentionSettings';
 import { TwoFactorSetup } from '@/components/TwoFactorSetup';
+import { UserManagement } from '@/components/UserManagement';
 
 export default async function SettingsPage({
   searchParams,
@@ -56,6 +57,10 @@ export default async function SettingsPage({
 
       <SectionErrorBoundary title="Two-Factor Authentication">
         <TwoFactorSetup />
+      </SectionErrorBoundary>
+
+      <SectionErrorBoundary title="User Management">
+        <UserManagement />
       </SectionErrorBoundary>
 
       <SectionErrorBoundary title="Credentials">

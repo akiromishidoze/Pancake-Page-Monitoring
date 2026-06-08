@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
-import { validateCredentials, hashPassword, withAuth } from '@/lib/auth';
-import { setSetting, logAuditEntry } from '@/lib/db';
+import { validateCredentials, hashPassword, withAuth, getSessionUser } from '@/lib/auth';
+import { getUserByEmail, updateUserPassword, updateUserEmail, incrementPasswordVersion, clearAllSessions, logAuditEntry } from '@/lib/db';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { ChangePasswordSchema } from '@/lib/schemas';
 import { addNotification } from '@/lib/notifications';
@@ -10,6 +10,11 @@ export const POST = withAuth(async (req: Request) => {
     const ip = getClientIp(req);
     const rateLimited = await rateLimit(ip, { store: 'change-password', max: 3 });
     if (rateLimited) return rateLimited;
+
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
+      return apiError(ErrorCodes.AUTH_REQUIRED, 'Not authenticated', 401);
+    }
 
     let raw: unknown;
     try {
@@ -25,32 +30,38 @@ export const POST = withAuth(async (req: Request) => {
 
     const { current_email, current_password, new_email, new_password } = parsed.data;
 
-    // Validate current credentials using bcrypt-aware comparison
-    if (!(await validateCredentials(current_email, current_password))) {
+    const targetEmail = current_email || sessionUser.email;
+    const targetUser = await getUserByEmail(targetEmail);
+    if (!targetUser) {
       return apiError(ErrorCodes.FORBIDDEN, 'Current credentials are incorrect', 403);
     }
 
-    if (new_email) {
-      await setSetting('auth_email', new_email);
+    if (targetUser.id !== sessionUser.id && sessionUser.role !== 'admin') {
+      return apiError(ErrorCodes.FORBIDDEN, 'Cannot change another user\'s credentials', 403);
+    }
+
+    if (!(await validateCredentials(targetEmail, current_password))) {
+      return apiError(ErrorCodes.FORBIDDEN, 'Current credentials are incorrect', 403);
     }
 
     const changes: string[] = [];
 
     if (new_password) {
-      // Hash before storing — never save plain text
       const hashed = await hashPassword(new_password);
-      await setSetting('auth_password', hashed);
+      await updateUserPassword(targetUser.id, hashed);
+      await incrementPasswordVersion();
+      await clearAllSessions();
       changes.push('password');
     }
 
-    if (new_email) {
+    if (new_email && new_email !== targetUser.email) {
+      await updateUserEmail(targetUser.id, new_email);
       changes.push('email');
     }
 
     if (changes.length > 0) {
-      const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '';
-      void logAuditEntry('update_credentials', 'auth', 'credentials', `Changed: ${changes.join(', ')}`, ip);
-      void addNotification('credential_change', 'warning', 'Credentials Changed', `Authentication credentials updated: ${changes.join(', ')}`);
+      void logAuditEntry('update_credentials', 'user', String(targetUser.id), `Changed: ${changes.join(', ')}`, ip);
+      void addNotification('credential_change', 'warning', 'Credentials Changed', `User "${targetUser.email}" credentials updated: ${changes.join(', ')}`);
     }
 
     return NextResponse.json({ ok: true, message: 'Credentials updated' });

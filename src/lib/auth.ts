@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { getSetting, setSetting, createSessionToken, validateSessionToken, clearSessionToken } from './db';
+import { getSetting, setSetting, createSessionToken, validateSessionToken, clearSessionToken, getUserByEmail, getUserById, createUser, getUserCount } from './db';
 import { ErrorCodes, apiCatch, requireJson } from './errors';
 import { createLogger } from './logger';
 
@@ -12,71 +12,52 @@ const DEFAULT_PASSWORD = 'admin';
 
 let _credsInitialized = false;
 
-/**
- * Returns true if the value looks like a bcrypt hash (starts with $2b$ or $2a$).
- */
 function isBcryptHash(value: string): boolean {
   return value.startsWith('$2b$') || value.startsWith('$2a$');
 }
 
-/**
- * On first boot: seed default hashed credentials if none exist.
- * On subsequent boots: transparently upgrade any plain-text password still in DB.
- */
 export async function ensureCredentials(): Promise<void> {
   if (_credsInitialized) return;
   _credsInitialized = true;
 
-  const existingPassword = await getSetting('auth_password');
+  const count = await getUserCount();
+  if (count > 0) return;
 
-  if (!existingPassword) {
-    // First boot — store hashed defaults
-    const hashed = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_ROUNDS);
-    await setSetting('auth_email', DEFAULT_EMAIL);
-    await setSetting('auth_password', hashed);
-    log.warn('Default credentials initialized (hashed). Change them in Settings > Change Password.');
+  const existingPassword = await getSetting('auth_password');
+  if (existingPassword) {
+    const existingEmail = (await getSetting('auth_email')) || DEFAULT_EMAIL;
+    const pwHash = isBcryptHash(existingPassword) ? existingPassword : await bcrypt.hash(existingPassword, BCRYPT_ROUNDS);
+    await createUser(existingEmail, existingEmail, pwHash, 'admin');
+    log.info('Migrated existing credentials to users table');
     return;
   }
 
-  // Silently upgrade plain-text password to bcrypt hash
-  if (!isBcryptHash(existingPassword)) {
-    log.warn('Upgrading plain-text password to bcrypt hash...');
-    const hashed = await bcrypt.hash(existingPassword, BCRYPT_ROUNDS);
-    await setSetting('auth_password', hashed);
-    log.info('Password upgraded successfully.');
-  }
+  const hashed = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_ROUNDS);
+  await createUser(DEFAULT_EMAIL, DEFAULT_EMAIL, hashed, 'admin');
+  log.warn('Default admin user created. Change the password in Settings.');
 }
 
 export async function validateCredentials(email: string, password: string): Promise<boolean> {
-  const storedEmail = (await getSetting('auth_email')) || DEFAULT_EMAIL;
-  const storedPassword = (await getSetting('auth_password')) || '';
-
-  if (email !== storedEmail) return false;
-
-  // Support both hashed (normal) and plain-text (legacy fallback only)
-  if (isBcryptHash(storedPassword)) {
-    return bcrypt.compare(password, storedPassword);
+  const user = await getUserByEmail(email);
+  if (!user || !user.is_active) return false;
+  if (isBcryptHash(user.password_hash)) {
+    return bcrypt.compare(password, user.password_hash);
   }
-
-  // Plain-text fallback (should only happen if DB was manually edited)
-  return password === storedPassword;
+  return password === user.password_hash;
 }
 
-/**
- * Hash a plain-text password using bcrypt.
- */
 export async function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, BCRYPT_ROUNDS);
 }
 
 export async function isDefaultPassword(): Promise<boolean> {
-  const storedPassword = await getSetting('auth_password');
-  if (!storedPassword || !isBcryptHash(storedPassword)) return false;
-  return bcrypt.compare(DEFAULT_PASSWORD, storedPassword);
+  const user = await getUserByEmail(DEFAULT_EMAIL);
+  if (!user) return false;
+  return bcrypt.compare(DEFAULT_PASSWORD, user.password_hash);
 }
 
-export async function createSession(role?: string): Promise<string> {
-  return createSessionToken(role);
+export async function createSession(role?: string, userId?: number): Promise<string> {
+  return createSessionToken(role, userId);
 }
 
 export async function requireAdminSession(token: string | null | undefined): Promise<boolean> {
@@ -101,6 +82,15 @@ export async function requireApiAuth(): Promise<NextResponse | null> {
     return NextResponse.json({ ok: false, error: 'Not authenticated', code: ErrorCodes.AUTH_REQUIRED }, { status: 401 });
   }
   return null;
+}
+
+export async function getSessionUser(): Promise<{ id: number; email: string; role: string } | null> {
+  const { cookies } = await import('next/headers');
+  const cookieStore = await cookies();
+  const token = cookieStore.get('session')?.value;
+  if (!token) return null;
+  const { getSessionTokenUser } = await import('./db');
+  return getSessionTokenUser(token);
 }
 
 type RouteHandler = (...args: any[]) => Promise<Response>;

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch, requireJson } from '@/lib/errors';
 import { createSession } from '@/lib/auth';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
-import { getSetting, logAuditEntry } from '@/lib/db';
+import { getSetting, logAuditEntry, getUserByEmail } from '@/lib/db';
 import { TotpLoginSchema } from '@/lib/schemas';
 import { verifyTOTP, consumeTotpTempToken } from '@/lib/totp';
 import { cookies } from 'next/headers';
@@ -43,7 +43,8 @@ export async function POST(req: Request) {
       return apiError(ErrorCodes.AUTH_TOTP_INVALID, 'Invalid code', 401);
     }
 
-    const session = await createSession();
+    const user = await getUserByEmail(identifier);
+    const session = await createSession(user?.role, user?.id);
     const cookieStore = await cookies();
     cookieStore.set('session', session, {
       httpOnly: true,

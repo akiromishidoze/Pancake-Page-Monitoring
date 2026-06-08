@@ -35,10 +35,12 @@ vi.mock('@/lib/errors', () => ({
 vi.mock('@/lib/db', () => {
   const store = new Map<string, string>();
   const sessionTokens = new Map<string, string>();
+  const users = new Map<number, { id: number; email: string; username: string | null; password_hash: string; role: string; is_active: boolean; created_at: string }>();
+  let nextUserId = 1;
   return {
     getSetting: vi.fn(async (key: string) => store.get(key) ?? null),
     setSetting: vi.fn(async (key: string, value: string) => { store.set(key, value); }),
-    createSessionToken: vi.fn(async () => {
+    createSessionToken: vi.fn(async (role?: string) => {
       const token = crypto.randomUUID();
       const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
       sessionTokens.set(token, expires);
@@ -54,6 +56,22 @@ vi.mock('@/lib/db', () => {
       sessionTokens.delete(token);
     }),
     pruneExpiredSessions: vi.fn(async () => {}),
+    getUserCount: vi.fn(async () => users.size),
+    getUserByEmail: vi.fn(async (email: string) => {
+      for (const u of users.values()) {
+        if (u.email === email) return u;
+      }
+      return undefined;
+    }),
+    getUserById: vi.fn(async (id: number) => users.get(id) ?? undefined),
+    createUser: vi.fn(async (email: string, username: string | undefined, passwordHash: string, role?: string) => {
+      const id = nextUserId++;
+      const u = { id, email, username: username ?? email, password_hash: passwordHash, role: role ?? 'admin', is_active: true, created_at: new Date().toISOString() };
+      users.set(id, u);
+      return u;
+    }),
+    incrementPasswordVersion: vi.fn(async () => {}),
+    clearAllSessions: vi.fn(async () => {}),
   };
 });
 
@@ -62,22 +80,24 @@ describe('ensureCredentials', () => {
 
   it('sets default credentials on first boot', async () => {
     const { ensureCredentials } = await import('@/lib/auth');
-    const { getSetting, setSetting } = await import('@/lib/db');
+    const { createUser, getUserCount } = await import('@/lib/db');
+    expect(await getUserCount()).toBe(0);
     await ensureCredentials();
-    expect(setSetting).toHaveBeenCalledWith('auth_email', 'admin');
-    expect(setSetting).toHaveBeenCalledWith(
-      'auth_password',
+    expect(createUser).toHaveBeenCalledWith(
+      'admin', 'admin',
       expect.stringMatching(/^\$2[ab]\$\d+\$/),
+      'admin',
     );
+    expect(await getUserCount()).toBe(1);
   });
 
   it('does not overwrite existing credentials', async () => {
     const { ensureCredentials } = await import('@/lib/auth');
-    const { setSetting } = await import('@/lib/db');
+    const { createUser } = await import('@/lib/db');
     await ensureCredentials();
-    const callCount = (setSetting as ReturnType<typeof vi.fn>).mock.calls.length;
+    const callCount = (createUser as ReturnType<typeof vi.fn>).mock.calls.length;
     await ensureCredentials();
-    expect((setSetting as ReturnType<typeof vi.fn>).mock.calls.length).toBe(callCount);
+    expect((createUser as ReturnType<typeof vi.fn>).mock.calls.length).toBe(callCount);
   });
 });
 
