@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
-import { getPlatformPage, upsertPlatformPage, deletePlatformPage } from '@/lib/db';
+import { getPlatformPage, upsertPlatformPage, deletePlatformPage, logAuditEntry } from '@/lib/db';
 import { PlatformPageUpdateSchema } from '@/lib/schemas';
 import { withAuth } from '@/lib/auth';
+import { getClientIp } from '@/lib/rate-limit';
 
 export const PUT = withAuth(async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
@@ -32,16 +33,30 @@ export const PUT = withAuth(async (req: Request, { params }: { params: Promise<{
       is_active: body.is_active !== undefined ? body.is_active : existing.is_active,
     });
 
+    const changed: string[] = [];
+    if (body.endpoint_id !== undefined && body.endpoint_id !== existing.endpoint_id) changed.push('endpoint_id');
+    if (body.page_name !== undefined && body.page_name !== existing.page_name) changed.push('page_name');
+    if (body.page_url !== undefined && body.page_url !== existing.page_url) changed.push('page_url');
+    if (body.is_active !== undefined && body.is_active !== existing.is_active) changed.push('is_active');
+    if (changed.length > 0) {
+      const ip = getClientIp(req);
+      void logAuditEntry('update_platform_page', 'platform_page', id, `Changed: ${changed.join(', ')}`, ip);
+    }
+
     return NextResponse.json({ ok: true, page });
 });
 
-export const DELETE = withAuth(async (_req: Request, { params }: { params: Promise<{ id: string }> }) => {
+export const DELETE = withAuth(async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
     const existing = await getPlatformPage(id);
     if (!existing) {
     return apiError(ErrorCodes.NOT_FOUND, 'Platform page not found', 404);
   }
 
+  const name = existing.page_name;
   await deletePlatformPage(id);
+    const ip = getClientIp(req);
+    void logAuditEntry('delete_platform_page', 'platform_page', id, `Deleted "${name}"`, ip);
+
     return NextResponse.json({ ok: true });
 });

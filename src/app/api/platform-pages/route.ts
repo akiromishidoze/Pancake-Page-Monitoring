@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, requireJson } from '@/lib/errors';
-import { listPlatformPages, upsertPlatformPage } from '@/lib/db';
+import { listPlatformPages, upsertPlatformPage, logAuditEntry } from '@/lib/db';
 import { PlatformPageCreateSchema } from '@/lib/schemas';
+import { getClientIp } from '@/lib/rate-limit';
 import { requireApiAuth } from '@/lib/auth';
 
 export async function GET(req: Request) {
@@ -37,6 +38,9 @@ export async function POST(req: Request) {
     page_url: body.page_url ?? null,
     is_active: body.is_active,
   });
+
+  const ip = getClientIp(req);
+  void logAuditEntry('create_platform_page', 'platform_page', page.id, `Created "${body.page_name}" for endpoint ${body.endpoint_id}`, ip);
 
   return NextResponse.json({ ok: true, page });
 }

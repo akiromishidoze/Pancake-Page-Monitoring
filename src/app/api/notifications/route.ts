@@ -3,6 +3,8 @@ import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { withAuth } from '@/lib/auth';
 import { getNotifications, markAsRead, markAllAsRead, dismissNotification, getUnreadCount } from '@/lib/notifications';
 import { MarkNotificationsSchema } from '@/lib/schemas';
+import { logAuditEntry } from '@/lib/db';
+import { getClientIp } from '@/lib/rate-limit';
 
 export const GET = withAuth(async (req: Request) => {
   const url = new URL(req.url);
@@ -31,14 +33,17 @@ export const PATCH = withAuth(async (req: Request) => {
     return apiError(ErrorCodes.VALIDATION_ERROR, 'Validation failed', 400, parsed.error.flatten());
   }
 
+  const ip = getClientIp(req);
   const body = parsed.data;
   if (body.all) {
     await markAllAsRead();
+    void logAuditEntry('mark_notifications_read', 'notification', 'all', 'Marked all notifications as read', ip);
     return NextResponse.json({ ok: true });
   }
 
   if (body.id !== undefined) {
     await markAsRead(body.id);
+    void logAuditEntry('mark_notification_read', 'notification', String(body.id), `Marked notification #${body.id} as read`, ip);
     return NextResponse.json({ ok: true });
   }
 
@@ -56,5 +61,8 @@ export const DELETE = withAuth(async (req: Request) => {
     return apiError(ErrorCodes.INVALID_VALUE, 'Invalid id', 400);
   }
   await dismissNotification(id);
+  const ip = getClientIp(req);
+  void logAuditEntry('dismiss_notification', 'notification', String(id), `Dismissed notification #${id}`, ip);
+
   return NextResponse.json({ ok: true });
 });

@@ -63,13 +63,17 @@ export const PUT = withAuth(async (req: Request, { params }: { params: Promise<{
     return NextResponse.json({ ok: true, endpoint: { ...endpoint, api_key: undefined } });
 });
 
-export const DELETE = withAuth(async (_req: Request, { params }: { params: Promise<{ id: string }> }) => {
+export const DELETE = withAuth(async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
     const existing = await getEndpoint(id);
     if (!existing) {
       return apiError(ErrorCodes.NOT_FOUND, 'Endpoint not found', 404);
     }
 
+    const name = existing.name;
     await deleteEndpoint(id);
+    const ip = getClientIp(req);
+    void logAuditEntry('delete_endpoint', 'endpoint', id, `Deleted "${name}"`, ip);
+
     return NextResponse.json({ ok: true });
 });

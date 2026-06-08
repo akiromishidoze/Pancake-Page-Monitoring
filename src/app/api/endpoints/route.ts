@@ -3,10 +3,11 @@
 
 import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
-import { listEndpoints, upsertEndpoint } from '@/lib/db';
+import { listEndpoints, upsertEndpoint, logAuditEntry } from '@/lib/db';
 import { EndpointCreateSchema } from '@/lib/schemas';
 import { withAuth } from '@/lib/auth';
 import { addNotification } from '@/lib/notifications';
+import { getClientIp } from '@/lib/rate-limit';
 
 export const GET = withAuth(async () => {
   const endpoints = await listEndpoints();
@@ -47,6 +48,8 @@ export const POST = withAuth(async (req: Request) => {
       is_active: body.is_active,
     });
 
+    const ip = getClientIp(req);
+    void logAuditEntry('create_endpoint', 'endpoint', endpoint.id, `Created "${body.name}"`, ip);
     void addNotification('platform_added', 'info', 'Endpoint Updated', `Endpoint "${body.name}" (${body.id}) configured`);
 
     return NextResponse.json({

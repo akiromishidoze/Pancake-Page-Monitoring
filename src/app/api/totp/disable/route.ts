@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch, requireJson } from '@/lib/errors';
 import { requireApiAuth, validateCredentials } from '@/lib/auth';
-import { setSetting } from '@/lib/db';
+import { setSetting, logAuditEntry } from '@/lib/db';
 import { TotpDisableSchema } from '@/lib/schemas';
+import { getClientIp } from '@/lib/rate-limit';
 
 export async function POST(req: Request) {
   try {
@@ -30,6 +31,9 @@ export async function POST(req: Request) {
 
     await setSetting('totp_enabled', 'false');
     await setSetting('totp_secret', '');
+
+    const ip = getClientIp(req);
+    void logAuditEntry('disable_totp', 'auth', 'totp', 'TOTP two-factor authentication disabled', ip);
 
     return NextResponse.json({ ok: true });
   } catch (e) {

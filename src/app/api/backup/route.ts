@@ -3,19 +3,22 @@
 
 import { NextResponse } from 'next/server';
 import { apiCatch } from '@/lib/errors';
-import { pool } from '@/lib/db';
+import { pool, logAuditEntry } from '@/lib/db';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { requireApiAuth, withAuth } from '@/lib/auth';
 import { backup } from '@/lib/backup';
 
 export const POST = withAuth(async (req: Request) => {
-    const rateLimited = rateLimit(getClientIp(req), { store: 'backup', windowMs: 120_000, max: 2 });
+    const ip = getClientIp(req);
+    const rateLimited = rateLimit(ip, { store: 'backup', windowMs: 120_000, max: 2 });
     if (rateLimited) return rateLimited;
 
     const backupFile = await backup();
     const fs = await import('fs');
     const stats = fs.statSync(backupFile);
     const sizeKb = (stats.size / 1024).toFixed(1);
+
+    void logAuditEntry('trigger_backup', 'system', 'backup', `Manual backup created (${sizeKb} KB)`, ip);
 
     return NextResponse.json({ ok: true, file: backupFile, size_kb: sizeKb });
 });

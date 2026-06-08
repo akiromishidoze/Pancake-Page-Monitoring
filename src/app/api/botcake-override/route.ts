@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch, requireJson } from '@/lib/errors';
-import { setBotCakeOverride, removeBotCakeOverride } from '@/lib/db';
+import { setBotCakeOverride, removeBotCakeOverride, logAuditEntry } from '@/lib/db';
 import { refreshAll } from '@/lib/poller';
 import { cors, corsOptions } from '@/lib/cors';
 import { BotCakeOverrideSchema } from '@/lib/schemas';
 import { requireApiAuth } from '@/lib/auth';
+import { getClientIp } from '@/lib/rate-limit';
 
 export async function POST(req: Request) {
   try {
@@ -24,11 +25,14 @@ export async function POST(req: Request) {
       return cors(apiError(ErrorCodes.VALIDATION_ERROR, 'Validation failed', 400, parsed.error.flatten()));
     }
 
+    const ip = getClientIp(req);
     const body = parsed.data;
     if (body.remove) {
       await removeBotCakeOverride(body.page_id);
+      void logAuditEntry('remove_botcake_override', 'botcake_override', body.page_id, `Removed override for page ${body.page_id}`, ip);
     } else {
       await setBotCakeOverride(body.page_id, body.is_active, body.reason ?? 'manual-override');
+      void logAuditEntry('set_botcake_override', 'botcake_override', body.page_id, `Set override for page ${body.page_id}: active=${body.is_active}`, ip);
     }
 
     await refreshAll();

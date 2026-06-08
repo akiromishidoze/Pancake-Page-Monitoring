@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
-import { listPlatformConnectors, upsertPlatformConnector, deletePlatformConnector, getPlatformConnector } from '@/lib/db';
+import { listPlatformConnectors, upsertPlatformConnector, logAuditEntry } from '@/lib/db';
 import { ConnectorCreateSchema } from '@/lib/schemas';
 import { withAuth } from '@/lib/auth';
 import { addNotification } from '@/lib/notifications';
+import { getClientIp } from '@/lib/rate-limit';
 
 export const GET = withAuth(async () => {
   const connectors = await listPlatformConnectors();
@@ -36,6 +37,8 @@ export const POST = withAuth(async (req: Request) => {
       is_active: body.is_active,
     });
 
+    const ip = getClientIp(req);
+    void logAuditEntry('create_connector', 'connector', connector.id, `Created "${body.name}" (${body.platform_type})`, ip);
     void addNotification('connector_added', 'info', 'Connector Added', `Connector "${body.name}" (${body.platform_type}) configured`);
 
     return NextResponse.json({ ok: true, connector });

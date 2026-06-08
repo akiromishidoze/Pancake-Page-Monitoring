@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch, requireJson } from '@/lib/errors';
 import { createSession } from '@/lib/auth';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
-import { getSetting } from '@/lib/db';
+import { getSetting, logAuditEntry } from '@/lib/db';
 import { TotpLoginSchema } from '@/lib/schemas';
 import { verifyTOTP, consumeTotpTempToken } from '@/lib/totp';
 import { cookies } from 'next/headers';
@@ -52,6 +52,8 @@ export async function POST(req: Request) {
       path: '/',
       maxAge: 60 * 60 * 24 * 7,
     });
+
+    void logAuditEntry('totp_login', 'auth', identifier, `Successful TOTP login from ${ip}`, ip);
 
     return NextResponse.json({ ok: true });
   } catch (e) {

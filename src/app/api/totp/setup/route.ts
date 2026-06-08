@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch, requireJson } from '@/lib/errors';
 import { requireApiAuth } from '@/lib/auth';
 import { generateSecret, generateTOTPUri, verifyTOTP } from '@/lib/totp';
-import { getSetting, setSetting } from '@/lib/db';
+import { getSetting, setSetting, logAuditEntry } from '@/lib/db';
 import { TotpSetupSchema } from '@/lib/schemas';
+import { getClientIp } from '@/lib/rate-limit';
 import QRCode from 'qrcode';
 
 let _pendingSecret: string | null = null;
@@ -56,6 +57,9 @@ export async function POST(req: Request) {
     await setSetting('totp_secret', secret);
     await setSetting('totp_enabled', 'true');
     _pendingSecret = null;
+
+    const ip = getClientIp(req);
+    void logAuditEntry('enable_totp', 'auth', 'totp', 'TOTP two-factor authentication enabled', ip);
 
     return NextResponse.json({ ok: true });
   } catch (e) {
