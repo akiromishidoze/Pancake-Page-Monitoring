@@ -251,8 +251,14 @@ async function checkPollerHealth() {
   const lastRunMs = parseInt(lastRunStr, 10);
   if (isNaN(lastRunMs)) return;
 
+  // Use the larger of: 2× the configured schedule interval, or the default threshold
+  const { intervalMs } = await getScheduleSettings();
+  const effectiveThreshold = intervalMs !== null
+    ? Math.max(intervalMs * 2, POLLER_STALE_THRESHOLD_MS)
+    : POLLER_STALE_THRESHOLD_MS;
+
   const elapsed = now - lastRunMs;
-  if (elapsed < POLLER_STALE_THRESHOLD_MS) {
+  if (elapsed < effectiveThreshold) {
     _pollerHealthAlerted.clear();
     return;
   }
@@ -263,23 +269,24 @@ async function checkPollerHealth() {
   if (activeEndpoints.length === 0) return;
 
   // Poller is stale — send alert (once per stale episode)
-  const alertKey = `stale:${Math.floor(elapsed / POLLER_STALE_THRESHOLD_MS)}`;
+  const alertKey = `stale:${Math.floor(elapsed / effectiveThreshold)}`;
   if (_pollerHealthAlerted.has(alertKey)) return;
   _pollerHealthAlerted.add(alertKey);
 
   const elapsedMin = Math.round(elapsed / 60000);
-  log.warn('Poller stale — no refresh for %d min', elapsedMin);
+  const thresholdMin = Math.round(effectiveThreshold / 60000);
+  log.warn('Poller stale — no refresh for %d min (threshold: %d min)', elapsedMin, thresholdMin);
 
   try {
     const { sendAlert } = await import('./notify');
     await sendAlert({
       title: 'Poller Stale',
-      message: `No data refresh for ${elapsedMin} minutes (threshold: ${POLLER_STALE_THRESHOLD_MS / 60000} min). Active endpoints: ${activeEndpoints.length}.`,
+      message: `No data refresh for ${elapsedMin} minutes (threshold: ${thresholdMin} min). Active endpoints: ${activeEndpoints.length}.`,
       level: 'warning',
       platform: 'system',
       timestamp: new Date().toISOString(),
     });
-    void addNotification('poller_stale', 'warning', 'Poller Stale', `No data refresh for ${elapsedMin} minutes. Active endpoints: ${activeEndpoints.length}.`);
+    void addNotification('poller_stale', 'warning', 'Poller Stale', `No data refresh for ${elapsedMin} minutes (threshold: ${thresholdMin} min). Active endpoints: ${activeEndpoints.length}.`);
   } catch (err) {
     log.error({ err }, 'Failed to send poller health alert');
   }
