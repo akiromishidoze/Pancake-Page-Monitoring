@@ -49,7 +49,7 @@ export const EndpointCreateSchema = z.object({
   token_expires_at: z.string().nullable().optional(),
   shop_label: z.string().trim().nullable().optional(),
   fb_page_id: z.string().trim().nullable().optional(),
-  is_active: z.boolean().optional().default(true),
+  is_active: z.coerce.boolean().optional().default(true),
 });
 
 export const EndpointUpdateSchema = z.object({
@@ -60,21 +60,21 @@ export const EndpointUpdateSchema = z.object({
   token_expires_at: z.string().nullable().optional(),
   shop_label: z.string().trim().nullable().optional(),
   fb_page_id: z.string().trim().nullable().optional(),
-  is_active: z.boolean().optional(),
+  is_active: z.coerce.boolean().optional(),
 });
 
 export const PlatformPageCreateSchema = z.object({
   endpoint_id: z.string().trim().min(1, 'endpoint_id is required'),
   page_name: z.string().trim().min(1, 'page_name is required'),
   page_url: z.string().trim().nullable().optional(),
-  is_active: z.boolean().optional().default(true),
+  is_active: z.coerce.boolean().optional().default(true),
 });
 
 export const PlatformPageUpdateSchema = z.object({
   endpoint_id: z.string().trim().min(1).optional(),
   page_name: z.string().trim().min(1).optional(),
   page_url: z.string().trim().nullable().optional(),
-  is_active: z.boolean().optional(),
+  is_active: z.coerce.boolean().optional(),
 });
 
 export const ConnectorCreateSchema = z.object({
@@ -86,7 +86,7 @@ export const ConnectorCreateSchema = z.object({
   auth_token: z.string().trim().nullable().optional(),
   json_path: z.string().trim().nullable().optional(),
   interval_ms: z.number().int().positive().optional().default(60000),
-  is_active: z.boolean().optional().default(true),
+  is_active: z.coerce.boolean().optional().default(true),
 });
 
 export const LoginSchema = z.object({
@@ -120,7 +120,7 @@ export const ScheduleSchema = z.object({
 
 export const BotCakeOverrideSchema = z.object({
   page_id: z.string().trim().min(1, 'page_id is required'),
-  is_active: z.boolean().optional().default(true),
+  is_active: z.coerce.boolean().optional().default(true),
   reason: z.string().trim().optional(),
   remove: z.boolean().optional(),
 });
