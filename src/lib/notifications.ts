@@ -18,7 +18,8 @@ export type NotificationType =
   | 'canary_down'
   | 'outage_suspected'
   | 'alert_triggered'
-  | 'retention_nearing';
+  | 'retention_nearing'
+  | 'poller_stale';
 
 export type NotificationSeverity = 'info' | 'warning' | 'critical';
 

@@ -95,6 +95,10 @@ export async function startScheduler() {
     checkBotCakeApiHealthAlert().catch(err => log.error({ err }, 'BotCake API health alert error'));
   }, 300_000));
 
+  _intervals.push(setInterval(() => {
+    checkPollerHealth().catch(err => log.error({ err }, 'Poller health alert error'));
+  }, POLLER_HEALTH_INTERVAL_MS));
+
 }
 
 export function stopScheduler() {
@@ -233,6 +237,8 @@ async function checkNotificationPrune() {
 
 // ─── Poller health alerting ─────────────────────────────────────────
 
+const _pollerHealthAlerted = new Set<string>();
+
 async function checkPollerHealth() {
   const now = Date.now();
 
@@ -246,26 +252,34 @@ async function checkPollerHealth() {
   if (isNaN(lastRunMs)) return;
 
   const elapsed = now - lastRunMs;
-  if (elapsed < POLLER_STALE_THRESHOLD_MS) return;
+  if (elapsed < POLLER_STALE_THRESHOLD_MS) {
+    _pollerHealthAlerted.clear();
+    return;
+  }
 
   // Check if there are any active endpoints to monitor
   const endpoints = await listEndpoints();
   const activeEndpoints = endpoints.filter(e => e.is_active);
   if (activeEndpoints.length === 0) return;
 
-  // Poller is stale — send alert
+  // Poller is stale — send alert (once per stale episode)
+  const alertKey = `stale:${Math.floor(elapsed / POLLER_STALE_THRESHOLD_MS)}`;
+  if (_pollerHealthAlerted.has(alertKey)) return;
+  _pollerHealthAlerted.add(alertKey);
+
   const elapsedMin = Math.round(elapsed / 60000);
   log.warn('Poller stale — no refresh for %d min', elapsedMin);
 
   try {
     const { sendAlert } = await import('./notify');
     await sendAlert({
-      title: '⏰ Poller Stale',
+      title: 'Poller Stale',
       message: `No data refresh for ${elapsedMin} minutes (threshold: ${POLLER_STALE_THRESHOLD_MS / 60000} min). Active endpoints: ${activeEndpoints.length}.`,
       level: 'warning',
       platform: 'system',
       timestamp: new Date().toISOString(),
     });
+    void addNotification('poller_stale', 'warning', 'Poller Stale', `No data refresh for ${elapsedMin} minutes. Active endpoints: ${activeEndpoints.length}.`);
   } catch (err) {
     log.error({ err }, 'Failed to send poller health alert');
   }
