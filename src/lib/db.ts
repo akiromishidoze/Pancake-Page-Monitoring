@@ -288,10 +288,16 @@ const MIGRATIONS: Migration[] = [
       ];
       for (const { table, column } of conversions) {
         try {
+          await pool.query(`ALTER TABLE ${table} ALTER COLUMN ${column} DROP DEFAULT`);
+        } catch { /* noop */ }
+        try {
           await pool.query(`ALTER TABLE ${table} ALTER COLUMN ${column} TYPE BOOLEAN USING ${column}::boolean`);
         } catch {
           // Column may already be BOOLEAN or not exist — skip
         }
+        try {
+          await pool.query(`ALTER TABLE ${table} ALTER COLUMN ${column} SET DEFAULT true`);
+        } catch { /* noop */ }
       }
     },
   },
