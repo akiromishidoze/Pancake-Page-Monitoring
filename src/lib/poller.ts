@@ -99,6 +99,7 @@ export async function refreshAll() {
 
 const ALERT_DROP_THRESHOLD_PCT = 0.50;
 const _missingFbPageIdNotified = new Set<string>();
+const _tokenExpiredNotified = new Set<string>();
 
 export async function refreshBotCake() {
   if (_refreshingBotCake) return;
@@ -162,7 +163,12 @@ async function refreshSingleBotCake(endpoint: EndpointRow): Promise<boolean> {
   try {
     bcResult = await fetchBotCakePages(endpoint.access_token, fbPageId);
     if (bcResult.authFailure) {
-      void addNotification('credential_change', 'critical', `BotCake Token Expired: ${endpoint.name}`, `The access token for "${endpoint.name}" returned 401. Generate a new token and update it in Settings > Endpoints.`);
+      if (!_tokenExpiredNotified.has(endpoint.id)) {
+        _tokenExpiredNotified.add(endpoint.id);
+        void addNotification('credential_change', 'critical', `BotCake Token Expired: ${endpoint.name}`, `The access token for "${endpoint.name}" returned 401. Generate a new token and update it in Settings > Endpoints.`);
+      }
+    } else {
+      _tokenExpiredNotified.delete(endpoint.id);
     }
     recordBotCakeApiHealth(endpoint.id, true, Date.now() - fetchStart, null);
   } catch (err) {
