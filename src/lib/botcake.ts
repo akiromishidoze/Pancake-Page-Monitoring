@@ -63,7 +63,8 @@ async function fetchWithRetry(url: string, token: string, retries = 2, method: '
           const text = await res.clone().text();
           if (text) errorBody = text.length > 500 ? text.slice(0, 500) + '…' : text;
         } catch { /* best-effort */ }
-        return { ok: false, authFailure: res.status === 401, status: res.status === 401 ? undefined : res.status, errorBody };
+        const authFailure = res.status === 401 || (res.status === 400 && (errorBody ?? '').includes('invalid_token'));
+        return { ok: false, authFailure, status: authFailure ? undefined : res.status, errorBody };
       }
     } catch (e) {
       log.warn({ err: e }, 'botcake fetch attempt %d failed', attempt);
