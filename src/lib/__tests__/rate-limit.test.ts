@@ -1,37 +1,70 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+const _mockDb = new Map<string, { count: number; reset_at: string }>();
+
+vi.mock('@/lib/db', () => ({
+  pool: {
+    query: vi.fn(async (text: string, params?: unknown[]) => {
+      if (text.includes('SELECT')) {
+        const key = params?.[0] + ':' + params?.[1];
+        const entry = _mockDb.get(key);
+        if (entry) {
+          return { rows: [entry] };
+        }
+        return { rows: [] };
+      }
+      if (text.includes('INSERT') || text.includes('UPDATE')) {
+        if (text.includes('count = 1')) {
+          _mockDb.set(params?.[0] + ':' + params?.[1], { count: 1, reset_at: params?.[2] as string });
+        } else if (text.includes('count = $1')) {
+          const key = params?.[1] + ':' + params?.[2];
+          const existing = _mockDb.get(key) || { count: 1, reset_at: new Date().toISOString() };
+          _mockDb.set(key, { ...existing, count: params?.[0] as number });
+        }
+        return { rowCount: 1 };
+      }
+      if (text.includes('DELETE')) {
+        _mockDb.clear();
+        return { rowCount: 1 };
+      }
+      return { rows: [] };
+    }),
+  },
+}));
+
 describe('rate-limit module', () => {
   beforeEach(() => {
+    _mockDb.clear();
     vi.resetModules();
-    // Mock setInterval so eviction timer doesn't interfere across tests
     vi.useFakeTimers();
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   describe('rateLimit', () => {
     it('returns null for first request in window', async () => {
       const { rateLimit } = await import('../rate-limit');
-      const result = rateLimit('1.2.3.4');
+      const result = await rateLimit('1.2.3.4');
       expect(result).toBeNull();
     });
 
     it('returns null for requests under the limit', async () => {
       const { rateLimit } = await import('../rate-limit');
       for (let i = 0; i < 9; i++) {
-        expect(rateLimit('1.2.3.4')).toBeNull();
+        expect(await rateLimit('1.2.3.4')).toBeNull();
       }
     });
 
     it('returns 429 when exceeding the limit', async () => {
       const { rateLimit } = await import('../rate-limit');
       for (let i = 0; i < 10; i++) {
-        rateLimit('1.2.3.4');
+        await rateLimit('1.2.3.4');
       }
-      const result = rateLimit('1.2.3.4');
+      const result = await rateLimit('1.2.3.4');
       expect(result).not.toBeNull();
       expect(result!.status).toBe(429);
       const body = await result!.json();
@@ -42,31 +75,28 @@ describe('rate-limit module', () => {
     it('uses separate windows for different IPs', async () => {
       const { rateLimit } = await import('../rate-limit');
       for (let i = 0; i < 10; i++) {
-        rateLimit('1.2.3.4');
+        await rateLimit('1.2.3.4');
       }
-      expect(rateLimit('1.2.3.4')).not.toBeNull();
-      expect(rateLimit('5.6.7.8')).toBeNull();
+      expect(await rateLimit('1.2.3.4')).not.toBeNull();
+      expect(await rateLimit('5.6.7.8')).toBeNull();
     });
 
     it('resets after window expires', async () => {
       const { rateLimit } = await import('../rate-limit');
       for (let i = 0; i < 11; i++) {
-        rateLimit('1.2.3.4');
+        await rateLimit('1.2.3.4');
       }
-      expect(rateLimit('1.2.3.4')).not.toBeNull();
+      expect(await rateLimit('1.2.3.4')).not.toBeNull();
 
-      // Advance past window
       vi.advanceTimersByTime(60_001);
 
-      // Should reset
-      expect(rateLimit('1.2.3.4')).toBeNull();
+      expect(await rateLimit('1.2.3.4')).toBeNull();
     });
 
     it('accepts custom windowMs and max', async () => {
       const { rateLimit } = await import('../rate-limit');
-      // 1 request per 1000ms
-      expect(rateLimit('1.2.3.4', { windowMs: 1000, max: 1 })).toBeNull();
-      const result = rateLimit('1.2.3.4', { windowMs: 1000, max: 1 });
+      expect(await rateLimit('1.2.3.4', { windowMs: 1000, max: 1 })).toBeNull();
+      const result = await rateLimit('1.2.3.4', { windowMs: 1000, max: 1 });
       expect(result).not.toBeNull();
       expect(result!.status).toBe(429);
     });
@@ -74,19 +104,16 @@ describe('rate-limit module', () => {
     it('isolates different stores', async () => {
       const { rateLimit } = await import('../rate-limit');
       for (let i = 0; i < 11; i++) {
-        rateLimit('1.2.3.4', { store: 'login' });
+        await rateLimit('1.2.3.4', { store: 'login' });
       }
-      // Exhausted in 'login' store
-      expect(rateLimit('1.2.3.4', { store: 'login' })).not.toBeNull();
-      // Separate store unaffected
-      expect(rateLimit('1.2.3.4', { store: 'api' })).toBeNull();
+      expect(await rateLimit('1.2.3.4', { store: 'login' })).not.toBeNull();
+      expect(await rateLimit('1.2.3.4', { store: 'api' })).toBeNull();
     });
 
     it('defaults store to _default', async () => {
       const { rateLimit } = await import('../rate-limit');
-      expect(rateLimit('1.2.3.4')).toBeNull();
-      // Same unnamed store
-      expect(rateLimit('1.2.3.4', {})).toBeNull();
+      expect(await rateLimit('1.2.3.4')).toBeNull();
+      expect(await rateLimit('1.2.3.4', {})).toBeNull();
     });
   });
 

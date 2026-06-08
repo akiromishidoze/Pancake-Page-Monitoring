@@ -10,7 +10,7 @@ import { cookies } from 'next/headers';
 export async function POST(req: Request) {
   try {
     const ip = getClientIp(req);
-    const rateLimited = rateLimit(ip, { store: 'totp-login', max: 5 });
+    const rateLimited = await rateLimit(ip, { store: 'totp-login', max: 5 });
     if (rateLimited) return rateLimited;
 
     const ctErr = requireJson(req);

@@ -1,3 +1,4 @@
+import { pool } from './db';
 import { createLogger } from './logger';
 
 const log = createLogger('lockout');
@@ -11,83 +12,106 @@ const LOCKOUT_DURATIONS_MS = [
   24 * 60 * 60 * 1000,// 5th+ lockout: 24 hours
 ];
 
-type LockoutEntry = {
-  attempts: number;
-  firstAttemptAt: number;
-  lockoutCount: number;
-  lockoutUntil: number;
-  lastIp: string;
-};
-
-const _store = new Map<string, LockoutEntry>();
-
-let _evictionTimer: ReturnType<typeof setInterval> | null = null;
-
-function startEviction(): void {
-  if (_evictionTimer) return;
-  _evictionTimer = setInterval(() => {
-    const now = Date.now();
-    for (const [key, entry] of _store) {
-      if (now > entry.lockoutUntil && entry.attempts === 0) {
-        _store.delete(key);
-      }
-    }
-  }, 60_000);
-  _evictionTimer.unref();
-}
-
-startEviction();
-
 function getLockoutDuration(lockoutCount: number): number {
   if (lockoutCount <= 0) return 0;
   const idx = Math.min(lockoutCount - 1, LOCKOUT_DURATIONS_MS.length - 1);
   return LOCKOUT_DURATIONS_MS[idx];
 }
 
-export function recordFailedAttempt(identifier: string, ip: string): { locked: boolean; remainingMs: number } {
-  const now = Date.now();
-  let entry = _store.get(identifier);
-
-  if (!entry) {
-    entry = { attempts: 0, firstAttemptAt: now, lockoutCount: 0, lockoutUntil: 0, lastIp: ip };
-    _store.set(identifier, entry);
-  }
-
-  // If currently locked, reject without counting another attempt
-  if (entry.lockoutUntil > now) {
-    return { locked: true, remainingMs: entry.lockoutUntil - now };
-  }
-
-  entry.attempts++;
-  entry.lastIp = ip;
-
-  if (entry.attempts >= MAX_ATTEMPTS) {
-    entry.lockoutCount++;
-    const duration = getLockoutDuration(entry.lockoutCount);
-    entry.lockoutUntil = now + duration;
-    entry.attempts = 0;
-
-    log.warn({ identifier, ip, lockoutCount: entry.lockoutCount, durationMs: duration }, 'account locked due to too many failed login attempts');
-
-    return { locked: true, remainingMs: duration };
-  }
-
-  return { locked: false, remainingMs: 0 };
-}
-
-export function resetAttempts(identifier: string): void {
-  _store.delete(identifier);
-}
-
-export function getLockoutStatus(identifier: string): { locked: boolean; remainingMs: number; attempts: number } {
-  const entry = _store.get(identifier);
-  if (!entry) return { locked: false, remainingMs: 0, attempts: 0 };
-
+export async function recordFailedAttempt(identifier: string, ip: string): Promise<{ locked: boolean; remainingMs: number }> {
   const now = Date.now();
 
-  if (entry.lockoutUntil > now) {
-    return { locked: true, remainingMs: entry.lockoutUntil - now, attempts: 0 };
-  }
+  try {
+    const row = await pool.query<{
+      attempts: number;
+      lockout_count: number;
+      lockout_until: string;
+    }>(
+      'SELECT attempts, lockout_count, lockout_until FROM lockout_entries WHERE identifier = $1',
+      [identifier],
+    );
 
-  return { locked: false, remainingMs: 0, attempts: entry.attempts };
+    if (row.rows.length > 0) {
+      const entry = row.rows[0];
+      const lockoutUntil = new Date(entry.lockout_until).getTime();
+
+      // If currently locked, reject without counting another attempt
+      if (lockoutUntil > now) {
+        return { locked: true, remainingMs: lockoutUntil - now };
+      }
+
+      const newAttempts = entry.attempts + 1;
+
+      if (newAttempts >= MAX_ATTEMPTS) {
+        const newLockoutCount = entry.lockout_count + 1;
+        const duration = getLockoutDuration(newLockoutCount);
+        const lockoutUntilDate = new Date(now + duration);
+
+        await pool.query(
+          `UPDATE lockout_entries
+           SET attempts = 0, lockout_count = $1, lockout_until = $2, last_ip = $3
+           WHERE identifier = $4`,
+          [newLockoutCount, lockoutUntilDate.toISOString(), ip, identifier],
+        );
+
+        log.warn({ identifier, ip, lockoutCount: newLockoutCount, durationMs: duration }, 'account locked due to too many failed login attempts');
+        return { locked: true, remainingMs: duration };
+      }
+
+      await pool.query(
+        'UPDATE lockout_entries SET attempts = $1, last_ip = $2 WHERE identifier = $3',
+        [newAttempts, ip, identifier],
+      );
+
+      return { locked: false, remainingMs: 0 };
+    }
+
+    // First failed attempt — create entry
+    await pool.query(
+      `INSERT INTO lockout_entries (identifier, attempts, first_attempt_at, last_ip)
+       VALUES ($1, 1, NOW(), $2)`,
+      [identifier, ip],
+    );
+
+    return { locked: false, remainingMs: 0 };
+  } catch (err) {
+    log.error({ err }, 'DB lockout check failed — allowing attempt');
+    return { locked: false, remainingMs: 0 };
+  }
+}
+
+export async function resetAttempts(identifier: string): Promise<void> {
+  try {
+    await pool.query('DELETE FROM lockout_entries WHERE identifier = $1', [identifier]);
+  } catch (err) {
+    log.error({ err }, 'failed to reset lockout entry');
+  }
+}
+
+export async function getLockoutStatus(identifier: string): Promise<{ locked: boolean; remainingMs: number; attempts: number }> {
+  try {
+    const row = await pool.query<{
+      attempts: number;
+      lockout_count: number;
+      lockout_until: string;
+    }>(
+      'SELECT attempts, lockout_count, lockout_until FROM lockout_entries WHERE identifier = $1',
+      [identifier],
+    );
+
+    if (row.rows.length === 0) return { locked: false, remainingMs: 0, attempts: 0 };
+
+    const entry = row.rows[0];
+    const lockoutUntil = new Date(entry.lockout_until).getTime();
+    const now = Date.now();
+
+    if (lockoutUntil > now) {
+      return { locked: true, remainingMs: lockoutUntil - now, attempts: 0 };
+    }
+
+    return { locked: false, remainingMs: 0, attempts: entry.attempts };
+  } catch (err) {
+    log.error({ err }, 'failed to read lockout status');
+    return { locked: false, remainingMs: 0, attempts: 0 };
+  }
 }

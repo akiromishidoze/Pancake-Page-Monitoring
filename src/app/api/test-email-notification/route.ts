@@ -5,7 +5,7 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { withAuth } from '@/lib/auth';
 
 export const POST = withAuth(async (req: Request) => {
-    const rateLimited = rateLimit(getClientIp(req), { store: 'test-email-notification', max: 3 });
+    const rateLimited = await rateLimit(getClientIp(req), { store: 'test-email-notification', max: 3 });
     if (rateLimited) return rateLimited;
 
     await sendAlert({

@@ -35,7 +35,7 @@ export async function POST(req: Request) {
   if (ctErr) return ctErr;
 
   const ip = getClientIp(req);
-  const rateLimited = rateLimit(ip, { store: 'notify-settings', max: 10 });
+  const rateLimited = await rateLimit(ip, { store: 'notify-settings', max: 10 });
   if (rateLimited) return rateLimited;
 
   try {

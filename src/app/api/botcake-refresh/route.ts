@@ -16,7 +16,7 @@ function addSecurityHeaders(res: NextResponse): NextResponse {
 
 async function handler(apiKey: string | null, ip?: string, viaQuery?: boolean) {
   if (ip) {
-    const rateLimited = rateLimit(ip, { store: 'botcake-refresh', max: 5 });
+    const rateLimited = await rateLimit(ip, { store: 'botcake-refresh', max: 5 });
     if (rateLimited) return rateLimited;
   }
   try {

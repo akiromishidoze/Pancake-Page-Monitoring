@@ -338,6 +338,30 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 'v8', name: 'rate_limit and lockout tables',
+    up: async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS rate_limit_entries (
+          store_key TEXT NOT NULL,
+          identifier TEXT NOT NULL,
+          count INTEGER NOT NULL DEFAULT 1,
+          reset_at TIMESTAMPTZ NOT NULL,
+          PRIMARY KEY (store_key, identifier)
+        )
+      `);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS lockout_entries (
+          identifier TEXT PRIMARY KEY,
+          attempts INTEGER NOT NULL DEFAULT 0,
+          first_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          lockout_count INTEGER NOT NULL DEFAULT 0,
+          lockout_until TIMESTAMPTZ NOT NULL DEFAULT 'epoch',
+          last_ip TEXT NOT NULL DEFAULT ''
+        )
+      `);
+    },
+  },
 ];
 
 // ──── Partitioning ──────────────────────────────────────────────────────

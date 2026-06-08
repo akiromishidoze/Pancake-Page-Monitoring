@@ -10,7 +10,7 @@ import { backup } from '@/lib/backup';
 
 export const POST = withAuth(async (req: Request) => {
     const ip = getClientIp(req);
-    const rateLimited = rateLimit(ip, { store: 'backup', windowMs: 120_000, max: 2 });
+    const rateLimited = await rateLimit(ip, { store: 'backup', windowMs: 120_000, max: 2 });
     if (rateLimited) return rateLimited;
 
     const result = await backup();

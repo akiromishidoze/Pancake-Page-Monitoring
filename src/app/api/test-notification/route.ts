@@ -6,7 +6,7 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { withAuth } from '@/lib/auth';
 
 export const POST = withAuth(async (req: Request) => {
-    const rateLimited = rateLimit(getClientIp(req), { store: 'test-notification', max: 3 });
+    const rateLimited = await rateLimit(getClientIp(req), { store: 'test-notification', max: 3 });
     if (rateLimited) return rateLimited;
     const webhook = await getSetting('notify_slack_webhook');
     if (!webhook) {
