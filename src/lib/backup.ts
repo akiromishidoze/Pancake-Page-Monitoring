@@ -2,10 +2,17 @@ import fs from 'fs/promises';
 import { createWriteStream } from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
+import { uploadToS3, cleanupRemoteBackups } from './remote-backup';
 
 const BACKUPS_DIR = path.join(process.cwd(), 'backups');
 
-export async function backup(): Promise<string> {
+export type BackupResult = {
+  file: string;
+  size_kb: string;
+  remote_key: string | null;
+};
+
+export async function backup(): Promise<BackupResult> {
   await fs.mkdir(BACKUPS_DIR, { recursive: true });
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const backupFile = path.join(BACKUPS_DIR, `monitor_${timestamp}.dump`);
@@ -43,6 +50,23 @@ export async function backup(): Promise<string> {
     });
   });
 
+  const sizeKb = (await fs.stat(backupFile)).size / 1024;
+
+  let remoteKey: string | null = null;
+  try {
+    remoteKey = await uploadToS3(backupFile);
+    if (remoteKey) {
+      const deleted = await cleanupRemoteBackups();
+      if (deleted > 0) {
+        const { createLogger } = await import('./logger');
+        createLogger('backup').info('cleaned up %d old remote backup(s)', deleted);
+      }
+    }
+  } catch (err) {
+    const { createLogger } = await import('./logger');
+    createLogger('backup').error({ err }, 'remote backup upload failed');
+  }
+
   const files = (await fs.readdir(BACKUPS_DIR))
     .filter(f => f.startsWith('monitor_') && f.endsWith('.dump'))
     .sort()
@@ -51,5 +75,5 @@ export async function backup(): Promise<string> {
     await fs.unlink(path.join(BACKUPS_DIR, old));
   }
 
-  return backupFile;
+  return { file: backupFile, size_kb: sizeKb.toFixed(1), remote_key: remoteKey };
 }

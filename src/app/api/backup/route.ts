@@ -13,14 +13,14 @@ export const POST = withAuth(async (req: Request) => {
     const rateLimited = rateLimit(ip, { store: 'backup', windowMs: 120_000, max: 2 });
     if (rateLimited) return rateLimited;
 
-    const backupFile = await backup();
-    const fs = await import('fs');
-    const stats = fs.statSync(backupFile);
-    const sizeKb = (stats.size / 1024).toFixed(1);
+    const result = await backup();
+    const detail = result.remote_key
+      ? `Manual backup created (${result.size_kb} KB, remotely uploaded)`
+      : `Manual backup created (${result.size_kb} KB)`;
 
-    void logAuditEntry('trigger_backup', 'system', 'backup', `Manual backup created (${sizeKb} KB)`, ip);
+    void logAuditEntry('trigger_backup', 'system', 'backup', detail, ip);
 
-    return NextResponse.json({ ok: true, file: backupFile, size_kb: sizeKb });
+    return NextResponse.json({ ok: true, file: result.file, size_kb: result.size_kb, remote_key: result.remote_key });
 });
 
 export async function GET() {
@@ -40,5 +40,17 @@ export async function GET() {
       return { file: f, size_kb: (stats.size / 1024).toFixed(1), created_at: stats.mtime.toISOString() };
     });
 
-  return NextResponse.json({ ok: true, backups: files });
+  let remote: { key: string; size: number; lastModified: string }[] = [];
+  try {
+    const { listRemoteBackups } = await import('@/lib/remote-backup');
+    remote = (await listRemoteBackups()).map(r => ({
+      key: r.key,
+      size: r.size,
+      lastModified: r.lastModified.toISOString(),
+    }));
+  } catch {
+    // remote listing is best-effort
+  }
+
+  return NextResponse.json({ ok: true, backups: files, remote_backups: remote });
 }

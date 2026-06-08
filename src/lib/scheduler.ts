@@ -116,9 +116,9 @@ async function checkBackup() {
 
   try {
     const { backup } = await import('./backup');
-    const file = await backup();
+    const result = await backup();
     await setSetting('last_backup_time', now.toString());
-    log.info('backup created: %s', file);
+    log.info({ remote: !!result.remote_key }, 'backup created: %s', result.file);
   } catch (err) {
     log.error({ err }, 'backup failed');
   }
