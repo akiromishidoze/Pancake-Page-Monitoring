@@ -34,3 +34,6 @@ jobs:
 
       - name: Tests
         run: npm test
+
+      - name: npm audit (all levels)
+        run: npm audit
