@@ -33,7 +33,7 @@ export async function register() {
   if (process.env['ALLOWED_ORIGINS']) {
     log.info('ALLOWED_ORIGINS set — CORS restricted to: %s', process.env['ALLOWED_ORIGINS']);
   } else {
-    log.warn('ALLOWED_ORIGINS not set — CORS allows all origins (*). Set it for production.');
+    log.warn('ALLOWED_ORIGINS not set — cross-origin browser requests will be rejected. Set it to your dashboard domain for production.');
   }
 
   if (process.env['PGBOUNCER'] === 'true') {
@@ -49,6 +49,26 @@ export async function register() {
 
   if (process.env['NODE_ENV'] !== 'production') {
     log.warn('NODE_ENV is not set to "production" — cookies will not use the secure flag, and logs will use pretty-print transport');
+  }
+
+  if (process.env['S3_BUCKET']) {
+    if (!process.env['AWS_REGION']) {
+      log.warn('S3_BUCKET is set but AWS_REGION is missing — S3 backups will fail');
+    } else {
+      log.info('S3_BUCKET set — remote backups enabled to s3://%s/%s', process.env['S3_BUCKET'], process.env['S3_PREFIX'] || '');
+    }
+  }
+
+  if (process.env['SSE_MAX_CLIENTS']) {
+    log.info('SSE_MAX_CLIENTS set — max concurrent SSE connections: %s', process.env['SSE_MAX_CLIENTS']);
+  }
+
+  if (process.env['PG_STATEMENT_TIMEOUT']) {
+    log.info('PG_STATEMENT_TIMEOUT set — statement timeout: %sms', process.env['PG_STATEMENT_TIMEOUT']);
+  }
+
+  if (process.env['WEBHOOK_SECRET']) {
+    log.info('WEBHOOK_SECRET set — webhook endpoints require secret header');
   }
 
   const { initHttpAgent } = await import('./lib/http');
