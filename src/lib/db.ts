@@ -651,26 +651,41 @@ export async function insertSnapshot(input: InsertSnapshotInput): Promise<{ inse
   const existing = await pool.query('SELECT 1 FROM runs WHERE run_id = $1', [input.run_id]);
   if (existing.rows.length > 0) return { inserted: false };
 
-  const allPages = [
-    ...input.active_pages.map(p => ({
-      ...p,
-      _is_active: true,
-      response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
-      fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
-    })),
-    ...input.inactive_pages.map(p => ({
-      ...p,
-      _is_active: false,
-      response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
-      fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
-    })),
-    ...(input.unknown_pages ?? []).map(p => ({
-      ...p,
-      _is_active: null,
-      response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
-      fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
-    })),
-  ];
+  const allPagesMap = new Map<string, typeof input.active_pages[0] & { _is_active: boolean | null; response_ms: number | null; fetch_errors: number }>();
+  for (const p of input.active_pages) {
+    const pid = p.page_id ?? p.id ?? '';
+    if (!allPagesMap.has(pid)) {
+      allPagesMap.set(pid, {
+        ...p,
+        _is_active: true,
+        response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
+        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
+      });
+    }
+  }
+  for (const p of input.inactive_pages) {
+    const pid = p.page_id ?? p.id ?? '';
+    if (!allPagesMap.has(pid)) {
+      allPagesMap.set(pid, {
+        ...p,
+        _is_active: false,
+        response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
+        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
+      });
+    }
+  }
+  for (const p of input.unknown_pages ?? []) {
+    const pid = p.page_id ?? p.id ?? '';
+    if (!allPagesMap.has(pid)) {
+      allPagesMap.set(pid, {
+        ...p,
+        _is_active: null,
+        response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
+        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
+      });
+    }
+  }
+  const allPages = [...allPagesMap.values()];
 
   const client = await pool.connect();
   try {
@@ -828,17 +843,13 @@ export async function getLatestPageStatesForEndpoints(endpointIds: string[]): Pr
   if (endpointIds.length === 0) return [];
   const placeholders = endpointIds.map((_, i) => `$${i + 1}`).join(',');
   return queryRows<PageStateRow>(`
-    WITH latest AS (
-      SELECT endpoint_id, MAX(generated_at) AS max_gen
-      FROM runs
-      WHERE endpoint_id IN (${placeholders})
-      GROUP BY endpoint_id
-    )
     SELECT ps.* FROM page_states ps
-    JOIN runs r ON r.run_id = ps.run_id
-    JOIN latest ON r.endpoint_id = latest.endpoint_id
-      AND r.generated_at = latest.max_gen
-      AND ps.generated_at::timestamptz >= latest.max_gen
+    WHERE ps.run_id IN (
+      SELECT DISTINCT ON (r.endpoint_id) r.run_id
+      FROM runs r
+      WHERE r.endpoint_id IN (${placeholders})
+      ORDER BY r.endpoint_id, r.generated_at DESC, r.run_id DESC
+    )
     ORDER BY ps.shop_label, ps.page_name
   `, endpointIds);
 }
@@ -849,37 +860,36 @@ export async function getLatestPageStates(endpointId?: string): Promise<PageStat
     const ep = endpointId ? await getEndpoint(endpointId) : undefined;
     const rows = await queryRows<PageStateRow>(`
       SELECT ps.* FROM page_states ps
-      JOIN runs r ON r.run_id = ps.run_id
-      WHERE r.endpoint_id = $1
-      AND r.run_id = (SELECT run_id FROM runs WHERE endpoint_id = $2 ORDER BY generated_at DESC LIMIT 1)
-      AND ps.generated_at::timestamptz >= (SELECT generated_at FROM runs WHERE endpoint_id = $2 ORDER BY generated_at DESC LIMIT 1)
+      WHERE ps.run_id = (
+        SELECT run_id FROM runs WHERE endpoint_id = $1
+        ORDER BY generated_at DESC, run_id DESC LIMIT 1
+      )
       ORDER BY ps.shop_label, ps.page_name
-    `, [endpointId, endpointId]);
+    `, [endpointId]);
     if (rows.length > 0) return rows;
 
     if (ep?.shop_label) {
       return queryRows<PageStateRow>(`
         SELECT ps.* FROM page_states ps
-        JOIN runs r ON r.run_id = ps.run_id
-        WHERE r.endpoint_id IS NULL
+        WHERE ps.run_id = (
+          SELECT run_id FROM runs WHERE endpoint_id IS NULL
+          ORDER BY generated_at DESC, run_id DESC LIMIT 1
+        )
         AND ps.shop_label = $1
-        AND r.run_id = (SELECT run_id FROM runs WHERE endpoint_id IS NULL ORDER BY generated_at DESC LIMIT 1)
-        AND ps.generated_at::timestamptz >= (SELECT generated_at FROM runs WHERE endpoint_id IS NULL ORDER BY generated_at DESC LIMIT 1)
         ORDER BY ps.page_name
       `, [ep.shop_label]);
     }
     return [];
   }
   return queryRows<PageStateRow>(`
-    WITH latest AS (
-      SELECT run_id, generated_at FROM runs
+    SELECT ps.* FROM page_states ps
+    WHERE ps.run_id = (
+      SELECT run_id FROM runs
       WHERE endpoint_id IS NULL OR endpoint_id NOT IN (
         SELECT id FROM endpoints WHERE fb_page_id IS NOT NULL OR id = 'botcake-platform' OR url LIKE '%botcake.io%'
       )
-      ORDER BY generated_at DESC LIMIT 1
+      ORDER BY generated_at DESC, run_id DESC LIMIT 1
     )
-    SELECT ps.* FROM page_states ps
-    JOIN latest ON ps.run_id = latest.run_id AND ps.generated_at::timestamptz >= latest.generated_at
     ORDER BY ps.shop_label, ps.page_name
   `);
 }

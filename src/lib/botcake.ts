@@ -503,7 +503,7 @@ function pageListHash(ids: string[]): string {
 }
 
 async function fetchPageIdsRaw(token: string, fbPageId: string): Promise<{ ids: string[]; authFailure: boolean }> {
-  const all: string[] = [];
+  const seen = new Set<string>();
   const BATCH = 5;
   let authFailure = false;
 
@@ -554,14 +554,18 @@ async function fetchPageIdsRaw(token: string, fbPageId: string): Promise<{ ids: 
     for (const data of results) {
       if (!data || data.length === 0) continue;
       hasAny = true;
-      all.push(...data);
+      for (const id of data) {
+        if (!seen.has(id)) {
+          seen.add(id);
+        }
+      }
       if (data.length < 200) anyShort = true;
     }
 
     if (!hasAny) break;
     if (anyShort) break;
   }
-  return { ids: all, authFailure };
+  return { ids: [...seen], authFailure };
 }
 
 export async function fetchBotCakePageIds(token: string, fbPageId: string): Promise<{ ids: string[]; authFailure: boolean }> {
