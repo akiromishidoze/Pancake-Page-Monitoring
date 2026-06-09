@@ -31,10 +31,7 @@ export async function proxy(request: NextRequest) {
     const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
     if (contentLength > MAX_BODY_SIZE) {
       log.warn({ requestId, pathname, contentLength, maxSize: MAX_BODY_SIZE }, 'request body too large');
-      if (pathname.startsWith('/api/')) {
-        return apiJson({ ok: false, error: 'Request body too large', code: ErrorCodes.PAYLOAD_TOO_LARGE }, 413);
-      }
-      return new NextResponse('Request body too large', { status: 413 });
+      return apiJson({ ok: false, error: 'Request body too large', code: ErrorCodes.PAYLOAD_TOO_LARGE }, 413);
     }
   }
 

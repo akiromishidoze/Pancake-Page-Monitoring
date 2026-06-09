@@ -2,13 +2,14 @@ export const dynamic = 'force-dynamic';
 
 import { addClient, removeClient, getClientCount, MAX_CLIENTS } from '@/lib/sse';
 import { requireApiAuth } from '@/lib/auth';
+import { ErrorCodes, apiError } from '@/lib/errors';
 
 export async function GET(req: Request) {
   const auth = await requireApiAuth();
   if (auth) return auth;
 
   if (getClientCount() >= MAX_CLIENTS) {
-    return new Response('Too many connections — server at capacity', { status: 503 });
+    return apiError(ErrorCodes.SSE_LIMIT_REACHED, 'Too many connections — server at capacity', 503);
   }
 
   let id: string | null = null;

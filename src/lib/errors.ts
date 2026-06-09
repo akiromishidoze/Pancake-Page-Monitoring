@@ -25,6 +25,7 @@ export const ErrorCodes = {
   INTERNAL_ERROR: 'INTERNAL_ERROR',
   MISSING_FIELD: 'MISSING_FIELD',
   INVALID_VALUE: 'INVALID_VALUE',
+  SSE_LIMIT_REACHED: 'SSE_LIMIT_REACHED',
 } as const;
 
 export type ErrorCode = string;
