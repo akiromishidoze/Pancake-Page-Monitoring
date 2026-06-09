@@ -212,3 +212,11 @@ export const IngestBodySchema = z.object({
   rows: z.array(IngestRowSchema).optional().default([]),
   summary: IngestSummarySchema.optional().default({}),
 });
+
+export const WebhookPancakeSchema = z.object({
+  shop_id: z.number().int().positive().optional(),
+});
+
+export const WebhookBotCakeSchema = z.object({
+  endpoint_id: z.string().trim().min(1, 'endpoint_id is required'),
+});

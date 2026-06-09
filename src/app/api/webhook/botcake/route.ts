@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
+import { ErrorCodes, apiError } from '@/lib/errors';
+import { WebhookBotCakeSchema } from '@/lib/schemas';
 import { triggerBotCakeRefresh } from '@/lib/poller';
 import { createLogger } from '@/lib/logger';
 
@@ -17,19 +18,20 @@ export async function POST(req: Request) {
     return apiError(ErrorCodes.AUTH_REQUIRED, 'Invalid webhook secret', 401);
   }
 
-  let body: { endpoint_id?: string };
+  let body: unknown;
   try {
     body = await req.json();
   } catch {
     return apiError(ErrorCodes.VALIDATION_INVALID_JSON, 'Invalid JSON body', 400);
   }
 
-  if (!body.endpoint_id) {
-    return apiError(ErrorCodes.MISSING_FIELD, 'Missing endpoint_id', 400);
+  const parsed = WebhookBotCakeSchema.safeParse(body);
+  if (!parsed.success) {
+    return apiError(ErrorCodes.VALIDATION_ERROR, 'Validation failed', 400, parsed.error.flatten());
   }
 
-  void triggerBotCakeRefresh(body.endpoint_id).then(ok => {
-    log.info('botcake webhook processed for %s: %s', body.endpoint_id, ok ? 'ok' : 'failed');
+  void triggerBotCakeRefresh(parsed.data.endpoint_id).then(ok => {
+    log.info('botcake webhook processed for %s: %s', parsed.data.endpoint_id, ok ? 'ok' : 'failed');
   });
 
   return NextResponse.json({ ok: true, message: 'BotCake refresh triggered' });
