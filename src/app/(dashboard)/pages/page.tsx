@@ -1,4 +1,4 @@
-import { listEndpoints, slugify, isPancakeEndpoint } from '@/lib/db';
+import { listEndpoints, slugify, isPancakeEndpoint, type EndpointRow } from '@/lib/db';
 import { getRunCount, getLatestPageStates } from '@/lib/db';
 import Link from 'next/link';
 import { SectionErrorBoundary } from '@/components/SectionErrorBoundary';
@@ -14,21 +14,25 @@ const KIND_TONE: Record<string, string> = {
 };
 
 export default async function PlatformsPage() {
-  const allEndpoints = await listEndpoints();
-  const endpoints = allEndpoints.filter(e => e.is_active && isPancakeEndpoint(e));
-  const dbCount = await getRunCount();
+  let endpoints: EndpointRow[] = [];
+  let perEndpoint = new Map<string, { total: number; active: number; inactive: number; kinds: Map<string, number> }>();
+  try {
+    const allEndpoints = await listEndpoints();
+    endpoints = allEndpoints.filter(e => e.is_active && isPancakeEndpoint(e));
+    const dbCount = await getRunCount();
 
-  // Compute per-platform page stats from monitoring data
-  const allStates = dbCount > 0 ? await getLatestPageStates() : [];
-  const perEndpoint = new Map<string, { total: number; active: number; inactive: number; kinds: Map<string, number> }>();
-  for (const s of allStates) {
-    const key = s.shop_label || 'Other';
-    if (!perEndpoint.has(key)) perEndpoint.set(key, { total: 0, active: 0, inactive: 0, kinds: new Map() });
-    const e = perEndpoint.get(key)!;
-    e.total++;
-    if (s.is_activated) e.active++; else e.inactive++;
-    const kind = s.activity_kind || 'none';
-    e.kinds.set(kind, (e.kinds.get(kind) ?? 0) + 1);
+    const allStates = dbCount > 0 ? await getLatestPageStates() : [];
+    for (const s of allStates) {
+      const key = s.shop_label || 'Other';
+      if (!perEndpoint.has(key)) perEndpoint.set(key, { total: 0, active: 0, inactive: 0, kinds: new Map() });
+      const e = perEndpoint.get(key)!;
+      e.total++;
+      if (s.is_activated) e.active++; else e.inactive++;
+      const kind = s.activity_kind || 'none';
+      e.kinds.set(kind, (e.kinds.get(kind) ?? 0) + 1);
+    }
+  } catch (err) {
+    console.error('PlatformsPage error:', err);
   }
 
   return (

@@ -12,6 +12,10 @@ export class SectionErrorBoundary extends Component<Props, State> {
     return { error: error, retryKey: 0 };
   }
 
+  componentDidCatch(error: Error, info: { componentStack?: string }) {
+    console.error('SectionErrorBoundary caught:', error, info.componentStack ?? '');
+  }
+
   handleRetry = () => {
     this.setState(prev => ({ error: null, retryKey: prev.retryKey + 1 }));
     this.props.onRetry?.();

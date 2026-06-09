@@ -1,4 +1,4 @@
-import { pool, listEndpoints, isBotCakeEndpoint, type RunRow } from '@/lib/db';
+import { pool, listEndpoints, isBotCakeEndpoint, type RunRow, type EndpointRow } from '@/lib/db';
 import { PlatformFilter } from '@/components/PlatformFilter';
 import { Pagination } from '@/components/Pagination';
 import { SectionErrorBoundary } from '@/components/SectionErrorBoundary';
@@ -36,26 +36,36 @@ export default async function RunsPage({
   const page = Math.max(1, parseInt(sp.page || '1', 10));
   const offset = (page - 1) * PAGE_SIZE;
 
-  const [allEndpoints, runsResult] = await Promise.all([
-    listEndpoints(),
-    (async () => {
-      if (endpointId) {
-        const [r, c] = await Promise.all([
-          pool.query('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT $2 OFFSET $3', [endpointId, PAGE_SIZE, offset]),
-          pool.query('SELECT COUNT(*) as c FROM runs WHERE endpoint_id = $1', [endpointId]),
-        ]);
-        return { rows: r.rows as RunRow[], total: parseInt(c.rows[0].c, 10) };
-      } else {
-        const [r, c] = await Promise.all([
-          pool.query('SELECT * FROM runs ORDER BY generated_at DESC LIMIT $1 OFFSET $2', [PAGE_SIZE, offset]),
-          pool.query('SELECT COUNT(*) as c FROM runs'),
-        ]);
-        return { rows: r.rows as RunRow[], total: parseInt(c.rows[0].c, 10) };
-      }
-    })(),
-  ]);
+  let allEndpoints: EndpointRow[] = [];
+  let rows: RunRow[] = [];
+  let total = 0;
+  try {
+    const result = await Promise.all([
+      listEndpoints(),
+      (async () => {
+        if (endpointId) {
+          const [r, c] = await Promise.all([
+            pool.query('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT $2 OFFSET $3', [endpointId, PAGE_SIZE, offset]),
+            pool.query('SELECT COUNT(*) as c FROM runs WHERE endpoint_id = $1', [endpointId]),
+          ]);
+          return { rows: r.rows as RunRow[], total: parseInt(c.rows[0].c, 10) };
+        } else {
+          const [r, c] = await Promise.all([
+            pool.query('SELECT * FROM runs ORDER BY generated_at DESC LIMIT $1 OFFSET $2', [PAGE_SIZE, offset]),
+            pool.query('SELECT COUNT(*) as c FROM runs'),
+          ]);
+          return { rows: r.rows as RunRow[], total: parseInt(c.rows[0].c, 10) };
+        }
+      })(),
+    ]);
+    allEndpoints = result[0];
+    const runsResult = result[1];
+    rows = runsResult.rows;
+    total = runsResult.total;
+  } catch (err) {
+    console.error('RunsPage error:', err);
+  }
   const endpointMap = new Map(allEndpoints.map(e => [e.id, e]));
-  const { rows, total } = runsResult;
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 

@@ -2,8 +2,8 @@
 
 ## Frontend UX
 
-1. **T4#16** — Error boundaries per dashboard section
-2. **T4#17** — BotCakePageList: override status invisible until next refresh
+1. **T4#16** — Error boundaries per dashboard section ✓
+2. **T4#17** — BotCakePageList: override status invisible until next refresh ✓
 3. **T4#18** — Run history page: no loading state during pagination
 
 ## Security
