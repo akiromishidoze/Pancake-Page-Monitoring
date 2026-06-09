@@ -3,7 +3,7 @@ import { ErrorCodes, apiError } from '@/lib/errors';
 import { getSetting, setSetting, logAuditEntry } from '@/lib/db';
 import { ScheduleSchema } from '@/lib/schemas';
 import { withAuth } from '@/lib/auth';
-import { getClientIp } from '@/lib/rate-limit';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
 export const GET = withAuth(async () => {
   const interval = (await getSetting('schedule_interval')) || 'off';
@@ -11,6 +11,10 @@ export const GET = withAuth(async () => {
 });
 
 export const POST = withAuth(async (req: Request) => {
+    const ip = getClientIp(req);
+    const rateLimited = await rateLimit(ip, { store: 'schedule', max: 5 });
+    if (rateLimited) return rateLimited;
+
     let raw: unknown;
     try {
       raw = await req.json();
@@ -27,7 +31,6 @@ export const POST = withAuth(async (req: Request) => {
     await setSetting('schedule_interval', interval);
     await setSetting('last_scheduled_run', Date.now().toString());
 
-    const ip = getClientIp(req);
     void logAuditEntry('update_schedule', 'settings', 'schedule', `Interval set to "${interval}"`, ip);
 
     return NextResponse.json({ ok: true, interval });

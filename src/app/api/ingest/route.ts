@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     return respond(apiError(ErrorCodes.FORBIDDEN_IP, 'IP not allowed', 403), req);
   }
 
-  const rateLimited = await rateLimit(ip, { store: 'ingest', max: 60 });
+  const rateLimited = await rateLimit(ip, { store: 'ingest', max: 120 });
   if (rateLimited) return respond(rateLimited, req);
 
   const apiKey = req.headers.get('x-api-key') || req.headers.get('X-Api-Key');

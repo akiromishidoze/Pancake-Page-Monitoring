@@ -3,7 +3,7 @@ import { ErrorCodes, apiError } from '@/lib/errors';
 import { pruneOldRuns, logAuditEntry } from '@/lib/db';
 import { withAuth } from '@/lib/auth';
 import { PruneSchema } from '@/lib/schemas';
-import { getClientIp } from '@/lib/rate-limit';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
 export const POST = withAuth(async (req: Request) => {
     let raw: unknown;
@@ -18,8 +18,11 @@ export const POST = withAuth(async (req: Request) => {
       return apiError(ErrorCodes.VALIDATION_ERROR, 'Validation failed', 400, parsed.error.flatten());
     }
 
-    const deleted = await pruneOldRuns(parsed.data.retention_days);
     const ip = getClientIp(req);
+    const rateLimited = await rateLimit(ip, { store: 'prune', max: 1 });
+    if (rateLimited) return rateLimited;
+
+    const deleted = await pruneOldRuns(parsed.data.retention_days);
     void logAuditEntry('prune_runs', 'system', 'prune', `Pruned runs older than ${parsed.data.retention_days} days (${deleted} rows)`, ip);
 
     return NextResponse.json({ ok: true, deleted });

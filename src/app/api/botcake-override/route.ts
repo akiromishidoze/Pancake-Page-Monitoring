@@ -5,7 +5,7 @@ import { refreshAll } from '@/lib/poller';
 import { cors, corsOptions } from '@/lib/cors';
 import { BotCakeOverrideSchema } from '@/lib/schemas';
 import { requireApiAuth } from '@/lib/auth';
-import { getClientIp } from '@/lib/rate-limit';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
 export async function POST(req: Request) {
   try {
@@ -26,6 +26,8 @@ export async function POST(req: Request) {
     }
 
     const ip = getClientIp(req);
+    const rateLimited = await rateLimit(ip, { store: 'botcake-override', max: 10 });
+    if (rateLimited) return cors(rateLimited);
     const body = parsed.data;
     if (body.remove) {
       await removeBotCakeOverride(body.page_id);
