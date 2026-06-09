@@ -5,9 +5,9 @@ const IV_LENGTH = 16;
 const AUTH_TAG_LENGTH = 16;
 
 function getKey(): Buffer {
-  const secret = process.env['ENCRYPTION_KEY'];
+  const secret = process.env['ENCRYPTION_KEY'] || process.env['DATABASE_URL'];
   if (!secret) {
-    throw new Error('ENCRYPTION_KEY is not set — cannot encrypt/decrypt sensitive data');
+    throw new Error('ENCRYPTION_KEY or DATABASE_URL must be set — cannot derive encryption key');
   }
   return createHash('sha256').update(secret).digest();
 }
