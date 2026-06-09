@@ -3,6 +3,7 @@ import { PlatformFilter } from '@/components/PlatformFilter';
 import { Pagination } from '@/components/Pagination';
 import { SectionErrorBoundary } from '@/components/SectionErrorBoundary';
 import { formatWithTz } from '@/lib/format';
+import { Suspense } from 'react';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +27,103 @@ function canaryTone(status: string | null): string {
   return 'text-slate-500';
 }
 
+function RunsTableSkeleton() {
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900 overflow-hidden animate-pulse">
+      <div className="bg-slate-800/50 px-4 py-3 border-b border-slate-800">
+        <div className="flex gap-8">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="h-3 w-16 rounded bg-slate-700/50" />
+          ))}
+        </div>
+      </div>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="px-4 py-4 border-b border-slate-800/50 flex gap-8">
+          {Array.from({ length: 8 }).map((_, j) => (
+            <div key={j} className={`h-3 rounded bg-slate-800/50 ${j === 0 ? 'w-36' : j === 1 ? 'w-20' : 'w-16'}`} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+async function RunsTable({ endpointId, offset, endpointMap }: { endpointId: string | null; offset: number; endpointMap: Map<string, EndpointRow> }) {
+  let rows: RunRow[] = [];
+  try {
+    if (endpointId) {
+      const r = await pool.query('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT $2 OFFSET $3', [endpointId, PAGE_SIZE, offset]);
+      rows = r.rows as RunRow[];
+    } else {
+      const r = await pool.query('SELECT * FROM runs ORDER BY generated_at DESC LIMIT $1 OFFSET $2', [PAGE_SIZE, offset]);
+      rows = r.rows as RunRow[];
+    }
+  } catch (err) {
+    console.error('RunsTable error:', err);
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 text-slate-400 text-center">
+        No runs found.
+      </div>
+    );
+  }
+
+  return (
+    <div className="dashboard-data rounded-lg border border-slate-800 bg-slate-900 overflow-hidden">
+      <table className="min-w-full text-sm">
+        <thead className="bg-slate-800/50">
+          <tr className="text-left text-xs uppercase text-slate-400">
+            <th className="px-4 py-3 font-medium">Run ID</th>
+            <th className="px-4 py-3 font-medium">Platform</th>
+            <th className="px-4 py-3 font-medium">Generated</th>
+            <th className="px-4 py-3 font-medium">Quality</th>
+            <th className="px-4 py-3 font-medium">Canary</th>
+            <th className="px-4 py-3 font-medium">Alerts</th>
+            <th className="px-4 py-3 font-medium">Heartbeat</th>
+            <th className="px-4 py-3 font-medium">Pages</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-800">
+          {rows.map((r: RunRow) => (
+            <tr key={r.run_id} className="hover:bg-slate-800/30">
+              <td className="px-4 py-3 font-mono text-xs text-slate-300" title={r.run_id}>
+                {r.run_id.length > 24 ? r.run_id.slice(0, 24) + '…' : r.run_id}
+              </td>
+              <td className="px-4 py-3 text-slate-300">
+                {r.endpoint_id && endpointMap.get(r.endpoint_id) ? (isBotCakeEndpoint(endpointMap.get(r.endpoint_id)!) ? 'BotCake' : r.endpoint_id) : 'Legacy'}
+              </td>
+              <td className="px-4 py-3 text-slate-400 text-xs">
+                {formatWithTz(r.generated_at)}
+              </td>
+              <td className="px-4 py-3">
+                <span className={`inline-block px-2 py-0.5 rounded text-xs font-mono border ${tone(r.run_quality)}`}>
+                  {r.run_quality || '—'}
+                </span>
+              </td>
+              <td className={`px-4 py-3 text-xs font-mono ${canaryTone(r.canary_status)}`}>
+                {r.canary_status || '—'}
+              </td>
+              <td className="px-4 py-3">
+                <span className={`font-mono text-xs ${(r.alert_count || 0) > 0 ? 'text-red-400' : 'text-slate-500'}`}>
+                  {r.alert_count ?? 0}
+                </span>
+              </td>
+              <td className="px-4 py-3">
+                <span className={`inline-block w-2 h-2 rounded-full ${r.heartbeat_ok ? 'bg-green-500' : 'bg-red-500'}`} />
+              </td>
+              <td className="px-4 py-3 text-slate-400 text-xs">
+                {r.total_pages ?? '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default async function RunsPage({
   searchParams,
 }: {
@@ -37,31 +135,16 @@ export default async function RunsPage({
   const offset = (page - 1) * PAGE_SIZE;
 
   let allEndpoints: EndpointRow[] = [];
-  let rows: RunRow[] = [];
   let total = 0;
   try {
-    const result = await Promise.all([
+    const [eps, countResult] = await Promise.all([
       listEndpoints(),
-      (async () => {
-        if (endpointId) {
-          const [r, c] = await Promise.all([
-            pool.query('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT $2 OFFSET $3', [endpointId, PAGE_SIZE, offset]),
-            pool.query('SELECT COUNT(*) as c FROM runs WHERE endpoint_id = $1', [endpointId]),
-          ]);
-          return { rows: r.rows as RunRow[], total: parseInt(c.rows[0].c, 10) };
-        } else {
-          const [r, c] = await Promise.all([
-            pool.query('SELECT * FROM runs ORDER BY generated_at DESC LIMIT $1 OFFSET $2', [PAGE_SIZE, offset]),
-            pool.query('SELECT COUNT(*) as c FROM runs'),
-          ]);
-          return { rows: r.rows as RunRow[], total: parseInt(c.rows[0].c, 10) };
-        }
-      })(),
+      endpointId
+        ? pool.query('SELECT COUNT(*) as c FROM runs WHERE endpoint_id = $1', [endpointId])
+        : pool.query('SELECT COUNT(*) as c FROM runs'),
     ]);
-    allEndpoints = result[0];
-    const runsResult = result[1];
-    rows = runsResult.rows;
-    total = runsResult.total;
+    allEndpoints = eps;
+    total = parseInt(countResult.rows[0].c, 10);
   } catch (err) {
     console.error('RunsPage error:', err);
   }
@@ -94,62 +177,9 @@ export default async function RunsPage({
       </div>
 
       <SectionErrorBoundary title="Run History Table">
-        {rows.length === 0 ? (
-          <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 text-slate-400 text-center">
-            No runs found.
-          </div>
-        ) : (
-          <div className="dashboard-data rounded-lg border border-slate-800 bg-slate-900 overflow-hidden">
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-800/50">
-                <tr className="text-left text-xs uppercase text-slate-400">
-                  <th className="px-4 py-3 font-medium">Run ID</th>
-                  <th className="px-4 py-3 font-medium">Platform</th>
-                  <th className="px-4 py-3 font-medium">Generated</th>
-                  <th className="px-4 py-3 font-medium">Quality</th>
-                  <th className="px-4 py-3 font-medium">Canary</th>
-                  <th className="px-4 py-3 font-medium">Alerts</th>
-                  <th className="px-4 py-3 font-medium">Heartbeat</th>
-                  <th className="px-4 py-3 font-medium">Pages</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800">
-                {rows.map((r: RunRow) => (
-                  <tr key={r.run_id} className="hover:bg-slate-800/30">
-                    <td className="px-4 py-3 font-mono text-xs text-slate-300" title={r.run_id}>
-                      {r.run_id.length > 24 ? r.run_id.slice(0, 24) + '…' : r.run_id}
-                    </td>
-                    <td className="px-4 py-3 text-slate-300">
-                      {r.endpoint_id && endpointMap.get(r.endpoint_id) ? (isBotCakeEndpoint(endpointMap.get(r.endpoint_id)!) ? 'BotCake' : r.endpoint_id) : 'Legacy'}
-                    </td>
-                    <td className="px-4 py-3 text-slate-400 text-xs">
-                      {formatWithTz(r.generated_at)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-mono border ${tone(r.run_quality)}`}>
-                        {r.run_quality || '—'}
-                      </span>
-                    </td>
-                    <td className={`px-4 py-3 text-xs font-mono ${canaryTone(r.canary_status)}`}>
-                      {r.canary_status || '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`font-mono text-xs ${(r.alert_count || 0) > 0 ? 'text-red-400' : 'text-slate-500'}`}>
-                        {r.alert_count ?? 0}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-block w-2 h-2 rounded-full ${r.heartbeat_ok ? 'bg-green-500' : 'bg-red-500'}`} />
-                    </td>
-                    <td className="px-4 py-3 text-slate-400 text-xs">
-                      {r.total_pages ?? '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <Suspense fallback={<RunsTableSkeleton />}>
+          <RunsTable endpointId={endpointId} offset={offset} endpointMap={endpointMap} />
+        </Suspense>
       </SectionErrorBoundary>
 
       {totalPages > 1 && (
