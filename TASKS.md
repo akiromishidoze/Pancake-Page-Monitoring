@@ -33,7 +33,7 @@
 17. **T8#35** — `pg_dump` flag audit (fix `--clean --if-exists` deprecation) ✓
 18. **T8#36** — PM2 log directory configuration ✓
 19. **T8#38** — CORS audit (verify allowed origins match production)
-20. **T8#39** — Rate-limit tuning (adjust per-route limits)
+20. **T8#39** — Rate-limit tuning (adjust per-route limits) ✓
 21. **T8#40** — Env var validation (warn on missing optional vars at startup)
 22. **T8#41** — Cache-Control headers on API responses
 23. **T8#42** — Session cleanup cron job
