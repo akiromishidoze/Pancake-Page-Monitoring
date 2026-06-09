@@ -18,7 +18,7 @@
 ## Observability
 
 10. **T6#25** — Error responses unstructured (no error codes) ✓
-11. **T6#26** — No request logging middleware
+11. **T6#26** — No request logging middleware ✓
 12. **T6#27** — Alert dedup uses settings table writes
 13. **T6#28** — `audit_log` table never queried in UI
 14. **T6#29** — Health check doesn't test DB connectivity
