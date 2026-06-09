@@ -8,7 +8,7 @@
 
 ## Security
 
-4. **T5#19** — Missing `Secure` flag on session cookie
+4. **T5#19** — Missing `Secure` flag on session cookie ✓
 5. **T5#20** — No CSRF protection on state-changing endpoints
 6. **T5#21** — `/api/ingest`: no IP allowlist / rate limiting, CORS wildcard
 7. **T5#22** — Encryption key falls back to `DATABASE_URL`
