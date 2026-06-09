@@ -22,7 +22,7 @@ export async function backup(): Promise<BackupResult> {
 
   await new Promise<void>((resolve, reject) => {
     const dump = spawn('pg_dump', [
-      '--clean', '--if-exists',
+      '--clean',
       '--no-owner', '--no-privileges',
       '--no-comments', '--no-security-labels',
       '--no-password',
