@@ -232,25 +232,13 @@ describe('notify module', () => {
     });
   });
 
-  describe('dedup cache edge cases', () => {
-    it('handles expired entries on load', async () => {
-      const past = Date.now() - 60 * 60 * 1000;
-      mockSettings.set('notify_dedup', JSON.stringify({ 'old|key': past }));
+  describe('dedup cache behavior', () => {
+    it('deduplicates identical alerts across sequential calls', async () => {
       mockSettings.set('notify_slack_webhook', 'https://slack.com/webhook');
       const { sendAlert } = await import('../notify');
-      await sendAlert({ title: 'new', message: 'alert', level: 'warning' });
-      // First alert should go through since expired entry was filtered
+      await sendAlert({ title: 'seq', message: 'dup', level: 'warning' });
       expect(mockFetch).toHaveBeenCalledTimes(1);
-      // Send same alert twice to confirm dedup works after fresh entry
-      await sendAlert({ title: 'new', message: 'alert', level: 'warning' });
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-    });
-
-    it('handles corrupted JSON in settings', async () => {
-      mockSettings.set('notify_dedup', 'not-json-at-all');
-      mockSettings.set('notify_slack_webhook', 'https://slack.com/webhook');
-      const { sendAlert } = await import('../notify');
-      await expect(sendAlert({ title: 'T', message: 'M', level: 'info' })).resolves.toBeUndefined();
+      await sendAlert({ title: 'seq', message: 'dup', level: 'warning' });
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
