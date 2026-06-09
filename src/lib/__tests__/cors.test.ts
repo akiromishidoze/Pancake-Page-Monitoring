@@ -12,19 +12,19 @@ describe('cors module', () => {
   });
 
   describe('cors', () => {
-    it('sets Access-Control-Allow-Origin to * when ALLOWED_ORIGINS is empty', async () => {
+    it('returns no CORS headers when ALLOWED_ORIGINS is empty', async () => {
       delete process.env.ALLOWED_ORIGINS;
       const { cors } = await import('../cors');
       const res = cors(new NextResponse());
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
       expect(res.headers.get('Vary')).toBeNull();
     });
 
-    it('sets Access-Control-Allow-Origin to * when ALLOWED_ORIGINS is blank', async () => {
+    it('returns no CORS headers when ALLOWED_ORIGINS is blank', async () => {
       process.env.ALLOWED_ORIGINS = '';
       const { cors } = await import('../cors');
       const res = cors(new NextResponse());
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
     });
 
     it('echoes matching origin', async () => {
@@ -43,7 +43,7 @@ describe('cors module', () => {
       expect(res.headers.get('Vary')).toBe('Origin');
     });
 
-    it('sets Vary: Origin only when allowOrigin is not *', async () => {
+    it('sets Vary: Origin when CORS headers are present', async () => {
       process.env.ALLOWED_ORIGINS = 'https://app.example.com';
       const { cors } = await import('../cors');
       const res = cors(new NextResponse(), 'https://app.example.com');
@@ -112,12 +112,12 @@ describe('cors module', () => {
   });
 
   describe('corsOptions', () => {
-    it('returns 204 response with CORS headers', async () => {
+    it('returns 204 response without CORS headers when unconfigured', async () => {
       process.env.ALLOWED_ORIGINS = '';
       const { corsOptions } = await import('../cors');
       const res = corsOptions();
       expect(res.status).toBe(204);
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
     });
 
     it('passes origin to cors', async () => {
