@@ -33,6 +33,9 @@ function setCorsHeaders(res: NextResponse, allowOrigin: string): void {
 export function cors(res: NextResponse, origin?: string | null): NextResponse {
   const allowOrigin = resolveAllowedOrigin(origin ?? null);
   setCorsHeaders(res, allowOrigin);
+  if (!res.headers.has('Cache-Control')) {
+    res.headers.set('Cache-Control', 'no-store');
+  }
   return res;
 }
 
