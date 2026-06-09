@@ -20,6 +20,8 @@ const mocks = vi.hoisted(() => {
   let pancakeCustomersFail = false;
   let prevRunActiveCount: number | null = null;
   let pancakeActivePageIds = new Set<string>();
+  let botCakeAuthFailure = false;
+  let botCakePagesError: Error | null = null;
 
   return {
     dbEndpoints, dbSettings, botCakePages, convResult, toolsResult,
@@ -37,6 +39,10 @@ const mocks = vi.hoisted(() => {
     setPancakeShopsFail(v: boolean) { pancakeShopsFail = v; },
     setPancakeOrdersFail(v: boolean) { pancakeOrdersFail = v; },
     setPancakeCustomersFail(v: boolean) { pancakeCustomersFail = v; },
+    botCakeAuthFailure: () => botCakeAuthFailure,
+    setBotCakeAuthFailure(v: boolean) { botCakeAuthFailure = v; },
+    botCakePagesError: () => botCakePagesError,
+    setBotCakePagesError(v: Error | null) { botCakePagesError = v; },
     resetAll() {
       dbEndpoints.length = 0;
       dbSettings.clear();
@@ -54,6 +60,8 @@ const mocks = vi.hoisted(() => {
       pancakeOrdersFail = false;
       pancakeCustomersFail = false;
       prevRunActiveCount = null;
+      botCakeAuthFailure = false;
+      botCakePagesError = null;
     },
   };
 });
@@ -66,6 +74,10 @@ vi.mock('@/lib/logger', () => ({
 
 vi.mock('@/lib/sse', () => ({
   broadcastSSE: vi.fn(),
+}));
+
+vi.mock('@/lib/notifications', () => ({
+  addNotification: vi.fn(async () => {}),
 }));
 
 vi.mock('@opentelemetry/api', () => ({
@@ -96,7 +108,11 @@ vi.mock('@/lib/db', () => ({
 }));
 
 vi.mock('@/lib/botcake', () => ({
-  fetchBotCakePages: vi.fn(async () => ({ pages: [...mocks.botCakePages], authFailure: false })),
+  fetchBotCakePages: vi.fn(async () => {
+    const err = mocks.botCakePagesError();
+    if (err) throw err;
+    return { pages: [...mocks.botCakePages], authFailure: mocks.botCakeAuthFailure() };
+  }),
   checkBotCakeConversations: vi.fn(async () => new Map(mocks.convResult)),
   checkBotCakeToolsFlows: vi.fn(async () => new Map(mocks.toolsResult)),
   recordBotCakeApiHealth: vi.fn(),
@@ -342,5 +358,160 @@ describe('refreshPancake (via refreshAll)', () => {
     expect(insertSnapshot).toHaveBeenCalledTimes(1);
     const pancakeCall = (insertSnapshot as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(pancakeCall.inactive_pages).toHaveLength(1);
+  });
+});
+
+describe('refreshBotCake — error and edge-case paths', () => {
+  beforeEach(async () => {
+    mocks.resetAll();
+    vi.clearAllMocks();
+    const { getAllBreakerStates, resetBreaker } = await import('@/lib/circuit-breaker');
+    for (const key of Object.keys(getAllBreakerStates())) resetBreaker(key);
+  });
+
+  it('sends auth-failure notification when token expired', async () => {
+    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-expired', is_active: true, fb_page_id: 'fb-123' });
+    mocks.setBotCakeAuthFailure(true);
+    const mod = await import('@/lib/poller');
+    const { addNotification } = await import('@/lib/notifications');
+    const { insertSnapshot } = await import('@/lib/db');
+    await mod.refreshBotCake();
+    expect(addNotification).toHaveBeenCalledWith('credential_change', 'critical', expect.stringContaining('Token Expired'), expect.any(String));
+    expect(insertSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('handles API error gracefully and sends alert', async () => {
+    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true, fb_page_id: 'fb-123' });
+    mocks.setBotCakePagesError(new Error('Network failure'));
+    const mod = await import('@/lib/poller');
+    const { addNotification } = await import('@/lib/notifications');
+    await mod.refreshBotCake();
+    expect(addNotification).toHaveBeenCalledWith('external_error', 'warning', expect.stringContaining('API Error'), expect.any(String));
+  });
+
+  it('skips endpoint when circuit breaker is open', async () => {
+    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true, fb_page_id: 'fb-123' });
+    mocks.botCakePages.push({ page_id: 'p1', name: 'Page 1' });
+    const { recordFailure, resetBreaker } = await import('@/lib/circuit-breaker');
+    const key = 'botcake:botcake-platform';
+    for (let i = 0; i < 3; i++) recordFailure(key);
+    const mod = await import('@/lib/poller');
+    const { fetchBotCakePages } = await import('@/lib/botcake');
+    await mod.refreshBotCake();
+    expect(fetchBotCakePages).not.toHaveBeenCalled();
+    resetBreaker(key);
+  });
+
+  it('does not reprocess endpoint when already refreshing', async () => {
+    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true, fb_page_id: 'fb-123' });
+    mocks.botCakePages.push({ page_id: 'p1', name: 'Page 1' });
+    const mod = await import('@/lib/poller');
+    const { fetchBotCakePages } = await import('@/lib/botcake');
+    await Promise.all([mod.refreshBotCake(), mod.refreshBotCake()]);
+    expect(fetchBotCakePages).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('refreshPancake — error and edge-case paths', () => {
+  beforeEach(async () => {
+    mocks.resetAll();
+    vi.clearAllMocks();
+    const { getAllBreakerStates, resetBreaker } = await import('@/lib/circuit-breaker');
+    for (const key of Object.keys(getAllBreakerStates())) resetBreaker(key);
+  });
+
+  it('skips when pancake circuit breaker is open', async () => {
+    mocks.dbEndpoints.push({ id: '430202960', name: 'Shop 1', access_token: 'tok-abc', url: 'https://example.com', is_active: true });
+    const { recordFailure, resetBreaker } = await import('@/lib/circuit-breaker');
+    for (let i = 0; i < 3; i++) recordFailure('pancake');
+    const mod = await import('@/lib/poller');
+    const { fetchPancakeShops } = await import('@/lib/pancake');
+    await mod.refreshAll();
+    expect(fetchPancakeShops).not.toHaveBeenCalled();
+    resetBreaker('pancake');
+  });
+
+  it('restores from previous run when orders and customers fail', async () => {
+    mocks.dbEndpoints.push(
+      { id: '430202960', name: 'Shop 1', access_token: 'tok-abc', url: 'https://example.com', is_active: true },
+    );
+    mocks.pancakeShops.push({
+      id: 430202960, name: 'Shop 1', pages: [
+        { id: 'p1', name: 'Page 1', is_activated: true },
+      ],
+    });
+    mocks.setPancakeOrdersFail(true);
+    mocks.setPancakeCustomersFail(true);
+    const { pool } = await import('@/lib/db');
+    (pool.query as ReturnType<typeof vi.fn>).mockResolvedValue({ rows: [{ run_id: 'prev-run-1' }] });
+    const mod = await import('@/lib/poller');
+    const { addNotification } = await import('@/lib/notifications');
+    await mod.refreshAll();
+    expect(addNotification).toHaveBeenCalledWith('external_error', 'info', expect.stringContaining('Shop Fetch Failed'), expect.any(String));
+  });
+
+  it('falls back globally when all shops return 0 active pages', async () => {
+    mocks.dbEndpoints.push(
+      { id: '430202960', name: 'Shop 1', access_token: 'tok-abc', url: 'https://example.com', is_active: true },
+    );
+    mocks.pancakeShops.push({
+      id: 430202960, name: 'Shop 1', pages: [
+        { id: 'p1', name: 'Page 1', is_activated: false },
+      ],
+    });
+    const mod = await import('@/lib/poller');
+    const { addNotification } = await import('@/lib/notifications');
+    await mod.refreshAll();
+    expect(addNotification).toHaveBeenCalledWith('external_error', 'warning', expect.stringContaining('0 Active Pages'), expect.any(String));
+  });
+});
+
+describe('triggerBotCakeRefresh', () => {
+  beforeEach(async () => {
+    mocks.resetAll();
+    vi.clearAllMocks();
+    const { getAllBreakerStates, resetBreaker } = await import('@/lib/circuit-breaker');
+    for (const key of Object.keys(getAllBreakerStates())) resetBreaker(key);
+  });
+
+  it('returns true when endpoint exists and refresh succeeds', async () => {
+    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true, fb_page_id: 'fb-123' });
+    mocks.botCakePages.push({ page_id: 'p1', name: 'Page 1' });
+    const mod = await import('@/lib/poller');
+    const { invalidateBotCakeCaches } = await import('@/lib/botcake');
+    const result = await mod.triggerBotCakeRefresh('botcake-platform');
+    expect(result).toBe(true);
+    expect(invalidateBotCakeCaches).toHaveBeenCalled();
+  });
+
+  it('returns false when endpoint not found', async () => {
+    const mod = await import('@/lib/poller');
+    const result = await mod.triggerBotCakeRefresh('nonexistent');
+    expect(result).toBe(false);
+  });
+
+  it('returns false when API returns 0 pages', async () => {
+    mocks.dbEndpoints.push({ id: 'botcake-platform', name: 'BotCake', access_token: 'tok-123', is_active: true, fb_page_id: 'fb-123' });
+    const mod = await import('@/lib/poller');
+    const result = await mod.triggerBotCakeRefresh('botcake-platform');
+    expect(result).toBe(false);
+  });
+});
+
+describe('triggerPancakeRefresh', () => {
+  beforeEach(async () => {
+    mocks.resetAll();
+    vi.clearAllMocks();
+    const { getAllBreakerStates, resetBreaker } = await import('@/lib/circuit-breaker');
+    for (const key of Object.keys(getAllBreakerStates())) resetBreaker(key);
+  });
+
+  it('calls refreshPancake which processes endpoints', async () => {
+    mocks.dbEndpoints.push({ id: '430202960', name: 'Shop 1', access_token: 'tok-abc', url: 'https://example.com', is_active: true });
+    mocks.pancakeShops.push({ id: 430202960, name: 'Shop 1', pages: [{ id: 'p1', name: 'Page 1', is_activated: true }] });
+    const mod = await import('@/lib/poller');
+    const { insertSnapshot } = await import('@/lib/db');
+    await mod.triggerPancakeRefresh();
+    expect(insertSnapshot).toHaveBeenCalled();
   });
 });
