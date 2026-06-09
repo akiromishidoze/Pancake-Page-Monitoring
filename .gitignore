@@ -57,5 +57,8 @@ ROADMAP.md
 # generated documentation
 /docs
 
+# PM2 logs
+/logs
+
 # task tracking (local only)
 TASKS.md
