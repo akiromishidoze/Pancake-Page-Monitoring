@@ -24,8 +24,10 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const method = request.method;
   const ip = getClientIp(request);
+  const userAgent = request.headers.get('user-agent') || undefined;
+  const contentLength = parseInt(request.headers.get('content-length') || '0', 10) || undefined;
 
-  log.info({ requestId, method, pathname, ip }, 'request');
+  log.info({ requestId, method, pathname, ip, userAgent, contentLength }, 'request');
 
   if (method === 'POST' || method === 'PUT') {
     const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
@@ -44,7 +46,8 @@ export async function proxy(request: NextRequest) {
         res.headers.set('Cache-Control', 'no-store');
       }
     }
-    log.info({ requestId, method, pathname, status: res.status, durationMs: Date.now() - start }, 'response');
+    const responseSize = parseInt(res.headers.get('content-length') || '0', 10) || undefined;
+    log.info({ requestId, method, pathname, status: res.status, durationMs: Date.now() - start, responseSize }, 'response');
     return res;
   }
 
@@ -67,7 +70,7 @@ export async function proxy(request: NextRequest) {
     if (pathname.startsWith('/api/')) {
       return apiJson({ ok: false, error: 'Not authenticated', code: ErrorCodes.AUTH_REQUIRED }, 401);
     }
-    return NextResponse.redirect(new URL('/login', request.url));
+    return respond(NextResponse.redirect(new URL('/login', request.url)));
   }
 
   const { validateSession } = await import('@/lib/auth');
@@ -77,7 +80,7 @@ export async function proxy(request: NextRequest) {
     if (pathname.startsWith('/api/')) {
       return apiJson({ ok: false, error: 'Not authenticated', code: ErrorCodes.AUTH_SESSION_EXPIRED }, 401);
     }
-    return NextResponse.redirect(new URL('/login', request.url));
+    return respond(NextResponse.redirect(new URL('/login', request.url)));
   }
 
   const { isStateChangingRequest, checkCsrf } = await import('@/lib/csrf');
@@ -86,7 +89,7 @@ export async function proxy(request: NextRequest) {
     if (pathname.startsWith('/api/')) {
       return apiJson({ ok: false, error: 'CSRF validation failed', code: ErrorCodes.CSRF_FAILED }, 403);
     }
-    return NextResponse.redirect(new URL('/login', request.url));
+    return respond(NextResponse.redirect(new URL('/login', request.url)));
   }
 
   return respond(NextResponse.next());
