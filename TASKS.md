@@ -26,12 +26,12 @@
 ## Testing
 
 15. **T7#30** — Zero tests for API routes ✓
-16. **T7#31** — Zero tests for poller
+16. **T7#31** — Zero tests for poller ✓
 
 ## Infrastructure
 
-17. **T8#35** — `pg_dump` flag audit (fix `--clean --if-exists` deprecation)
-18. **T8#36** — PM2 log directory configuration
+17. **T8#35** — `pg_dump` flag audit (fix `--clean --if-exists` deprecation) ✓
+18. **T8#36** — PM2 log directory configuration ✓
 19. **T8#38** — CORS audit (verify allowed origins match production)
 20. **T8#39** — Rate-limit tuning (adjust per-route limits)
 21. **T8#40** — Env var validation (warn on missing optional vars at startup)
