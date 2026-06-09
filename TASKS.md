@@ -13,7 +13,7 @@
 6. **T5#21** — `/api/ingest`: no IP allowlist / rate limiting, CORS wildcard ✓
 7. **T5#22** — Encryption key falls back to `DATABASE_URL` ✓
 8. **T5#23** — Zod schemas defined but unused on most routes ✓
-9. **T5#24** — Session token potentially exposed in URL (proxy redirect) 
+9. **T5#24** — Session token potentially exposed in URL (proxy redirect) ✓
 
 ## Observability
 
