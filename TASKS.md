@@ -25,7 +25,7 @@
 
 ## Testing
 
-15. **T7#30** — Zero tests for API routes
+15. **T7#30** — Zero tests for API routes ✓
 16. **T7#31** — Zero tests for poller
 
 ## Infrastructure
