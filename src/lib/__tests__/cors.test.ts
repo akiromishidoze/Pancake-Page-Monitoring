@@ -74,18 +74,18 @@ describe('cors module', () => {
       expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://app.example.com');
     });
 
-    it('falls back to first allowed for non-matching origin', async () => {
+    it('returns no CORS headers for non-matching origin', async () => {
       process.env.ALLOWED_ORIGINS = 'https://app.example.com,https://admin.example.com';
       const { corsReflectOrigin } = await import('../cors');
       const res = corsReflectOrigin(new NextResponse(), 'https://evil.com');
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://app.example.com');
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
     });
 
-    it('falls back to * when no allowed origins configured', async () => {
+    it('returns no CORS headers when no allowed origins configured', async () => {
       delete process.env.ALLOWED_ORIGINS;
       const { corsReflectOrigin } = await import('../cors');
       const res = corsReflectOrigin(new NextResponse(), 'https://any.com');
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://any.com');
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
     });
 
     it('does nothing when origin is null', async () => {
@@ -95,23 +95,19 @@ describe('cors module', () => {
       expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
     });
 
-    it('sets Vary header when origin is not *', async () => {
+    it('sets Vary header on allowed origin', async () => {
       process.env.ALLOWED_ORIGINS = 'https://app.example.com';
       const { corsReflectOrigin } = await import('../cors');
       const res = corsReflectOrigin(new NextResponse(), 'https://app.example.com');
       expect(res.headers.get('Vary')).toBe('Origin');
     });
 
-    it('does not set Vary when allowOrigin is *', async () => {
+    it('returns no CORS headers when origin is unconfigured', async () => {
       delete process.env.ALLOWED_ORIGINS;
       const { corsReflectOrigin } = await import('../cors');
-      const res = corsReflectOrigin(new NextResponse(), 'https://any.com');
-      // When no ALLOWED_ORIGINS and origin is provided, allowed = true -> allowOrigin = origin = 'https://any.com'
-      // list.length === 0 so allowed is true -> allowOrigin = origin
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://any.com');
-      // allowOrigin is not '*', so Vary should be set... wait, let me re-check logic
-      // Actually: list.length === 0 -> allowed = true -> allowOrigin = origin ('https://any.com') -> allowOrigin !== '*' -> Vary set
-      expect(res.headers.get('Vary')).toBe('Origin');
+      const res = corsReflectOrigin(new NextResponse(), null);
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
+      expect(res.headers.get('Access-Control-Allow-Methods')).toBeNull();
     });
   });
 

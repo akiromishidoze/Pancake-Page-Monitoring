@@ -38,11 +38,9 @@ export function cors(res: NextResponse, origin?: string | null): NextResponse {
 }
 
 export function corsReflectOrigin(res: NextResponse, origin: string | null): NextResponse {
-  if (origin) {
-    const list = getAllowedOrigins();
-    const allowed = list.length === 0 || list.includes(origin);
-    const allowOrigin = allowed ? origin : (list.length > 0 ? list[0] : '*');
-    setCorsHeaders(res, allowOrigin);
+  const list = getAllowedOrigins();
+  if (origin && list.length > 0 && list.includes(origin)) {
+    setCorsHeaders(res, origin);
   }
   return res;
 }
