@@ -7,8 +7,8 @@ import { createLogger } from './logger';
 const log = createLogger('auth');
 
 const BCRYPT_ROUNDS = 12;
-const DEFAULT_EMAIL = 'admin';
-const DEFAULT_PASSWORD = 'admin';
+const DEFAULT_EMAIL = process.env['DEFAULT_ADMIN_EMAIL'] || 'admin';
+const DEFAULT_PASSWORD = process.env['DEFAULT_ADMIN_PASSWORD'] || 'admin';
 
 let _credsInitialized = false;
 
@@ -34,7 +34,11 @@ export async function ensureCredentials(): Promise<void> {
 
   const hashed = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_ROUNDS);
   await createUser(DEFAULT_EMAIL, DEFAULT_EMAIL, hashed, 'admin');
-  log.warn('Default admin user created. Change the password in Settings.');
+  if (process.env['DEFAULT_ADMIN_PASSWORD']) {
+    log.warn('Admin user created from DEFAULT_ADMIN_PASSWORD env var. Change the password in Settings.');
+  } else {
+    log.error('Default admin user created with hardcoded credentials (admin/admin). Set DEFAULT_ADMIN_PASSWORD env var to use a secure password on first run, then change it in Settings.');
+  }
 }
 
 export async function validateCredentials(email: string, password: string): Promise<boolean> {

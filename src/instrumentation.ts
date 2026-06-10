@@ -30,6 +30,10 @@ export async function register() {
     log.error('ENCRYPTION_KEY not set — startup will fail when encryption/decryption is attempted. If you have existing encrypted data that was previously encrypted via the DATABASE_URL fallback, set ENCRYPTION_KEY to your current DATABASE_URL value to preserve access.');
   }
 
+  if (!process.env['DEFAULT_ADMIN_PASSWORD']) {
+    log.warn('DEFAULT_ADMIN_PASSWORD not set — on first run with an empty database, the admin user will be created with the hardcoded default password "admin". Set DEFAULT_ADMIN_PASSWORD to a strong password for production deployments.');
+  }
+
   if (process.env['ALLOWED_ORIGINS']) {
     log.info('ALLOWED_ORIGINS set — CORS restricted to: %s', process.env['ALLOWED_ORIGINS']);
   } else {
