@@ -16,6 +16,7 @@ const RANGES = [
 
 export function ActiveTrendChart({ series }: { series: Series[] }) {
   const [range, setRange] = useState(1);
+  const [hiddenLabels, setHiddenLabels] = useState<Set<string>>(new Set());
 
   const COLORS = ['#22c55e', '#3b82f6', '#a855f7', '#f59e0b', '#ef4444'];
 
@@ -31,7 +32,6 @@ export function ActiveTrendChart({ series }: { series: Series[] }) {
     const merged = new Map<string, Record<string, number>>();
     const timestamps = new Set<string>();
 
-    // Use the already-filtered series so chart respects the selected range
     for (const s of filtered) {
       for (const d of s.data) {
         const timeStr = typeof d.time === 'string' ? d.time : new Date(d.time).toISOString();
@@ -55,7 +55,16 @@ export function ActiveTrendChart({ series }: { series: Series[] }) {
         }
         return row;
       });
-  }, [filtered, range]);
+  }, [filtered]);
+
+  const toggleSeries = (label: string) => {
+    setHiddenLabels(prev => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  };
 
   if (series.length === 0) return null;
 
@@ -94,18 +103,26 @@ export function ActiveTrendChart({ series }: { series: Series[] }) {
                 contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', color: '#f8fafc' }}
                 itemStyle={{ color: '#f8fafc' }}
               />
-              <Legend wrapperStyle={{ color: '#94a3b8' }} />
-              {filtered.map((s, i) => (
-                <Line
-                  key={s.label}
-                  type="monotone"
-                  dataKey={`${s.label}_active`}
-                  name={s.label}
-                  stroke={COLORS[i % COLORS.length]}
-                  strokeWidth={2}
-                  dot={false}
-                />
-              ))}
+              <Legend
+                onClick={(e) => toggleSeries((e as { value: string }).value)}
+                wrapperStyle={{ color: '#94a3b8' }}
+              />
+              {filtered.map((s, i) => {
+                const hidden = hiddenLabels.has(s.label);
+                return (
+                  <Line
+                    key={s.label}
+                    type="monotone"
+                    dataKey={`${s.label}_active`}
+                    name={s.label}
+                    stroke={COLORS[i % COLORS.length]}
+                    strokeWidth={hidden ? 0 : 2}
+                    dot={false}
+                    legendType={hidden ? 'none' : 'line'}
+                    strokeOpacity={hidden ? 0.15 : 1}
+                  />
+                );
+              })}
             </LineChart>
           </ResponsiveContainer>
         </div>
