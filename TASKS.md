@@ -38,4 +38,4 @@
 22. **T8#41** — Cache-Control headers on API responses ✓
 23. **T8#42** — Session cleanup cron job ✓
 24. **T8#43** — Request size limits ✓
-25. **T8#44** — Version endpoint (`GET /api/version`) 
+25. **T8#44** — Version endpoint (`GET /api/version`) ✓
