@@ -40,7 +40,7 @@ export default tseslint.config(
       ...react.configs.flat.recommended.rules,
       ...react.configs.flat['jsx-runtime'].rules,
       ...reactHooks.configs.recommended.rules,
-      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       'react/react-in-jsx-scope': 'off',
       'react-hooks/purity': 'off',
