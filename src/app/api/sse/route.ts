@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 
+import { randomBytes } from 'crypto';
 import { addClient, removeClient, getClientCount, MAX_CLIENTS } from '@/lib/sse';
 import { requireApiAuth } from '@/lib/auth';
 import { ErrorCodes, apiError } from '@/lib/errors';
@@ -18,7 +19,7 @@ export async function GET(req: Request) {
 
   const stream = new ReadableStream({
     start(controller) {
-      id = crypto.randomUUID();
+      id = randomBytes(16).toString('hex');
       addClient(id, controller, scope);
 
       controller.enqueue(new TextEncoder().encode(`event: connected\ndata: {"client_count": ${getClientCount()}}\n\n`));

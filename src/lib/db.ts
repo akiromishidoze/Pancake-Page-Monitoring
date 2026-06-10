@@ -1,6 +1,11 @@
 import { Pool, type PoolConfig } from 'pg';
 import { parse } from 'pg-connection-string';
 import { createLogger } from './logger';
+import { randomBytes } from 'crypto';
+
+function randomId(): string {
+  return randomBytes(16).toString('hex');
+}
 
 
 type DbPoolConfig = PoolConfig & { pgbouncer?: boolean | undefined };
@@ -960,7 +965,7 @@ export async function upsertEndpoint(input: {
   fb_page_id?: string | null;
 }): Promise<EndpointRow> {
   await ensureMigrated();
-  const id = input.id || crypto.randomUUID();
+  const id = input.id || randomId();
   const now = new Date().toISOString();
 
   await pool.query(q(`
@@ -1054,7 +1059,7 @@ export async function upsertPlatformPage(input: {
   is_active?: boolean;
 }): Promise<PlatformPageRow> {
   await ensureMigrated();
-  const id = input.id || crypto.randomUUID();
+  const id = input.id || randomId();
   const now = new Date().toISOString();
 
   if (input.id) {
@@ -1131,7 +1136,7 @@ export async function upsertPlatformConnector(input: {
   is_active?: boolean;
 }): Promise<PlatformConnectorRow> {
   await ensureMigrated();
-  const id = input.id || crypto.randomUUID();
+  const id = input.id || randomId();
   const now = new Date().toISOString();
 
   // Ensure FK reference exists in endpoints table (no-op if already exists)
@@ -1274,7 +1279,7 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 export async function createSessionToken(role?: string, userId?: number): Promise<string> {
   await ensureMigrated();
-  const token = crypto.randomUUID();
+  const token = randomId();
   const now = new Date().toISOString();
   const expires = new Date(Date.now() + SESSION_TTL_MS).toISOString();
   const pwv = await getCurrentPasswordVersion();

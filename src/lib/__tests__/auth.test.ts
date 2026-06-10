@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { randomBytes } from 'crypto';
 
 const sessionCookie = vi.hoisted(() => new Map<string, string>());
 
@@ -41,7 +42,7 @@ vi.mock('@/lib/db', () => {
     getSetting: vi.fn(async (key: string) => store.get(key) ?? null),
     setSetting: vi.fn(async (key: string, value: string) => { store.set(key, value); }),
     createSessionToken: vi.fn(async (role?: string) => {
-      const token = crypto.randomUUID();
+      const token = randomBytes(16).toString('hex');
       const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
       sessionTokens.set(token, expires);
       return token;
