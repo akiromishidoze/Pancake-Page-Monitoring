@@ -6,6 +6,12 @@ import { createLogger } from '@/lib/logger';
 const log = createLogger('proxy');
 const MAX_BODY_SIZE = 5 * 1024 * 1024;
 
+const ROUTE_MAX_BODY: Record<string, number> = {
+  '/api/ingest': 10 * 1024 * 1024,
+  '/api/export': 10 * 1024 * 1024,
+  '/api/backup': 10 * 1024 * 1024,
+};
+
 function getClientIp(request: NextRequest): string {
   return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
     || request.headers.get('x-real-ip')
@@ -26,14 +32,17 @@ export async function proxy(request: NextRequest) {
   const ip = getClientIp(request);
   const userAgent = request.headers.get('user-agent') || undefined;
   const contentLength = parseInt(request.headers.get('content-length') || '0', 10) || undefined;
+  const maxBodySize = ROUTE_MAX_BODY[pathname] ?? MAX_BODY_SIZE;
 
-  log.info({ requestId, method, pathname, ip, userAgent, contentLength }, 'request');
-
-  if (method === 'POST' || method === 'PUT') {
+  log.info({ requestId, method, pathname, ip, userAgent, contentLength, maxBodySize }, 'request');
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
     const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
-    if (contentLength > MAX_BODY_SIZE) {
-      log.warn({ requestId, pathname, contentLength, maxSize: MAX_BODY_SIZE }, 'request body too large');
+    if (contentLength > maxBodySize) {
+      log.warn({ requestId, pathname, method, contentLength, maxBodySize }, 'request body too large');
       return apiJson({ ok: false, error: 'Request body too large', code: ErrorCodes.PAYLOAD_TOO_LARGE }, 413);
+    }
+    if (contentLength === 0 && method !== 'DELETE') {
+      log.warn({ requestId, pathname, method }, 'request body size unknown — no content-length header');
     }
   }
 
