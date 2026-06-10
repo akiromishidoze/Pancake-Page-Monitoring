@@ -90,6 +90,10 @@ export function stopPoller() {
   }
 }
 
+export function getPollerStatus(): { running: boolean; lastRefreshAt: string | null } {
+  return { running: !_pollerStopped && _pollerTimer !== null, lastRefreshAt: _lastPolledAt };
+}
+
 export async function refreshAll() {
   _lastPolledAt = new Date().toISOString();
   await Promise.all([refreshBotCake(), refreshPancake()]);
