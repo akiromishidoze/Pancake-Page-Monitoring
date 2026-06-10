@@ -72,7 +72,17 @@ export function NotificationsBell() {
   useEffect(() => {
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
+
+    const es = new EventSource('/api/sse');
+    es.addEventListener('notification', () => {
+      fetchNotifications();
+    });
+    es.addEventListener('error', () => { /* SSE will reconnect automatically */ });
+
+    return () => {
+      clearInterval(interval);
+      es.close();
+    };
   }, [fetchNotifications]);
 
   useEffect(() => {

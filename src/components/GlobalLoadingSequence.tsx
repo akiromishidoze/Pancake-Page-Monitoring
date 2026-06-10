@@ -26,12 +26,21 @@ export function GlobalLoadingSequence() {
     }
 
     checkStatus();
+
+    const es = new EventSource('/api/sse');
+    es.addEventListener('refresh', () => {
+      setIsRunning(false);
+      document.body.classList.remove('is-fetching-data');
+    });
+    es.addEventListener('error', () => { /* SSE will reconnect automatically */ });
+
     function onRunStarted() { document.body.classList.add('is-fetching-data'); setIsRunning(true); }
     window.addEventListener('run-started', onRunStarted);
 
     return () => {
       stopped = true;
       clearTimeout(timeoutId);
+      es.close();
       window.removeEventListener('run-started', onRunStarted);
       document.body.classList.remove('is-fetching-data');
     };

@@ -1,4 +1,5 @@
 import { queryRows, queryRow } from './db';
+import { broadcastSSE } from './sse';
 import { createLogger } from './logger';
 
 const log = createLogger('notifications');
@@ -47,6 +48,7 @@ export async function addNotification(
        VALUES ($1, $2, $3, $4, $5)`,
       [type, severity, title, message ?? null, metadata ?? {}],
     );
+    broadcastSSE('notification', JSON.stringify({ type, severity, title, message }));
   } catch (e) {
     log.warn({ err: e }, 'failed to add notification');
   }

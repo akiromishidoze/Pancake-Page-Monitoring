@@ -1,39 +1,14 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 
 export function LiveTimeAgo({ timestampMs }: { timestampMs: number | null | undefined }) {
   const [now, setNow] = useState(Date.now());
-  const [liveTs, setLiveTs] = useState<number | null>(timestampMs ?? null);
-  const prevPropRef = useRef(timestampMs ?? null);
-
-  const effectiveTs = liveTs ?? timestampMs ?? null;
-
-  useEffect(() => {
-    prevPropRef.current = timestampMs ?? null;
-  }, [timestampMs]);
+  const effectiveTs = timestampMs ?? null;
 
   useEffect(() => {
     const intervalId = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(intervalId);
-  }, []);
-
-  useEffect(() => {
-    const pollId = setInterval(async () => {
-      try {
-        const res = await fetch('/api/last-run');
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.lastScheduledRun) {
-          if (data.lastScheduledRun !== prevPropRef.current) {
-            setLiveTs(data.lastScheduledRun);
-          }
-        }
-      } catch {
-        // ignore fetch errors
-      }
-    }, 15_000);
-    return () => clearInterval(pollId);
   }, []);
 
   const timeAgoText = (() => {

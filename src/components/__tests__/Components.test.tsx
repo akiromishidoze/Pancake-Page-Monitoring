@@ -20,6 +20,27 @@ async function renderWithProvider(ui: React.ReactElement) {
 const mockPush = vi.fn();
 const mockRefresh = vi.fn();
 
+let sseListeners: Record<string, (e: Event) => void> = {};
+let onSSEError: ((e: Event) => void) | null = null;
+
+class MockEventSource {
+  constructor(_url: string) {
+    sseListeners = {};
+    onSSEError = null;
+  }
+  addEventListener(event: string, handler: (e: Event) => void) {
+    sseListeners[event] = handler;
+  }
+  close() {}
+}
+
+vi.stubGlobal('EventSource', MockEventSource);
+
+function fireSSEEvent(event: string) {
+  const handler = sseListeners[event];
+  if (handler) handler(new Event(event));
+}
+
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(() => ({ push: mockPush, refresh: mockRefresh })),
   useSearchParams: vi.fn(() => new URLSearchParams()),
@@ -590,5 +611,18 @@ describe('GlobalLoadingSequence', () => {
     unmount();
     fireEvent(window, new CustomEvent('run-started'));
     expect(document.body.classList.contains('is-fetching-data')).toBe(false);
+  });
+
+  it('stops spinner on SSE refresh event', async () => {
+    document.body.classList.add('is-fetching-data');
+    global.fetch = vi.fn(async () => new Response(JSON.stringify({ ok: true, isRunning: true }), { status: 200 }));
+    const { GlobalLoadingSequence } = await import('../GlobalLoadingSequence');
+    await renderWithProvider(<GlobalLoadingSequence />);
+    await vi.waitFor(() => {
+      expect(screen.getByText('Fetching latest data...')).toBeInTheDocument();
+    });
+    await act(async () => { fireSSEEvent('refresh'); });
+    expect(document.body.classList.contains('is-fetching-data')).toBe(false);
+    expect(screen.queryByText('Fetching latest data...')).not.toBeInTheDocument();
   });
 });
