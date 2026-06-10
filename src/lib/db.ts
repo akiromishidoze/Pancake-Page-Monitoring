@@ -35,11 +35,13 @@ pool.on('error', (err) => {
 export { pool };
 
 export async function queryRows<T = any>(text: string, params?: unknown[]): Promise<T[]> {
+  await ensureMigrated();
   const r = await pool.query(text, params);
   return r.rows as T[];
 }
 
 export async function queryRow<T = any>(text: string, params?: unknown[]): Promise<T | undefined> {
+  await ensureMigrated();
   const r = await pool.query(text, params);
   return r.rows[0] as T | undefined;
 }

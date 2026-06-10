@@ -1,4 +1,4 @@
-import { pool, listEndpoints, isBotCakeEndpoint, type RunRow, type EndpointRow } from '@/lib/db';
+import { queryRows, listEndpoints, isBotCakeEndpoint, type RunRow, type EndpointRow } from '@/lib/db';
 import { PlatformFilter } from '@/components/PlatformFilter';
 import { Pagination } from '@/components/Pagination';
 import { SectionErrorBoundary } from '@/components/SectionErrorBoundary';
@@ -52,11 +52,9 @@ async function RunsTable({ endpointId, offset, endpointMap }: { endpointId: stri
   let rows: RunRow[] = [];
   try {
     if (endpointId) {
-      const r = await pool.query('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT $2 OFFSET $3', [endpointId, PAGE_SIZE, offset]);
-      rows = r.rows as RunRow[];
+      rows = await queryRows<RunRow>('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT $2 OFFSET $3', [endpointId, PAGE_SIZE, offset]);
     } else {
-      const r = await pool.query('SELECT * FROM runs ORDER BY generated_at DESC LIMIT $1 OFFSET $2', [PAGE_SIZE, offset]);
-      rows = r.rows as RunRow[];
+      rows = await queryRows<RunRow>('SELECT * FROM runs ORDER BY generated_at DESC LIMIT $1 OFFSET $2', [PAGE_SIZE, offset]);
     }
   } catch (err) {
     console.error('RunsTable error:', err);
@@ -137,14 +135,14 @@ export default async function RunsPage({
   let allEndpoints: EndpointRow[] = [];
   let total = 0;
   try {
-    const [eps, countResult] = await Promise.all([
+    const [eps, countRows] = await Promise.all([
       listEndpoints(),
       endpointId
-        ? pool.query('SELECT COUNT(*) as c FROM runs WHERE endpoint_id = $1', [endpointId])
-        : pool.query('SELECT COUNT(*) as c FROM runs'),
+        ? queryRows<{ c: string }>('SELECT COUNT(*) as c FROM runs WHERE endpoint_id = $1', [endpointId])
+        : queryRows<{ c: string }>('SELECT COUNT(*) as c FROM runs'),
     ]);
     allEndpoints = eps;
-    total = parseInt(countResult.rows[0].c, 10);
+    total = parseInt(countRows[0].c, 10);
   } catch (err) {
     console.error('RunsPage error:', err);
   }
