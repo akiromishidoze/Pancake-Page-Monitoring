@@ -8,7 +8,7 @@ const log = createLogger('webhook-botcake');
 
 function secretValid(req: Request): boolean {
   const expected = process.env['WEBHOOK_SECRET'];
-  if (!expected) return true;
+  if (!expected) return false;
   const got = req.headers.get('x-webhook-secret') || req.headers.get('X-Webhook-Secret');
   return got === expected;
 }

@@ -24,6 +24,8 @@ export async function register() {
 
   if (process.env['INGEST_IP_ALLOWLIST']) {
     log.info('INGEST_IP_ALLOWLIST is set — ingest restricted to allowed IPs');
+  } else {
+    log.warn('INGEST_IP_ALLOWLIST not set — all IPs accepted by /api/ingest (API key is still required). Set it to a comma-separated list of IPs for defense-in-depth.');
   }
 
   if (!process.env['ENCRYPTION_KEY']) {
@@ -73,6 +75,8 @@ export async function register() {
 
   if (process.env['WEBHOOK_SECRET']) {
     log.info('WEBHOOK_SECRET set — webhook endpoints require secret header');
+  } else {
+    log.error('WEBHOOK_SECRET not set — webhook endpoints will reject all requests. Set WEBHOOK_SECRET to a shared secret for your webhook callers.');
   }
 
   const { initHttpAgent } = await import('./lib/http');
