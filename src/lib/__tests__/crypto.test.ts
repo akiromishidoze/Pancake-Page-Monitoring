@@ -65,21 +65,10 @@ describe('crypto module', () => {
   });
 
   describe('getKey', () => {
-    it('falls back to DATABASE_URL when ENCRYPTION_KEY is missing', async () => {
+    it('throws when ENCRYPTION_KEY is missing', async () => {
       delete process.env.ENCRYPTION_KEY;
-      process.env['DATABASE_URL'] = 'postgres://user:pass@localhost/db';
-      const { encrypt, decrypt } = await import('../crypto');
-      const encrypted = encrypt('fallback test');
-      const decrypted = decrypt(encrypted);
-      expect(decrypted).toBe('fallback test');
-      delete process.env['DATABASE_URL'];
-    });
-
-    it('throws when both ENCRYPTION_KEY and DATABASE_URL are missing', async () => {
-      delete process.env.ENCRYPTION_KEY;
-      delete process.env['DATABASE_URL'];
       const { encrypt } = await import('../crypto');
-      expect(() => encrypt('test')).toThrow('cannot derive encryption key');
+      expect(() => encrypt('test')).toThrow('ENCRYPTION_KEY must be set');
     });
   });
 });

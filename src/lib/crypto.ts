@@ -5,9 +5,14 @@ const IV_LENGTH = 16;
 const AUTH_TAG_LENGTH = 16;
 
 function getKey(): Buffer {
-  const secret = process.env['ENCRYPTION_KEY'] || process.env['DATABASE_URL'];
+  const secret = process.env['ENCRYPTION_KEY'];
   if (!secret) {
-    throw new Error('ENCRYPTION_KEY or DATABASE_URL must be set — cannot derive encryption key');
+    throw new Error(
+      'ENCRYPTION_KEY must be set — cannot derive encryption key. ' +
+      'If you have existing encrypted data (e.g. SMTP passwords) that was encrypted with ' +
+      'a previous fallback to DATABASE_URL, set ENCRYPTION_KEY to your current DATABASE_URL value ' +
+      'to preserve access, then rotate it via Settings.'
+    );
   }
   return createHash('sha256').update(secret).digest();
 }

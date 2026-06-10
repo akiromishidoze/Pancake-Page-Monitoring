@@ -27,7 +27,7 @@ export async function register() {
   }
 
   if (!process.env['ENCRYPTION_KEY']) {
-    log.warn('ENCRYPTION_KEY not set — falling back to DATABASE_URL for encryption key derivation. Set ENCRYPTION_KEY explicitly to avoid re-encryption if DATABASE_URL changes.');
+    log.error('ENCRYPTION_KEY not set — startup will fail when encryption/decryption is attempted. If you have existing encrypted data that was previously encrypted via the DATABASE_URL fallback, set ENCRYPTION_KEY to your current DATABASE_URL value to preserve access.');
   }
 
   if (process.env['ALLOWED_ORIGINS']) {
