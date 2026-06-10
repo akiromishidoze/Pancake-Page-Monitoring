@@ -503,65 +503,7 @@ describe('SearchablePageTable', () => {
   });
 });
 
-// ──── RunStatusIndicator ──────────────────────────────────────────────
-
-describe('RunStatusIndicator', () => {
-  afterEach(() => {
-    cleanup();
-    if ((global as any).fetch) delete (global as any).fetch;
-    vi.useRealTimers();
-  });
-
-  it('renders null when not running', async () => {
-    global.fetch = vi.fn(async () => new Response(JSON.stringify({ ok: true, isRunning: false }), { status: 200 }));
-    const { RunStatusIndicator } = await import('../RunStatusIndicator');
-    await renderWithProvider(<RunStatusIndicator />);
-    await vi.waitFor(() => {
-      expect(screen.queryByText('Fetching latest data...')).not.toBeInTheDocument();
-    });
-  });
-
-  it('shows fetching indicator when status returns isRunning', async () => {
-    global.fetch = vi.fn(async () => new Response(JSON.stringify({ ok: true, isRunning: true }), { status: 200 }));
-    const { RunStatusIndicator } = await import('../RunStatusIndicator');
-    await renderWithProvider(<RunStatusIndicator />);
-    await vi.waitFor(() => {
-      expect(screen.getByText('Fetching latest data...')).toBeInTheDocument();
-    });
-  });
-
-  it('displays status role and aria-live', async () => {
-    global.fetch = vi.fn(async () => new Response(JSON.stringify({ ok: true, isRunning: true }), { status: 200 }));
-    const { RunStatusIndicator } = await import('../RunStatusIndicator');
-    await renderWithProvider(<RunStatusIndicator />);
-    await vi.waitFor(() => {
-      const statusEl = screen.getByRole('status');
-      expect(statusEl).toBeInTheDocument();
-      expect(statusEl).toHaveAttribute('aria-live', 'polite');
-    });
-  });
-
-  it('handles fetch error and calls toast', async () => {
-    global.fetch = vi.fn(async () => { throw new Error('Network error'); });
-    const { RunStatusIndicator } = await import('../RunStatusIndicator');
-    await renderWithProvider(<RunStatusIndicator />);
-    await vi.waitFor(() => {
-      expect(screen.getByText('Failed to fetch run status')).toBeInTheDocument();
-    });
-  });
-
-  it('polls repeatedly with setTimeout', async () => {
-    vi.useFakeTimers();
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true, isRunning: false }), { status: 200 }));
-    global.fetch = fetchMock;
-    const { RunStatusIndicator } = await import('../RunStatusIndicator');
-    await renderWithProvider(<RunStatusIndicator />);
-    // Initial call runs synchronously on mount
-    await vi.advanceTimersToNextTimerAsync();
-    // After initial fetch + first scheduled timer
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-});
+// ──── RunStatusIndicator (removed — merged into GlobalLoadingSequence) ─
 
 // ──── GlobalLoadingSequence ───────────────────────────────────────────
 
@@ -577,24 +519,36 @@ describe('GlobalLoadingSequence', () => {
     document.body.className = '';
   });
 
-  it('renders null', async () => {
+  it('renders nothing when not running', async () => {
     global.fetch = vi.fn(async () => new Response(JSON.stringify({ ok: true, isRunning: false }), { status: 200 }));
     const { GlobalLoadingSequence } = await import('../GlobalLoadingSequence');
     await renderWithProvider(<GlobalLoadingSequence />);
-    // Component returns null, render nothing visible
     expect(document.body.classList.contains('is-fetching-data')).toBe(false);
+    expect(screen.queryByText('Fetching latest data...')).not.toBeInTheDocument();
   });
 
-  it('adds is-fetching-data class when status returns isRunning', async () => {
+  it('shows spinner and adds class when status returns isRunning', async () => {
     global.fetch = vi.fn(async () => new Response(JSON.stringify({ ok: true, isRunning: true }), { status: 200 }));
     const { GlobalLoadingSequence } = await import('../GlobalLoadingSequence');
     await renderWithProvider(<GlobalLoadingSequence />);
     await vi.waitFor(() => {
       expect(document.body.classList.contains('is-fetching-data')).toBe(true);
+      expect(screen.getByText('Fetching latest data...')).toBeInTheDocument();
     });
   });
 
-  it('removes is-fetching-data class when status returns not running', async () => {
+  it('displays status role and aria-live on spinner', async () => {
+    global.fetch = vi.fn(async () => new Response(JSON.stringify({ ok: true, isRunning: true }), { status: 200 }));
+    const { GlobalLoadingSequence } = await import('../GlobalLoadingSequence');
+    await renderWithProvider(<GlobalLoadingSequence />);
+    await vi.waitFor(() => {
+      const statusEl = screen.getByRole('status');
+      expect(statusEl).toBeInTheDocument();
+      expect(statusEl).toHaveAttribute('aria-live', 'polite');
+    });
+  });
+
+  it('removes class and spinner when status returns not running', async () => {
     document.body.classList.add('is-fetching-data');
     global.fetch = vi.fn(async () => new Response(JSON.stringify({ ok: true, isRunning: false }), { status: 200 }));
     const { GlobalLoadingSequence } = await import('../GlobalLoadingSequence');
@@ -602,6 +556,7 @@ describe('GlobalLoadingSequence', () => {
     await vi.waitFor(() => {
       expect(document.body.classList.contains('is-fetching-data')).toBe(false);
     });
+    expect(screen.queryByText('Fetching latest data...')).not.toBeInTheDocument();
   });
 
   it('handles fetch error and calls toast', async () => {
@@ -613,16 +568,16 @@ describe('GlobalLoadingSequence', () => {
     });
   });
 
-  it('adds is-fetching-data class on run-started custom event', async () => {
+  it('sets running state on run-started custom event', async () => {
     global.fetch = vi.fn(async () => new Response(JSON.stringify({ ok: true, isRunning: false }), { status: 200 }));
     const { GlobalLoadingSequence } = await import('../GlobalLoadingSequence');
     await renderWithProvider(<GlobalLoadingSequence />);
-    // Wait for initial fetch to settle
     await vi.waitFor(() => {
       expect(document.body.classList.contains('is-fetching-data')).toBe(false);
     });
     fireEvent(window, new CustomEvent('run-started'));
     expect(document.body.classList.contains('is-fetching-data')).toBe(true);
+    expect(screen.getByText('Fetching latest data...')).toBeInTheDocument();
   });
 
   it('cleans up event listener on unmount', async () => {

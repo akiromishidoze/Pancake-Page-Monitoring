@@ -7,7 +7,6 @@ import { RunNowButton } from '@/components/RunNowButton';
 import { formatWithTz } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
-import { RunStatusIndicator } from '@/components/RunStatusIndicator';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { ActiveDonutChart } from '@/components/ActiveDonutChart';
 import { PageWaterfallChart } from '@/components/PageWaterfallChart';
@@ -375,7 +374,6 @@ export default async function OverviewPage({
           <p className="text-sm text-slate-400 mt-1">
             Last updated {lastUpdatedDisplay}
           </p>
-          <RunStatusIndicator />
         </div>
         <RunNowButton />
       </div>
