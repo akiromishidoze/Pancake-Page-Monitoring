@@ -405,6 +405,13 @@ const MIGRATIONS: Migration[] = [
       await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`);
     },
   },
+  {
+    version: 'v11', name: 'api_key_hash column',
+    up: async () => {
+      await pool.query(`ALTER TABLE endpoints ADD COLUMN IF NOT EXISTS api_key_hash TEXT`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS endpoints_api_key_hash ON endpoints(api_key_hash)`);
+    },
+  },
 ];
 
 // ──── Partitioning ──────────────────────────────────────────────────────
