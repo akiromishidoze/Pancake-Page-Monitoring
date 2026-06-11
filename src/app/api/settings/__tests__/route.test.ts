@@ -42,7 +42,7 @@ vi.mock('@/lib/errors', () => ({
 
 const mockHandler = vi.fn();
 vi.mock('@/lib/auth', () => ({
-  withAuth: vi.fn((fn: Function) => fn),
+  withAuth: vi.fn((fn: (...args: unknown[]) => unknown) => fn),
 }));
 
 vi.mock('@/lib/schemas', () => ({

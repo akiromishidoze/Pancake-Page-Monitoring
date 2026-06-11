@@ -80,27 +80,25 @@ function DbErrorFallback({ label }: { label: string }) {
 }
 
 async function PancakeSection({ endpointId, pancakeIds, allEndpoints }: { endpointId?: string; pancakeIds: string[]; allEndpoints: EndpointRow[] }) {
+  let allPages: PageStateRow[];
   try {
-    let allPages: PageStateRow[];
-    try {
-      if (endpointId) {
-        allPages = await getLatestPageStates(endpointId);
-      } else if (pancakeIds.length > 0) {
-        allPages = await getLatestPageStatesForEndpoints(pancakeIds);
-      } else {
-        allPages = [];
-      }
-    } catch {
-      return <DbErrorFallback label="Pancake Platform" />;
+    if (endpointId) {
+      allPages = await getLatestPageStates(endpointId);
+    } else if (pancakeIds.length > 0) {
+      allPages = await getLatestPageStatesForEndpoints(pancakeIds);
+    } else {
+      allPages = [];
     }
+  } catch {
+    return <DbErrorFallback label="Pancake Platform" />;
+  }
 
-    if (allPages.length === 0) return null;
+  if (allPages.length === 0) return null;
 
-    const activeCount = allPages.filter((p) => p.is_activated).length;
-    const inactiveCount = allPages.filter((p) => !p.is_activated).length;
-    const pancakeEndpoints = allEndpoints.filter(e => isPancakeEndpoint(e) && pancakeIds.includes(e.id));
-
-    const shopBreakdown = pancakeEndpoints.map((ep) => {
+  let trendSeries: { label: string; data: { time: string; active: number; inactive: number; total: number }[] }[] = [];
+  let shopBreakdown: { label: string; total: number; active: number; inactive: number }[] = [];
+  try {
+    shopBreakdown = allEndpoints.filter(e => isPancakeEndpoint(e) && pancakeIds.includes(e.id)).map((ep) => {
       const shopPages = allPages.filter((p) => p.shop_label === ep.shop_label);
       return {
         label: ep.shop_label ?? ep.name,
@@ -111,7 +109,7 @@ async function PancakeSection({ endpointId, pancakeIds, allEndpoints }: { endpoi
     });
 
     const histories = pancakeIds.length > 0 ? await tryDb(() => getRunHistories(pancakeIds, 100), new Map()) : new Map();
-    const trendSeries = pancakeEndpoints.map((ep) => {
+    trendSeries = allEndpoints.filter(e => isPancakeEndpoint(e) && pancakeIds.includes(e.id)).map((ep) => {
       const history: RunRow[] = histories.get(ep.id) ?? [];
       if (history.length < 2) return null;
       return {
@@ -124,108 +122,112 @@ async function PancakeSection({ endpointId, pancakeIds, allEndpoints }: { endpoi
         })),
       };
     }).filter(Boolean) as { label: string; data: { time: string; active: number; inactive: number; total: number }[] }[];
-
-    const exportHref = endpointId
-      ? `/api/export?format=csv&endpoint_id=${encodeURIComponent(endpointId)}`
-      : '/api/export?format=csv';
-
-    return (
-      <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <h3 className="text-lg font-semibold text-slate-200">Pancake Platform</h3>
-          <a href={exportHref} className="ml-auto rounded px-2 py-0.5 text-xs font-medium bg-slate-800 text-slate-400 hover:bg-slate-700 transition-colors">
-            Export CSV
-          </a>
-        </div>
-        <p className="text-xs text-slate-400 mb-4">
-          {allPages.length} pages across {shopBreakdown.length} shops. Activity kind data requires n8n monitoring.
-        </p>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-1">
-            <ActiveDonutChart activeCount={activeCount} inactiveCount={inactiveCount} />
-          </div>
-          <div className="lg:col-span-2">
-            <div className="rounded-lg border border-slate-800 bg-slate-900 h-[400px] flex flex-col">
-              <div className="shrink-0 px-6 pt-6 pb-3">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-bold text-slate-200">{allPages.length}</span>
-                  <span className="text-sm text-slate-400">pages total</span>
-                </div>
-              </div>
-              <div className="flex-1 overflow-auto px-6 pb-6">
-                <table className="min-w-full text-sm">
-                  <thead className="sticky top-0 bg-slate-900 z-10">
-                    <tr className="text-left text-xs uppercase text-slate-400">
-                      <th className="pb-2 pr-4 font-medium">Shop</th>
-                      <th className="pb-2 pr-4 font-medium">Pages</th>
-                      <th className="pb-2 pr-4 font-medium">Active</th>
-                      <th className="pb-2 font-medium">Inactive</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {shopBreakdown.map((s) => (
-                      <tr key={s.label} className="text-slate-300">
-                        <td className="py-2 pr-4">{s.label}</td>
-                        <td className="py-2 pr-4 font-mono text-xs">{s.total}</td>
-                        <td className="py-2 pr-4 text-green-400 font-mono text-xs">{s.active}</td>
-                        <td className="py-2 text-red-400 font-mono text-xs">{s.inactive}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-        {trendSeries.length > 0 && (
-          <div className="mt-6">
-            <ActiveTrendChart series={trendSeries} />
-          </div>
-        )}
-      </div>
-    );
   } catch (err) {
     console.error('PancakeSection error:', err);
     return <DbErrorFallback label="Pancake Platform" />;
   }
+
+  const activeCount = allPages.filter((p) => p.is_activated).length;
+  const inactiveCount = allPages.filter((p) => !p.is_activated).length;
+  const exportHref = endpointId
+    ? `/api/export?format=csv&endpoint_id=${encodeURIComponent(endpointId)}`
+    : '/api/export?format=csv';
+
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
+      <div className="flex items-center gap-2 mb-4">
+        <h3 className="text-lg font-semibold text-slate-200">Pancake Platform</h3>
+        <a href={exportHref} className="ml-auto rounded px-2 py-0.5 text-xs font-medium bg-slate-800 text-slate-400 hover:bg-slate-700 transition-colors">
+          Export CSV
+        </a>
+      </div>
+      <p className="text-xs text-slate-400 mb-4">
+        {allPages.length} pages across {shopBreakdown.length} shops. Activity kind data requires n8n monitoring.
+      </p>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-1">
+          <ActiveDonutChart activeCount={activeCount} inactiveCount={inactiveCount} />
+        </div>
+        <div className="lg:col-span-2">
+          <div className="rounded-lg border border-slate-800 bg-slate-900 h-[400px] flex flex-col">
+            <div className="shrink-0 px-6 pt-6 pb-3">
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-bold text-slate-200">{allPages.length}</span>
+                <span className="text-sm text-slate-400">pages total</span>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto px-6 pb-6">
+              <table className="min-w-full text-sm">
+                <thead className="sticky top-0 bg-slate-900 z-10">
+                  <tr className="text-left text-xs uppercase text-slate-400">
+                    <th className="pb-2 pr-4 font-medium">Shop</th>
+                    <th className="pb-2 pr-4 font-medium">Pages</th>
+                    <th className="pb-2 pr-4 font-medium">Active</th>
+                    <th className="pb-2 font-medium">Inactive</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {shopBreakdown.map((s) => (
+                    <tr key={s.label} className="text-slate-300">
+                      <td className="py-2 pr-4">{s.label}</td>
+                      <td className="py-2 pr-4 font-mono text-xs">{s.total}</td>
+                      <td className="py-2 pr-4 text-green-400 font-mono text-xs">{s.active}</td>
+                      <td className="py-2 text-red-400 font-mono text-xs">{s.inactive}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      {trendSeries.length > 0 && (
+        <div className="mt-6">
+          <ActiveTrendChart series={trendSeries} />
+        </div>
+      )}
+    </div>
+  );
 }
 
 async function BotCakeSection({ endpointId }: { endpointId: string }) {
+  let pages: PageStateRow[];
   try {
-    let pages: PageStateRow[];
-    try {
-      pages = await getLatestPageStates(endpointId);
-    } catch {
-      return <DbErrorFallback label="BotCake Platform" />;
-    }
-    if (pages.length === 0) return null;
+    pages = await getLatestPageStates(endpointId);
+  } catch {
+    return <DbErrorFallback label="BotCake Platform" />;
+  }
+  if (pages.length === 0) return null;
 
-    const [latestRun, botCakeHistory, overrides] = await Promise.all([
+  const overrideMap = new Map<string, boolean>();
+  let botCakeHistory: RunRow[] = [];
+  let breakdown: { label: string; count: number; color: string }[] = [];
+  let botCakeTrend: { label: string; data: { time: string; active: number; inactive: number; total: number }[] }[] = [];
+  let apiHealthy = false;
+  try {
+    const [latestRun, bcHistory, overrides] = await Promise.all([
       tryDb(() => getLatestRun(endpointId), null),
       tryDb(() => getRunHistory(endpointId, 200), []),
       tryDb(() => getBotCakeOverrides(), new Map()),
     ]);
+    botCakeHistory = bcHistory;
 
-    const overrideMap = new Map<string, boolean>();
     for (const [pid, ov] of overrides) {
       overrideMap.set(pid, ov.is_active);
     }
-    const apiHealthy = latestRun && latestRun.heartbeat_ok && !latestRun.outage_suspected;
+    apiHealthy = latestRun != null && !!latestRun.heartbeat_ok && !latestRun.outage_suspected;
 
-    const activeCount = pages.filter(p => p.is_activated).length;
-    const inactiveCount = pages.filter(p => !p.is_activated).length;
-
-    const breakdown = [
+    breakdown = [
       { label: 'Active (has orders)', count: pages.filter(p => p.is_activated && p.activation_reason === 'pancake-activity').length, color: 'text-green-400' },
       { label: 'Active (has conversations)', count: pages.filter(p => p.is_activated && p.activation_reason === 'has-conversations').length, color: 'text-emerald-400' },
       { label: 'Active (has tools/flows)', count: pages.filter(p => p.is_activated && p.activation_reason === 'has-tools').length, color: 'text-teal-400' },
       { label: 'Inactive (no activity)', count: pages.filter(p => !p.is_activated && p.activation_reason === 'no-activity').length, color: 'text-slate-500' },
     ].filter(b => b.count > 0);
 
-    const botCakeTrend = botCakeHistory.length >= 2
+    botCakeTrend = bcHistory.length >= 2
       ? [{
           label: 'BotCake Active',
-          data: botCakeHistory.map(r => ({
+          data: bcHistory.map(r => ({
             time: r.generated_at,
             active: r.active_pages ?? 0,
             inactive: r.inactive_pages ?? 0,
@@ -233,77 +235,80 @@ async function BotCakeSection({ endpointId }: { endpointId: string }) {
           })),
         }]
       : [];
+  } catch (err) {
+    console.error('BotCakeSection error:', err);
+    return <DbErrorFallback label="BotCake Platform" />;
+  }
 
-    return (
-      <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="flex items-center gap-2">
-            <span className={`inline-block w-2 h-2 rounded-full ${apiHealthy ? 'bg-green-500' : 'bg-red-500'}`} title={apiHealthy ? 'API healthy' : 'API degraded'} />
-            <h3 className="text-lg font-semibold text-slate-200">BotCake Platform</h3>
-          </div>
-          <a href={`/api/botcake-export?endpoint_id=${encodeURIComponent(endpointId)}`} className="ml-auto rounded px-2 py-0.5 text-xs font-medium bg-slate-800 text-slate-400 hover:bg-slate-700 transition-colors">
-            Export CSV
-          </a>
+  const activeCount = pages.filter(p => p.is_activated).length;
+  const inactiveCount = pages.filter(p => !p.is_activated).length;
+
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
+      <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center gap-2">
+          <span className={`inline-block w-2 h-2 rounded-full ${apiHealthy ? 'bg-green-500' : 'bg-red-500'}`} title={apiHealthy ? 'API healthy' : 'API degraded'} />
+          <h3 className="text-lg font-semibold text-slate-200">BotCake Platform</h3>
         </div>
-        <p className="text-xs text-slate-400 mb-4">
-          {pages.length} pages monitored via BotCake API. Active = has Pancake orders OR has BotCake conversations OR has tools/flows configured. Inactive = none.
-        </p>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-1">
-            <ActiveDonutChart activeCount={activeCount} inactiveCount={inactiveCount} />
-          </div>
-          <div className="lg:col-span-2">
-            <div className="rounded-lg border border-slate-800 bg-slate-900 h-[400px] flex flex-col">
-              <div className="shrink-0 px-6 pt-6 pb-3">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-bold text-green-400">{activeCount}</span>
-                  <span className="text-sm text-slate-400">active / {pages.length} total</span>
-                </div>
+        <a href={`/api/botcake-export?endpoint_id=${encodeURIComponent(endpointId)}`} className="ml-auto rounded px-2 py-0.5 text-xs font-medium bg-slate-800 text-slate-400 hover:bg-slate-700 transition-colors">
+          Export CSV
+        </a>
+      </div>
+      <p className="text-xs text-slate-400 mb-4">
+        {pages.length} pages monitored via BotCake API. Active = has Pancake orders OR has BotCake conversations OR has tools/flows configured. Inactive = none.
+      </p>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-1">
+          <ActiveDonutChart activeCount={activeCount} inactiveCount={inactiveCount} />
+        </div>
+        <div className="lg:col-span-2">
+          <div className="rounded-lg border border-slate-800 bg-slate-900 h-[400px] flex flex-col">
+            <div className="shrink-0 px-6 pt-6 pb-3">
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-bold text-green-400">{activeCount}</span>
+                <span className="text-sm text-slate-400">active / {pages.length} total</span>
               </div>
-              <div className="flex-1 overflow-auto px-6 pb-6">
-                <table className="min-w-full text-sm">
-                  <thead className="sticky top-0 bg-slate-900 z-10">
-                    <tr className="text-left text-xs uppercase text-slate-400">
-                      <th className="pb-2 pr-4 font-medium">Reason</th>
-                      <th className="pb-2 font-medium">Pages</th>
+            </div>
+            <div className="flex-1 overflow-auto px-6 pb-6">
+              <table className="min-w-full text-sm">
+                <thead className="sticky top-0 bg-slate-900 z-10">
+                  <tr className="text-left text-xs uppercase text-slate-400">
+                    <th className="pb-2 pr-4 font-medium">Reason</th>
+                    <th className="pb-2 font-medium">Pages</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {breakdown.map(b => (
+                    <tr key={b.label} className="text-slate-300">
+                      <td className="py-2 pr-4">{b.label}</td>
+                      <td className={`py-2 font-mono text-xs ${b.color}`}>{b.count}</td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {breakdown.map(b => (
-                      <tr key={b.label} className="text-slate-300">
-                        <td className="py-2 pr-4">{b.label}</td>
-                        <td className={`py-2 font-mono text-xs ${b.color}`}>{b.count}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="mt-4">
-                  <div className="text-xs text-slate-500">
-                    <BotCakePageList pages={pages.map(p => ({
-                      page_id: p.page_id,
-                      page_name: p.page_name,
-                      is_activated: p.is_activated,
-                      activation_reason: p.activation_reason,
-                      hours_since_last_customer_activity: p.hours_since_last_customer_activity,
-                      customer_count: p.customer_count,
-                    }))} overrides={overrideMap} />
-                  </div>
+                  ))}
+                </tbody>
+              </table>
+              <div className="mt-4">
+                <div className="text-xs text-slate-500">
+                  <BotCakePageList pages={pages.map(p => ({
+                    page_id: p.page_id,
+                    page_name: p.page_name,
+                    is_activated: p.is_activated,
+                    activation_reason: p.activation_reason,
+                    hours_since_last_customer_activity: p.hours_since_last_customer_activity,
+                    customer_count: p.customer_count,
+                  }))} overrides={overrideMap} />
                 </div>
               </div>
             </div>
           </div>
         </div>
-        {botCakeTrend.length > 0 && (
-          <div className="mt-6">
-            <ActiveTrendChart series={botCakeTrend} />
-          </div>
-        )}
       </div>
-    );
-  } catch (err) {
-    console.error('BotCakeSection error:', err);
-    return <DbErrorFallback label="BotCake Platform" />;
-  }
+      {botCakeTrend.length > 0 && (
+        <div className="mt-6">
+          <ActiveTrendChart series={botCakeTrend} />
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default async function OverviewPage({

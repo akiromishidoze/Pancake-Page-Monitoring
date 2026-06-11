@@ -16,7 +16,7 @@ const POLLER_GRACE_PERIOD_MS = 3 * 60_000;
 const POLLER_STALE_THRESHOLD_MS = 3 * 60_000;
 
 let _started = false;
-let _serverStartTime = Date.now();
+const _serverStartTime = Date.now();
 const _intervals: NodeJS.Timeout[] = [];
 const _timers: ReturnType<typeof setTimeout>[] = [];
 

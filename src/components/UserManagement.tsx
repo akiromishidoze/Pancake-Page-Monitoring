@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect, startTransition, FormEvent } from 'react';
 
 type User = {
   id: number;
@@ -43,7 +43,7 @@ export function UserManagement() {
     }
   }
 
-  useEffect(() => { loadUsers(); }, []);
+  useEffect(() => { startTransition(() => { void loadUsers(); }); }, []);
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();

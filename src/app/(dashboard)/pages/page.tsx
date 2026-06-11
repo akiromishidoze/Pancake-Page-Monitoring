@@ -15,7 +15,7 @@ const KIND_TONE: Record<string, string> = {
 
 export default async function PlatformsPage() {
   let endpoints: EndpointRow[] = [];
-  let perEndpoint = new Map<string, { total: number; active: number; inactive: number; kinds: Map<string, number> }>();
+  const perEndpoint = new Map<string, { total: number; active: number; inactive: number; kinds: Map<string, number> }>();
   try {
     const allEndpoints = await listEndpoints();
     endpoints = allEndpoints.filter(e => e.is_active && isPancakeEndpoint(e));

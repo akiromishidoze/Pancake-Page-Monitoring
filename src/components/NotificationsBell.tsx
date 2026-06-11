@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, startTransition } from 'react';
 
 type NotificationRow = {
   id: number;
@@ -70,8 +70,8 @@ export function NotificationsBell() {
   }, []);
 
   useEffect(() => {
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000);
+    startTransition(() => { void fetchNotifications(); });
+    const interval = setInterval(() => startTransition(() => { void fetchNotifications(); }), 30000);
 
     const es = new EventSource('/api/sse');
     es.addEventListener('notification', () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, startTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 type Endpoint = {
@@ -14,7 +14,9 @@ export function EndpointFilter({ endpoints }: { endpoints: Endpoint[] }) {
   const [current, setCurrent] = useState('');
 
   useEffect(() => {
-    setCurrent(searchParams?.get('endpoint_id') ?? '');
+    startTransition(() => {
+      setCurrent(searchParams?.get('endpoint_id') ?? '');
+    });
   }, [searchParams]);
 
   function onChange(e: React.ChangeEvent<HTMLSelectElement>) {

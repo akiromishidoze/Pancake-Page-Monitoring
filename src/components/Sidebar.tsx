@@ -2,15 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 
 function useCollapsed() {
-  const [collapsed, setCollapsed] = useState(false);
-
-  useEffect(() => {
-    const stored = localStorage.getItem('sidebar_collapsed');
-    if (stored === 'true') setCollapsed(true);
-  }, []);
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar_collapsed') === 'true');
 
   const toggle = useCallback(() => {
     setCollapsed(prev => {
@@ -28,6 +23,74 @@ function SvgIcon({ d, size = 20, className = '' }: { d: string; size?: number; c
     <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`flex-shrink-0 ${className}`}>
       <path d={d} />
     </svg>
+  );
+}
+
+function NavLink({ href, icon, label, active, collapsed, onNav }: { href: string; icon: string; label: string; active: boolean; collapsed: boolean; onNav: () => void }) {
+  return (
+    <Link
+      href={href}
+      onClick={onNav}
+      className={`flex items-center rounded-md transition-colors text-sm font-medium ${
+        collapsed ? 'justify-center h-9 w-full' : 'px-3 py-2 gap-3'
+      } ${active ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+      title={label}
+    >
+      <SvgIcon d={icon} />
+      {!collapsed && <span>{label}</span>}
+    </Link>
+  );
+}
+
+function NavGroup({ item, isMobile, collapsed, pagesOpen, onTogglePages, onNav }: { item: NavItem; isMobile?: boolean; collapsed: boolean; pagesOpen: boolean; onTogglePages: () => void; onNav: () => void }) {
+  if (isMobile || !collapsed) {
+    return (
+      <div>
+        <button
+          onClick={onTogglePages}
+          className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer ${
+            item.active ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+          }`}
+        >
+          <SvgIcon d={item.icon} />
+          <span className="flex-1 text-left">{item.label}</span>
+          <SvgIcon d={ICONS.chevron} size={14} className={`transition-transform ${pagesOpen ? 'rotate-90' : ''}`} />
+        </button>
+        {pagesOpen && item.children && (
+          <div className="ml-4 mt-1 space-y-1">
+            {item.children.map(child => (
+              <Link
+                key={child.href}
+                href={child.href}
+                onClick={onNav}
+                className={`block px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  child.active ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                }`}
+              >
+                {child.label}
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+  return <NavLink href={item.href} icon={item.icon} label={item.label} active={item.active} collapsed={collapsed} onNav={onNav} />;
+}
+
+function Logo({ compact }: { compact?: boolean }) {
+  return (
+    <div className={`flex items-center h-14 border-b border-slate-800 ${compact ? 'justify-center' : 'px-4 gap-3'}`}>
+      <div className="w-8 h-8 rounded-lg bg-blue-700 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+        M
+      </div>
+      {!compact && (
+        <div className="flex flex-col min-w-0">
+          <div className="text-sm font-semibold text-white truncate leading-tight">Page Monitor</div>
+          <div className="text-xs text-slate-500 truncate leading-tight">Pancake & BotCake</div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -77,77 +140,7 @@ export function Sidebar() {
     { href: '/settings', icon: ICONS.settings, label: 'Settings', active: isSettingsActive },
   ];
 
-  function closeMobile() {
-    setMobileOpen(false);
-  }
-
-  function NavLink({ href, icon, label, active }: { href: string; icon: string; label: string; active: boolean }) {
-    return (
-      <Link
-        href={href}
-        onClick={closeMobile}
-        className={`flex items-center rounded-md transition-colors text-sm font-medium ${
-          collapsed ? 'justify-center h-9 w-full' : 'px-3 py-2 gap-3'
-        } ${active ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
-        title={label}
-      >
-        <SvgIcon d={icon} />
-        {!collapsed && <span>{label}</span>}
-      </Link>
-    );
-  }
-
-  function NavGroup({ item, isMobile }: { item: NavItem; isMobile?: boolean }) {
-    if (isMobile || !collapsed) {
-      return (
-        <div>
-          <button
-            onClick={() => setPagesOpen(prev => !prev)}
-            className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer ${
-              item.active ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
-            }`}
-          >
-            <SvgIcon d={item.icon} />
-            <span className="flex-1 text-left">{item.label}</span>
-            <SvgIcon d={ICONS.chevron} size={14} className={`transition-transform ${pagesOpen ? 'rotate-90' : ''}`} />
-          </button>
-          {pagesOpen && item.children && (
-            <div className="ml-4 mt-1 space-y-1">
-              {item.children.map(child => (
-                <Link
-                  key={child.href}
-                  href={child.href}
-                  onClick={closeMobile}
-                  className={`block px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                    child.active ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
-                  }`}
-                >
-                  {child.label}
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-      );
-    }
-    return <NavLink href={item.href} icon={item.icon} label={item.label} active={item.active} />;
-  }
-
-  function Logo({ compact }: { compact?: boolean }) {
-    return (
-      <div className={`flex items-center h-14 border-b border-slate-800 ${compact ? 'justify-center' : 'px-4 gap-3'}`}>
-        <div className="w-8 h-8 rounded-lg bg-blue-700 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-          M
-        </div>
-        {!compact && (
-          <div className="flex flex-col min-w-0">
-            <div className="text-sm font-semibold text-white truncate leading-tight">Page Monitor</div>
-            <div className="text-xs text-slate-500 truncate leading-tight">Pancake & BotCake</div>
-          </div>
-        )}
-      </div>
-    );
-  }
+  const closeMobile = useCallback(() => setMobileOpen(false), []);
 
   return (
     <>
@@ -157,9 +150,9 @@ export function Sidebar() {
 
         <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
           {navItems.slice(0, 2).map(item => (
-            <NavLink key={item.href} {...item} />
+            <NavLink key={item.href} {...item} collapsed={collapsed} onNav={closeMobile} />
           ))}
-          {navItems[2].children && <NavGroup item={navItems[2]} />}
+          {navItems[2].children && <NavGroup item={navItems[2]} collapsed={collapsed} pagesOpen={pagesOpen} onTogglePages={() => setPagesOpen(prev => !prev)} onNav={closeMobile} />}
         </nav>
 
         <div className="border-t border-slate-800 px-3 py-3 space-y-1">
@@ -172,8 +165,8 @@ export function Sidebar() {
               <SvgIcon d={ICONS.collapse} size={16} />
             </button>
           </div>
-          <NavLink {...navItems[3]} label={navItems[3].label} />
-          <NavLink {...navItems[4]} label={navItems[4].label} />
+          <NavLink {...navItems[3]} collapsed={collapsed} onNav={closeMobile} />
+          <NavLink {...navItems[4]} collapsed={collapsed} onNav={closeMobile} />
         </div>
       </aside>
 
@@ -197,7 +190,7 @@ export function Sidebar() {
                   <span>{item.label}</span>
                 </Link>
               ))}
-              <NavGroup item={navItems[2]} isMobile />
+              <NavGroup item={navItems[2]} isMobile collapsed={collapsed} pagesOpen={pagesOpen} onTogglePages={() => setPagesOpen(prev => !prev)} onNav={closeMobile} />
             </nav>
             <div className="border-t border-slate-800 px-3 py-3 space-y-1">
               <Link

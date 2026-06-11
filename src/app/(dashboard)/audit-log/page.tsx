@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, startTransition } from 'react';
 import { SectionErrorBoundary } from '@/components/SectionErrorBoundary';
 import { formatWithTz } from '@/lib/format';
 
@@ -53,7 +53,7 @@ export default function AuditLogPage() {
     }
   }, [offset, actionFilter, entityTypeFilter, dateFrom, dateTo, limit]);
 
-  useEffect(() => { fetchLogs(); }, [fetchLogs]);
+  useEffect(() => { startTransition(() => { void fetchLogs(); }); }, [fetchLogs]);
 
   const resetFilters = () => {
     setActionFilter('');
