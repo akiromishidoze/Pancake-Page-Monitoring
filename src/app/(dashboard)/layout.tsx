@@ -14,7 +14,6 @@ export default function DashboardLayout({
       <div className="flex h-screen overflow-hidden">
         <ChunkReload />
         <AutoRefresh />
-        <GlobalLoadingSequence />
         <Sidebar />
 
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -23,7 +22,8 @@ export default function DashboardLayout({
               <div className="flex items-center gap-3">
                 <h1 className="text-lg font-semibold">Page Monitoring</h1>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-4">
+                <GlobalLoadingSequence />
                 <NotificationsBell />
                 <LogoutButton />
               </div>
