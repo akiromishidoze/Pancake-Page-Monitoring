@@ -5,7 +5,9 @@ import { usePathname } from 'next/navigation';
 import { useState, useCallback } from 'react';
 
 function useCollapsed() {
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar_collapsed') === 'true');
+  const [collapsed, setCollapsed] = useState(() =>
+    typeof window !== 'undefined' ? localStorage.getItem('sidebar_collapsed') === 'true' : false
+  );
 
   const toggle = useCallback(() => {
     setCollapsed(prev => {
