@@ -99,9 +99,13 @@ describe('db module', () => {
     });
 
     it('upsertEndpoint creates new endpoint', async () => {
+      const { encrypt, hashApiKey } = await import('../crypto');
+      const encryptedKey = encrypt('key-123');
+      const apiKeyHash = hashApiKey('key-123');
+
       mockPool.query.mockImplementation(async (sql: any) => {
         if (typeof sql === 'string' && sql.includes('SELECT * FROM endpoints WHERE id')) {
-          return { rows: [{ id: 'new-id', name: 'new-ep' }] };
+          return { rows: [{ id: 'new-id', name: 'new-ep', api_key: encryptedKey, api_key_hash: apiKeyHash }] };
         }
         return defaultQuery(sql);
       });
@@ -124,6 +128,8 @@ describe('db module', () => {
       // api_key_hash should be present
       const hashValue = insertCall[0].values.find((v: string) => typeof v === 'string' && /^[0-9a-f]{64}$/i.test(v));
       expect(hashValue).toBeDefined();
+      // returned endpoint should have decrypted api_key
+      expect(res.api_key).toBe('key-123');
     });
   });
 
