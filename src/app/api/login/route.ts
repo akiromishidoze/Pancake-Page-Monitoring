@@ -10,6 +10,7 @@ import { recordFailedAttempt, resetAttempts, getLockoutStatus, MAX_ATTEMPTS } fr
 import { addNotification } from '@/lib/notifications';
 import { logAuditEntry } from '@/lib/db';
 import { generateCsrfToken, makeCsrfCookieHeader } from '@/lib/csrf';
+import { SESSION_COOKIE_NAME, SESSION_COOKIE_OPTIONS } from '@/lib/session';
 
 export async function POST(req: Request) {
   try {
@@ -67,13 +68,7 @@ export async function POST(req: Request) {
 
     const token = await createSession(user?.role, user?.id);
     const cookieStore = await cookies();
-    cookieStore.set('session', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 60 * 60 * 24 * 7,
-    });
+    cookieStore.set(SESSION_COOKIE_NAME, token, SESSION_COOKIE_OPTIONS);
 
     const mustChangePassword = await isDefaultPassword();
 

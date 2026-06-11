@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { ErrorCodes } from '@/lib/errors';
+import { SESSION_COOKIE_NAME } from '@/lib/session';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('proxy');
@@ -73,7 +74,7 @@ export async function proxy(request: NextRequest) {
     return respond(NextResponse.next());
   }
 
-  const session = request.cookies.get('session')?.value;
+  const session = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (!session) {
     log.warn({ requestId, pathname }, 'no session');
     if (pathname.startsWith('/api/')) {

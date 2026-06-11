@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { getSetting, setSetting, createSessionToken, validateSessionToken, clearSessionToken, getUserByEmail, getUserById, createUser, getUserCount } from './db';
 import { ErrorCodes, apiCatch, apiError, requireJson } from './errors';
 import { checkCsrf } from './csrf';
+import { SESSION_COOKIE_NAME } from './session';
 import { createLogger } from './logger';
 
 const log = createLogger('auth');
@@ -82,7 +83,7 @@ export async function clearSession(token?: string): Promise<void> {
 export async function requireApiAuth(): Promise<NextResponse | null> {
   const { cookies } = await import('next/headers');
   const cookieStore = await cookies();
-  const session = cookieStore.get('session')?.value;
+  const session = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (!(await validateSession(session))) {
     return NextResponse.json({ ok: false, error: 'Not authenticated', code: ErrorCodes.AUTH_REQUIRED }, { status: 401 });
   }
@@ -92,7 +93,7 @@ export async function requireApiAuth(): Promise<NextResponse | null> {
 export async function getSessionUser(): Promise<{ id: number; email: string; role: string } | null> {
   const { cookies } = await import('next/headers');
   const cookieStore = await cookies();
-  const token = cookieStore.get('session')?.value;
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (!token) return null;
   const { getSessionTokenUser } = await import('./db');
   return getSessionTokenUser(token);
