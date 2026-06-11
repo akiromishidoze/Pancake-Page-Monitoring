@@ -9,6 +9,7 @@ import { LoginSchema } from '@/lib/schemas';
 import { recordFailedAttempt, resetAttempts, getLockoutStatus, MAX_ATTEMPTS } from '@/lib/lockout';
 import { addNotification } from '@/lib/notifications';
 import { logAuditEntry } from '@/lib/db';
+import { generateCsrfToken, makeCsrfCookieHeader } from '@/lib/csrf';
 
 export async function POST(req: Request) {
   try {
@@ -53,10 +54,15 @@ export async function POST(req: Request) {
 
     const user = await getUserByEmail(identifier);
 
+    const csrfToken = generateCsrfToken();
+    const csrfCookie = makeCsrfCookieHeader(csrfToken);
+
     const totpEnabled = await getSetting('totp_enabled');
     if (totpEnabled === 'true') {
       const totpToken = createTotpTempToken(identifier);
-      return NextResponse.json({ requires_2fa: true, totp_token: totpToken });
+      const res = NextResponse.json({ requires_2fa: true, totp_token: totpToken });
+      res.headers.append('Set-Cookie', csrfCookie);
+      return res;
     }
 
     const token = await createSession(user?.role, user?.id);
@@ -71,7 +77,9 @@ export async function POST(req: Request) {
 
     const mustChangePassword = await isDefaultPassword();
 
-    return NextResponse.json({ ok: true, must_change_password: mustChangePassword });
+    const res = NextResponse.json({ ok: true, must_change_password: mustChangePassword });
+    res.headers.append('Set-Cookie', csrfCookie);
+    return res;
   } catch (e) {
     return apiCatch(e);
   }

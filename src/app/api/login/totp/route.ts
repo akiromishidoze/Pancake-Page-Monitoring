@@ -6,6 +6,7 @@ import { getSetting, logAuditEntry, getUserByEmail } from '@/lib/db';
 import { TotpLoginSchema } from '@/lib/schemas';
 import { verifyTOTP, consumeTotpTempToken } from '@/lib/totp';
 import { cookies } from 'next/headers';
+import { generateCsrfToken, makeCsrfCookieHeader } from '@/lib/csrf';
 
 export async function POST(req: Request) {
   try {
@@ -56,7 +57,11 @@ export async function POST(req: Request) {
 
     void logAuditEntry('totp_login', 'auth', identifier, `Successful TOTP login from ${ip}`, ip);
 
-    return NextResponse.json({ ok: true });
+    const csrfToken = generateCsrfToken();
+    const csrfCookie = makeCsrfCookieHeader(csrfToken);
+    const res = NextResponse.json({ ok: true });
+    res.headers.append('Set-Cookie', csrfCookie);
+    return res;
   } catch (e) {
     return apiCatch(e);
   }
