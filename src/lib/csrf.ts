@@ -1,12 +1,14 @@
-import type { NextRequest } from 'next/server';
-
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 export function isStateChangingRequest(method: string): boolean {
   return !SAFE_METHODS.has(method.toUpperCase());
 }
 
-export function checkCsrf(request: NextRequest): boolean {
+/** Returns true if the request passes CSRF validation.
+ *  - If Origin is present, it must match Host.
+ *  - If only Referer is present, it must match Host.
+ *  - If neither is present (non-browser client), pass through. */
+export function checkCsrf(request: Request): boolean {
   const origin = request.headers.get('origin');
   const host = request.headers.get('host');
 
@@ -19,7 +21,6 @@ export function checkCsrf(request: NextRequest): boolean {
     }
   }
 
-  // Fall back to Referer header when Origin is absent
   const referer = request.headers.get('referer');
   if (referer) {
     try {
@@ -30,5 +31,6 @@ export function checkCsrf(request: NextRequest): boolean {
     }
   }
 
-  return false;
+  // No Origin/Referer — not a browser request, can't be CSRF
+  return true;
 }

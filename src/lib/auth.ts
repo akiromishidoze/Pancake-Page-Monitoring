@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { getSetting, setSetting, createSessionToken, validateSessionToken, clearSessionToken, getUserByEmail, getUserById, createUser, getUserCount } from './db';
-import { ErrorCodes, apiCatch, requireJson } from './errors';
+import { ErrorCodes, apiCatch, apiError, requireJson } from './errors';
+import { checkCsrf } from './csrf';
 import { createLogger } from './logger';
 
 const log = createLogger('auth');
@@ -137,6 +138,10 @@ export function withAuth<T extends RouteHandler>(handler: T): T {
       }
       const req = args[0];
       if (req instanceof Request && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+        if (!checkCsrf(req)) {
+          handlerLog.info({ method, path, status: 403, durationMs: Date.now() - start }, 'handler');
+          return apiError(ErrorCodes.CSRF_FAILED, 'CSRF validation failed', 403);
+        }
         const jsonErr = requireJson(req);
         if (jsonErr) {
           handlerLog.info({ method, path, status: jsonErr.status, durationMs: Date.now() - start }, 'handler');
