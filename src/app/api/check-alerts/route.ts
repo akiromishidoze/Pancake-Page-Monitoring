@@ -3,8 +3,10 @@ import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { getLatestRun } from '@/lib/db';
 import { checkAlertsForRun } from '@/lib/notify';
 import { withAuth } from '@/lib/auth';
+import { rateLimitRoute } from '@/lib/rate-limit-guard';
 
-export const POST = withAuth(async () => {
+export const POST = withAuth(async (req: Request) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
     const run = await getLatestRun();
     if (!run) {
       return apiError(ErrorCodes.NOT_FOUND, 'No runs in database', 400);

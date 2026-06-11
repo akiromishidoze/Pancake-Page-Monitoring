@@ -5,13 +5,16 @@ import { ConnectorCreateSchema } from '@/lib/schemas';
 import { withAuth } from '@/lib/auth';
 import { addNotification } from '@/lib/notifications';
 import { getClientIp } from '@/lib/rate-limit';
+import { rateLimitRoute } from '@/lib/rate-limit-guard';
 
-export const GET = withAuth(async () => {
+export const GET = withAuth(async (req: Request) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
   const connectors = await listPlatformConnectors();
   return NextResponse.json({ ok: true, connectors });
 });
 
 export const POST = withAuth(async (req: Request) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
     let raw: unknown;
     try {
       raw = await req.json();

@@ -3,6 +3,7 @@ import { ErrorCodes, apiError } from '@/lib/errors';
 import { WebhookBotCakeSchema } from '@/lib/schemas';
 import { triggerBotCakeRefresh } from '@/lib/poller';
 import { createLogger } from '@/lib/logger';
+import { rateLimitRoute } from '@/lib/rate-limit-guard';
 
 const log = createLogger('webhook-botcake');
 
@@ -14,6 +15,7 @@ function secretValid(req: Request): boolean {
 }
 
 export async function POST(req: Request) {
+  const rl = await rateLimitRoute(req); if (rl) return rl;
   if (!secretValid(req)) {
     return apiError(ErrorCodes.AUTH_REQUIRED, 'Invalid webhook secret', 401);
   }

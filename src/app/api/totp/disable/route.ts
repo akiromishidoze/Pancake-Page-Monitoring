@@ -4,11 +4,13 @@ import { requireApiAuth, validateCredentials } from '@/lib/auth';
 import { setSetting, logAuditEntry } from '@/lib/db';
 import { TotpDisableSchema } from '@/lib/schemas';
 import { getClientIp } from '@/lib/rate-limit';
+import { rateLimitRoute } from '@/lib/rate-limit-guard';
 
 export async function POST(req: Request) {
   try {
     const authErr = await requireApiAuth();
     if (authErr) return authErr;
+    const rl = await rateLimitRoute(req); if (rl) return rl;
 
     const ctErr = requireJson(req);
     if (ctErr) return ctErr;

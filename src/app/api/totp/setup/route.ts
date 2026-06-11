@@ -5,14 +5,16 @@ import { generateSecret, generateTOTPUri, verifyTOTP } from '@/lib/totp';
 import { getSetting, setSetting, logAuditEntry } from '@/lib/db';
 import { TotpSetupSchema } from '@/lib/schemas';
 import { getClientIp } from '@/lib/rate-limit';
+import { rateLimitRoute } from '@/lib/rate-limit-guard';
 import QRCode from 'qrcode';
 
 let _pendingSecret: string | null = null;
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const authErr = await requireApiAuth();
     if (authErr) return authErr;
+    const rl = await rateLimitRoute(req); if (rl) return rl;
 
     const secret = generateSecret();
     _pendingSecret = secret;
@@ -29,6 +31,7 @@ export async function POST(req: Request) {
   try {
     const authErr = await requireApiAuth();
     if (authErr) return authErr;
+    const rl = await rateLimitRoute(req); if (rl) return rl;
 
     const ctErr = requireJson(req);
     if (ctErr) return ctErr;

@@ -7,6 +7,7 @@ import { pool, logAuditEntry } from '@/lib/db';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { requireApiAuth, withAuth } from '@/lib/auth';
 import { backup } from '@/lib/backup';
+import { rateLimitRoute } from '@/lib/rate-limit-guard';
 
 export const POST = withAuth(async (req: Request) => {
     const ip = getClientIp(req);
@@ -23,9 +24,10 @@ export const POST = withAuth(async (req: Request) => {
     return NextResponse.json({ ok: true, file: result.file, size_kb: result.size_kb, remote_key: result.remote_key });
 });
 
-export async function GET() {
+export async function GET(req: Request) {
   const auth = await requireApiAuth();
   if (auth) return auth;
+  const rl = await rateLimitRoute(req); if (rl) return rl;
   const fs = await import('fs');
   const path = await import('path');
   const BACKUPS_DIR = path.join(process.cwd(), 'backups');

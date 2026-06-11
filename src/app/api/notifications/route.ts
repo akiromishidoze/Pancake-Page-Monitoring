@@ -5,8 +5,10 @@ import { getNotifications, markAsRead, markAllAsRead, dismissNotification, getUn
 import { MarkNotificationsSchema } from '@/lib/schemas';
 import { logAuditEntry } from '@/lib/db';
 import { getClientIp } from '@/lib/rate-limit';
+import { rateLimitRoute } from '@/lib/rate-limit-guard';
 
 export const GET = withAuth(async (req: Request) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
   const url = new URL(req.url);
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '50', 10), 200);
   const offset = Math.max(parseInt(url.searchParams.get('offset') || '0', 10), 0);
@@ -21,6 +23,7 @@ export const GET = withAuth(async (req: Request) => {
 });
 
 export const PATCH = withAuth(async (req: Request) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
   let raw: unknown;
   try {
     raw = await req.json();
@@ -51,6 +54,7 @@ export const PATCH = withAuth(async (req: Request) => {
 });
 
 export const DELETE = withAuth(async (req: Request) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
   const url = new URL(req.url);
   const idStr = url.searchParams.get('id');
   if (!idStr) {

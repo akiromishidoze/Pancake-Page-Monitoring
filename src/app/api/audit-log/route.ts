@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server';
 import { apiError, apiCatch } from '@/lib/errors';
 import { queryRows } from '@/lib/db';
 import { withAuth } from '@/lib/auth';
+import { rateLimitRoute } from '@/lib/rate-limit-guard';
 
 export const GET = withAuth(async (req: Request) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
     const url = new URL(req.url);
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '100', 10), 500);
     const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10));

@@ -59,7 +59,7 @@ describe('GET /api/settings', () => {
 
   it('returns default retention_days when not set', async () => {
     const { GET } = await import('../route');
-    const res = await GET();
+    const res = await GET(new Request('http://localhost'));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.settings.retention_days).toBe('90');
@@ -68,7 +68,7 @@ describe('GET /api/settings', () => {
   it('returns stored retention_days', async () => {
     mockSettings.set('retention_days', '45');
     const { GET } = await import('../route');
-    const res = await GET();
+    const res = await GET(new Request('http://localhost'));
     const body = await res.json();
     expect(body.settings.retention_days).toBe('45');
   });

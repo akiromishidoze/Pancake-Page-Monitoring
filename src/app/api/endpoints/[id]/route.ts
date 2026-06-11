@@ -7,10 +7,12 @@ import { getEndpoint, upsertEndpoint, deleteEndpoint, logAuditEntry } from '@/li
 import { EndpointUpdateSchema } from '@/lib/schemas';
 import { withAuth } from '@/lib/auth';
 import { getClientIp } from '@/lib/rate-limit';
+import { rateLimitRoute } from '@/lib/rate-limit-guard';
 import { resetBreaker } from '@/lib/circuit-breaker';
 import { invalidateBotCakeCaches } from '@/lib/botcake';
 
 export const PUT = withAuth(async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
     const { id } = await params;
     const existing = await getEndpoint(id);
     if (!existing) {
@@ -72,6 +74,7 @@ export const PUT = withAuth(async (req: Request, { params }: { params: Promise<{
 });
 
 export const DELETE = withAuth(async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
     const { id } = await params;
     const existing = await getEndpoint(id);
     if (!existing) {

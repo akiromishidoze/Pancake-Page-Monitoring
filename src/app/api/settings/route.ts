@@ -3,8 +3,10 @@ import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { getSetting, setSetting, logAuditEntry } from '@/lib/db';
 import { RetentionSettingsSchema } from '@/lib/schemas';
 import { withAuth } from '@/lib/auth';
+import { rateLimitRoute } from '@/lib/rate-limit-guard';
 
-export const GET = withAuth(async () => {
+export const GET = withAuth(async (req: Request) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
   const retentionDays = (await getSetting('retention_days')) || '90';
   return NextResponse.json({
     ok: true,
@@ -13,6 +15,7 @@ export const GET = withAuth(async () => {
 });
 
 export const POST = withAuth(async (req: Request) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
     let raw: unknown;
     try {
       raw = await req.json();

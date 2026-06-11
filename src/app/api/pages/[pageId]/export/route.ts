@@ -3,8 +3,10 @@ import { toCsv } from '@/lib/format';
 import { apiCatch } from '@/lib/errors';
 import { pool } from '@/lib/db';
 import { withAuth } from '@/lib/auth';
+import { rateLimitRoute } from '@/lib/rate-limit-guard';
 
 export const GET = withAuth(async (req: Request, { params }: { params: Promise<{ pageId: string }> }) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
     const { pageId } = await params;
   const url = new URL(req.url);
   const shop = url.searchParams.get('shop');

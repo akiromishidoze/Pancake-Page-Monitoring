@@ -8,8 +8,10 @@ import { EndpointCreateSchema } from '@/lib/schemas';
 import { withAuth } from '@/lib/auth';
 import { addNotification } from '@/lib/notifications';
 import { getClientIp } from '@/lib/rate-limit';
+import { rateLimitRoute } from '@/lib/rate-limit-guard';
 
-export const GET = withAuth(async () => {
+export const GET = withAuth(async (req: Request) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
   const endpoints = await listEndpoints();
   const safe = endpoints.map(({ api_key_hash, ...e }) => ({
     ...e,

@@ -4,8 +4,10 @@ import { getSetting, setSetting, logAuditEntry } from '@/lib/db';
 import { ScheduleSchema } from '@/lib/schemas';
 import { withAuth } from '@/lib/auth';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { rateLimitRoute } from '@/lib/rate-limit-guard';
 
-export const GET = withAuth(async () => {
+export const GET = withAuth(async (req: Request) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
   const interval = (await getSetting('schedule_interval')) || 'off';
   return NextResponse.json({ ok: true, interval });
 });

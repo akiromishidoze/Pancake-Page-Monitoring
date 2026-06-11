@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server';
 import { apiCatch } from '@/lib/errors';
 import { getRunCount, getSetting } from '@/lib/db';
 import { withAuth } from '@/lib/auth';
+import { rateLimitRoute } from '@/lib/rate-limit-guard';
 
-export const GET = withAuth(async () => {
+export const GET = withAuth(async (req: Request) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
   const [runCount, lastBackfill] = await Promise.all([
     getRunCount(),
     getSetting('last_backfill_at'),
@@ -17,7 +19,8 @@ export const GET = withAuth(async () => {
   });
 });
 
-export const POST = withAuth(async () => {
+export const POST = withAuth(async (req: Request) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
     return NextResponse.json({
       ok: true,
       inserted: 0,

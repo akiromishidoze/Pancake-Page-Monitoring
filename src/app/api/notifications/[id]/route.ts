@@ -3,8 +3,10 @@ import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
 import { withAuth } from '@/lib/auth';
 import { queryRow } from '@/lib/db';
 import type { NotificationRow } from '@/lib/notifications';
+import { rateLimitRoute } from '@/lib/rate-limit-guard';
 
-export const GET = withAuth(async (_req: Request, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withAuth(async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
     const { id: idStr } = await params;
     const id = parseInt(idStr, 10);
     if (isNaN(id)) {

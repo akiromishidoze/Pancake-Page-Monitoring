@@ -4,8 +4,10 @@ import { cookies } from 'next/headers';
 import { clearSession, withAuth } from '@/lib/auth';
 import { logAuditEntry } from '@/lib/db';
 import { SESSION_COOKIE_NAME, SESSION_COOKIE_OPTIONS } from '@/lib/session';
+import { rateLimitRoute } from '@/lib/rate-limit-guard';
 
-export const POST = withAuth(async () => {
+export const POST = withAuth(async (req: Request) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
     const cookieStore = await cookies();
     const session = cookieStore.get(SESSION_COOKIE_NAME)?.value;
     await clearSession(session);

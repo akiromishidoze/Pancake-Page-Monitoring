@@ -5,8 +5,10 @@ import { getUserById, updateUserEmail, updateUserRole, setUserActive, deleteUser
 import { hashPassword } from '@/lib/auth';
 import { UserUpdateSchema } from '@/lib/schemas';
 import { getClientIp } from '@/lib/rate-limit';
+import { rateLimitRoute } from '@/lib/rate-limit-guard';
 
 export const PUT = withAuth(async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
   try {
     const { id } = await params;
     const userId = parseInt(id, 10);
@@ -87,6 +89,7 @@ export const PUT = withAuth(async (req: Request, { params }: { params: Promise<{
 });
 
 export const DELETE = withAuth(async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
   try {
     const { id } = await params;
     const userId = parseInt(id, 10);

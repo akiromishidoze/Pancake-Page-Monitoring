@@ -4,6 +4,7 @@ import { apiCatch } from '@/lib/errors';
 import { getLatestPageStates, getBotCakeOverrides, listEndpoints, isBotCakeEndpoint } from '@/lib/db';
 import { cors, corsOptions } from '@/lib/cors';
 import { requireApiAuth } from '@/lib/auth';
+import { rateLimitRoute } from '@/lib/rate-limit-guard';
 
 export async function OPTIONS() {
   return corsOptions();
@@ -13,6 +14,7 @@ export async function GET(request: Request) {
   try {
     const auth = await requireApiAuth();
     if (auth) return cors(auth);
+    const rl = await rateLimitRoute(request); if (rl) return cors(rl);
     const { searchParams } = new URL(request.url);
     const endpointId = searchParams.get('endpoint_id');
 

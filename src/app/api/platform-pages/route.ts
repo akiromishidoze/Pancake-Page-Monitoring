@@ -4,10 +4,12 @@ import { listPlatformPages, upsertPlatformPage, logAuditEntry } from '@/lib/db';
 import { PlatformPageCreateSchema } from '@/lib/schemas';
 import { getClientIp } from '@/lib/rate-limit';
 import { requireApiAuth } from '@/lib/auth';
+import { rateLimitRoute } from '@/lib/rate-limit-guard';
 
 export async function GET(req: Request) {
   const auth = await requireApiAuth();
   if (auth) return auth;
+  const rl = await rateLimitRoute(req); if (rl) return rl;
   const url = new URL(req.url);
   const endpointId = url.searchParams.get('endpoint_id') || undefined;
   const pages = await listPlatformPages(endpointId);
@@ -17,6 +19,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const auth = await requireApiAuth();
   if (auth) return auth;
+  const rl = await rateLimitRoute(req); if (rl) return rl;
   const ctErr = requireJson(req);
   if (ctErr) return ctErr;
   let raw: unknown;

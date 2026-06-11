@@ -4,8 +4,10 @@ import { getPlatformPage, upsertPlatformPage, deletePlatformPage, logAuditEntry 
 import { PlatformPageUpdateSchema } from '@/lib/schemas';
 import { withAuth } from '@/lib/auth';
 import { getClientIp } from '@/lib/rate-limit';
+import { rateLimitRoute } from '@/lib/rate-limit-guard';
 
 export const PUT = withAuth(async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
     const { id } = await params;
     const existing = await getPlatformPage(id);
     if (!existing) {
@@ -47,6 +49,7 @@ export const PUT = withAuth(async (req: Request, { params }: { params: Promise<{
 });
 
 export const DELETE = withAuth(async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
     const { id } = await params;
     const existing = await getPlatformPage(id);
     if (!existing) {

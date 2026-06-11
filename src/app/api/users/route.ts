@@ -5,8 +5,10 @@ import { listUsers, createUser, getUserCount, logAuditEntry } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
 import { UserCreateSchema } from '@/lib/schemas';
 import { getClientIp } from '@/lib/rate-limit';
+import { rateLimitRoute } from '@/lib/rate-limit-guard';
 
-export const GET = withAuth(async () => {
+export const GET = withAuth(async (req: Request) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
   try {
     const users = await listUsers();
     const safe = users.map(u => ({
@@ -24,6 +26,7 @@ export const GET = withAuth(async () => {
 });
 
 export const POST = withAuth(async (req: Request) => {
+    const rl = await rateLimitRoute(req); if (rl) return rl;
   try {
     const ctErr = requireJson(req);
     if (ctErr) return ctErr;
