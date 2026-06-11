@@ -11,13 +11,14 @@ import { corsReflectOrigin, corsOptions } from '@/lib/cors';
 import { IngestBodySchema } from '@/lib/schemas';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { createLogger } from '@/lib/logger';
+import { netmask } from '@/lib/net';
 
 const log = createLogger('ingest');
 
 function isAllowedIp(ip: string): boolean {
   const allowed = process.env['INGEST_IP_ALLOWLIST'];
   if (!allowed) return true;
-  return allowed.split(',').map(s => s.trim()).some(a => a === ip || a === '0.0.0.0/0');
+  return allowed.split(',').map(s => s.trim()).some(a => a === '0.0.0.0/0' || netmask(a, ip));
 }
 
 function respond(res: NextResponse, req: Request): NextResponse {
