@@ -74,13 +74,18 @@ function q(sql: string, params?: Record<string, unknown>): { text: string; value
 // so the old deployment can still start without issue.
 
 let _migrated = false;
+let _migrationPromise: Promise<void> | null = null;
 
-async function ensureMigrated() {
-  if (_migrated) return;
-  _migrated = true;
-  await runPendingMigrations();
-  await migratePageStatesPartitioning();
-  await migratePartitionColumnTypes();
+function ensureMigrated(): Promise<void> {
+  if (_migrated) return Promise.resolve();
+  if (_migrationPromise) return _migrationPromise;
+  _migrationPromise = (async () => {
+    _migrated = true;
+    await runPendingMigrations();
+    await migratePageStatesPartitioning();
+    await migratePartitionColumnTypes();
+  })();
+  return _migrationPromise;
 }
 
 async function runPendingMigrations() {

@@ -19,7 +19,7 @@
 ## 🟠 High (7)
 
 - [x] **Request body size validation** — reject oversized payloads before parsing JSON. (All POST routes)
-- [ ] **`ensureMigrated()` call overhead** — redundant on every query after startup. (`src/lib/db.ts:42-52`)
+- [x] **`ensureMigrated()` call overhead** — redundant on every query after startup. (`src/lib/db.ts:42-52`)
 - [ ] **Migration race condition** — `migratePartitionColumnTypes()` runs outside the versioned migration system. (`src/lib/db.ts:501-512`)
 - [ ] **SSE backpressure** — slow SSE consumers can cause memory growth. (`src/lib/sse.ts`)
 - [ ] **Partition cache never invalidated** — `_partitionCache` misses externally-created partitions until restart. (`src/lib/db.ts:514-538`)
