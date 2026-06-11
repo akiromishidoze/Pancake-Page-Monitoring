@@ -11,7 +11,7 @@ import { getClientIp } from '@/lib/rate-limit';
 
 export const GET = withAuth(async () => {
   const endpoints = await listEndpoints();
-  const safe = endpoints.map((e) => ({
+  const safe = endpoints.map(({ api_key_hash, ...e }) => ({
     ...e,
     api_key: e.api_key ? `${e.api_key.slice(0, 8)}...${e.api_key.slice(-4)}` : null,
   }));
@@ -54,6 +54,6 @@ export const POST = withAuth(async (req: Request) => {
 
     return NextResponse.json({
       ok: true,
-      endpoint: { ...endpoint, api_key: undefined },
+      endpoint: { ...endpoint, api_key: undefined, api_key_hash: undefined },
     });
 });

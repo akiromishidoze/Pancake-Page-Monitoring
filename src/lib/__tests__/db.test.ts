@@ -118,7 +118,12 @@ describe('db module', () => {
       ) as any;
       expect(insertCall).toBeDefined();
       expect(insertCall[0].values).toContain('new-ep');
-      expect(insertCall[0].values).toContain('key-123');
+      // api_key should be encrypted, not plaintext
+      const apiValue = insertCall[0].values.find((v: string) => typeof v === 'string' && /^[0-9a-f]{32}:[0-9a-f]{32}:[0-9a-f]+$/i.test(v));
+      expect(apiValue).toBeDefined();
+      // api_key_hash should be present
+      const hashValue = insertCall[0].values.find((v: string) => typeof v === 'string' && /^[0-9a-f]{64}$/i.test(v));
+      expect(hashValue).toBeDefined();
     });
   });
 

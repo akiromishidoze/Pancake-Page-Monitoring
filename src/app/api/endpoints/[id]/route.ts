@@ -68,7 +68,7 @@ export const PUT = withAuth(async (req: Request, { params }: { params: Promise<{
       void logAuditEntry('update_endpoint', 'endpoint', id, `Changed: ${changed.join(', ')}`, ip);
     }
 
-    return NextResponse.json({ ok: true, endpoint: { ...endpoint, api_key: undefined } });
+    return NextResponse.json({ ok: true, endpoint: { ...endpoint, api_key: undefined, api_key_hash: undefined } });
 });
 
 export const DELETE = withAuth(async (req: Request, { params }: { params: Promise<{ id: string }> }) => {

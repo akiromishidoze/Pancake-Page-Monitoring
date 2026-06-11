@@ -2,6 +2,7 @@ import { Pool, type PoolConfig } from 'pg';
 import { parse } from 'pg-connection-string';
 import { createLogger } from './logger';
 import { randomBytes } from 'crypto';
+import { encrypt, decrypt, hashApiKey } from './crypto';
 
 function randomId(): string {
   return randomBytes(16).toString('hex');
@@ -927,6 +928,7 @@ export type EndpointRow = {
   last_used_at: string | null;
   shop_label: string | null;
   fb_page_id: string | null;
+  api_key_hash: string | null;
 };
 
 export function isBotCakeEndpoint(ep: EndpointRow): boolean {
@@ -937,14 +939,27 @@ export function isPancakeEndpoint(ep: EndpointRow): boolean {
   return !isBotCakeEndpoint(ep);
 }
 
+/** Decrypt an endpoint row's api_key and access_token if they're encrypted. */
+function decryptEndpointRow(row: EndpointRow): EndpointRow {
+  if (isEncrypted(row.api_key)) {
+    try { row.api_key = decrypt(row.api_key); } catch { /* keep as-is */ }
+  }
+  if (row.access_token && isEncrypted(row.access_token)) {
+    try { row.access_token = decrypt(row.access_token); } catch { /* keep as-is */ }
+  }
+  return row;
+}
+
 export async function listEndpoints(): Promise<EndpointRow[]> {
   await ensureMigrated();
-  return queryRows<EndpointRow>('SELECT * FROM endpoints ORDER BY created_at DESC');
+  const rows = await queryRows<EndpointRow>('SELECT * FROM endpoints ORDER BY created_at DESC');
+  return rows.map(decryptEndpointRow);
 }
 
 export async function getEndpoint(id: string): Promise<EndpointRow | undefined> {
   await ensureMigrated();
-  return queryRow<EndpointRow>('SELECT * FROM endpoints WHERE id = $1', [id]);
+  const row = await queryRow<EndpointRow>('SELECT * FROM endpoints WHERE id = $1', [id]);
+  return row ? decryptEndpointRow(row) : undefined;
 }
 
 export function slugify(name: string): string {
@@ -958,7 +973,18 @@ export async function getEndpointBySlug(slug: string): Promise<EndpointRow | und
 
 export async function getEndpointByApiKey(apiKey: string): Promise<EndpointRow | undefined> {
   await ensureMigrated();
-  return queryRow<EndpointRow>('SELECT * FROM endpoints WHERE api_key = $1 AND is_active IS TRUE', [apiKey]);
+  const apiKeyHash = hashApiKey(apiKey);
+  const row = await queryRow<EndpointRow>(
+    'SELECT * FROM endpoints WHERE api_key_hash = $1 AND is_active IS TRUE',
+    [apiKeyHash],
+  );
+  if (!row) return row;
+  return decryptEndpointRow(row);
+}
+
+/** Check if a string looks like an encrypted payload (iv:authTag:ciphertext). */
+function isEncrypted(val: string): boolean {
+  return /^[0-9a-f]{32}:[0-9a-f]{32}:[0-9a-f]+$/i.test(val);
 }
 
 export async function upsertEndpoint(input: {
@@ -975,19 +1001,27 @@ export async function upsertEndpoint(input: {
   const id = input.id || randomId();
   const now = new Date().toISOString();
 
+  const encryptedApiKey = isEncrypted(input.api_key) ? input.api_key : encrypt(input.api_key);
+  const encryptedToken = input.access_token && !isEncrypted(input.access_token)
+    ? encrypt(input.access_token)
+    : input.access_token ?? null;
+  const apiKeyHash = hashApiKey(input.api_key);
+
   await pool.query(q(`
-    INSERT INTO endpoints (id, name, url, api_key, access_token, token_expires_at, is_active, created_at, fb_page_id)
-    VALUES (@id, @name, @url, @api_key, @access_token, @token_expires_at, @is_active, @created_at, @fb_page_id)
+    INSERT INTO endpoints (id, name, url, api_key, access_token, api_key_hash, token_expires_at, is_active, created_at, fb_page_id)
+    VALUES (@id, @name, @url, @api_key, @access_token, @api_key_hash, @token_expires_at, @is_active, @created_at, @fb_page_id)
     ON CONFLICT (id) DO UPDATE SET
       name=EXCLUDED.name, url=EXCLUDED.url, api_key=EXCLUDED.api_key,
-      access_token=EXCLUDED.access_token, token_expires_at=EXCLUDED.token_expires_at,
+      access_token=EXCLUDED.access_token, api_key_hash=EXCLUDED.api_key_hash,
+      token_expires_at=EXCLUDED.token_expires_at,
       is_active=EXCLUDED.is_active, fb_page_id=EXCLUDED.fb_page_id
   `, {
     id,
     name: input.name,
     url: input.url ?? null,
-    api_key: input.api_key,
-    access_token: input.access_token ?? null,
+    api_key: encryptedApiKey,
+    access_token: encryptedToken,
+    api_key_hash: apiKeyHash,
     token_expires_at: input.token_expires_at ?? null,
     is_active: input.is_active ?? true,
     created_at: now,
@@ -1147,15 +1181,17 @@ export async function upsertPlatformConnector(input: {
   const now = new Date().toISOString();
 
   // Ensure FK reference exists in endpoints table (no-op if already exists)
+  const connectorApiKey = `connector_${id}`;
   await pool.query(q(`
-    INSERT INTO endpoints (id, name, url, api_key, is_active, created_at)
-    VALUES (@id, @name, @url, @api_key, @is_active, @created_at)
+    INSERT INTO endpoints (id, name, url, api_key, api_key_hash, is_active, created_at)
+    VALUES (@id, @name, @url, @api_key, @api_key_hash, @is_active, @created_at)
     ON CONFLICT (id) DO NOTHING
   `, {
     id,
     name: `${input.name} (Connector)`,
     url: input.api_url,
-    api_key: `connector_${id}`,
+    api_key: encrypt(connectorApiKey),
+    api_key_hash: hashApiKey(connectorApiKey),
     is_active: 1,
     created_at: now,
   }));
