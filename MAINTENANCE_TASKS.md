@@ -12,7 +12,7 @@
 - [ ] **Rate-limit race condition** — `rateLimit()` read-then-write without DB locking; concurrent requests can exceed `max`. (`src/lib/rate-limit.ts:58-83`)
 - [ ] **Session cookie hardening** — add `__Host-` prefix and `partitioned` attribute to login cookie. (`src/app/api/login/route.ts:64-70`)
 - [ ] **API keys encryption** — `api_key` and `access_token` stored in plaintext in the `endpoints` table. (`src/lib/db.ts:118-128`)
-- [ ] **HTTP security headers** — add CSP, HSTS, X-Frame-Options, X-Content-Type-Options (via middleware or next.config).
+- [x] **HTTP security headers** — add CSP, HSTS, X-Frame-Options, X-Content-Type-Options (via middleware or next.config).
 - [ ] **Rate limit all API routes** — only login and ingest are protected; 30+ routes have no rate limiting.
 - [ ] **Ingest IP allowlist CIDR support** — replace string-exact match with proper CIDR matching. (`src/app/api/ingest/route.ts:17-21`)
 
