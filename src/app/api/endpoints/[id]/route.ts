@@ -7,6 +7,8 @@ import { getEndpoint, upsertEndpoint, deleteEndpoint, logAuditEntry } from '@/li
 import { EndpointUpdateSchema } from '@/lib/schemas';
 import { withAuth } from '@/lib/auth';
 import { getClientIp } from '@/lib/rate-limit';
+import { resetBreaker } from '@/lib/circuit-breaker';
+import { invalidateBotCakeCaches } from '@/lib/botcake';
 
 export const PUT = withAuth(async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
@@ -55,6 +57,12 @@ export const PUT = withAuth(async (req: Request, { params }: { params: Promise<{
     if (body.fb_page_id !== undefined && body.fb_page_id !== existing.fb_page_id) changed.push('fb_page_id');
     if (body.shop_label !== undefined && body.shop_label !== existing.shop_label) changed.push('shop_label');
     if (body.is_active !== undefined && body.is_active !== existing.is_active) changed.push('is_active');
+
+    if (tokenChanged) {
+      resetBreaker('botcake:' + id);
+      invalidateBotCakeCaches();
+    }
+
     if (changed.length > 0) {
       const ip = getClientIp(req);
       void logAuditEntry('update_endpoint', 'endpoint', id, `Changed: ${changed.join(', ')}`, ip);
