@@ -83,7 +83,6 @@ function ensureMigrated(): Promise<void> {
     _migrated = true;
     await runPendingMigrations();
     await migratePageStatesPartitioning();
-    await migratePartitionColumnTypes();
   })();
   return _migrationPromise;
 }
@@ -418,6 +417,21 @@ const MIGRATIONS: Migration[] = [
       await pool.query(`CREATE INDEX IF NOT EXISTS endpoints_api_key_hash ON endpoints(api_key_hash)`);
     },
   },
+  {
+    version: 'v12', name: 'page_states boolean column types',
+    up: async () => {
+      try {
+        await pool.query(`ALTER TABLE page_states ALTER COLUMN is_activated TYPE BOOLEAN USING is_activated::boolean`);
+      } catch {
+        // Already BOOLEAN or column doesn't exist
+      }
+      try {
+        await pool.query(`ALTER TABLE page_states ALTER COLUMN is_canary TYPE BOOLEAN USING is_canary::boolean`);
+      } catch {
+        // Already BOOLEAN or column doesn't exist
+      }
+    },
+  },
 ];
 
 // ──── Partitioning ──────────────────────────────────────────────────────
@@ -508,19 +522,6 @@ async function migratePageStatesPartitioning() {
     await pool.query('ROLLBACK');
     log.error({ err: e }, 'partitioning migration failed, reverting:');
     throw e;
-  }
-}
-
-async function migratePartitionColumnTypes() {
-  try {
-    await pool.query(`ALTER TABLE page_states ALTER COLUMN is_activated TYPE BOOLEAN USING is_activated::boolean`);
-  } catch {
-    // Already BOOLEAN or column doesn't exist
-  }
-  try {
-    await pool.query(`ALTER TABLE page_states ALTER COLUMN is_canary TYPE BOOLEAN USING is_canary::boolean`);
-  } catch {
-    // Already BOOLEAN or column doesn't exist
   }
 }
 
