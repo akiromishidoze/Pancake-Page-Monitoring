@@ -47,6 +47,8 @@ export function broadcastSSE(event: string, data: string) {
   const message = `event: ${event}\ndata: ${data}\n\n`;
   for (const [id, { controller, scope }] of clients) {
     if (scope && eventEndpointId && scope !== eventEndpointId) continue;
+    // If the stream is full (consumer is slow), skip the message to avoid memory growth
+    if (controller.desiredSize !== null && controller.desiredSize <= 0) continue;
     try {
       controller.enqueue(new TextEncoder().encode(message));
     } catch {
