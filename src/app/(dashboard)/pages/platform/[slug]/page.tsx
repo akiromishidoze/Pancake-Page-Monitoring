@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ManagedPagesSection } from '@/components/ManagedPagesSection';
 import { PlatformSettings } from '@/components/PlatformSettings';
 import { SearchablePageTable } from '@/components/SearchablePageTable';
+import { SectionErrorBoundary } from '@/components/SectionErrorBoundary';
 
 type Row = {
   page_id: string;
@@ -49,10 +50,28 @@ export default async function PlatformPage({
     notFound();
   }
 
-  const [allRows, managedPages] = await Promise.all([
-    loadRows(platform.id),
-    listPlatformPages(platform.id),
-  ]);
+  let allRows: Row[];
+  let managedPages: { id: string; page_name: string; page_url: string; is_active: boolean }[];
+  try {
+    [allRows, managedPages] = await Promise.all([
+      loadRows(platform.id),
+      listPlatformPages(platform.id),
+    ]);
+  } catch {
+    return (
+      <div className="space-y-6">
+        <Link href="/pages" className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+          All Platforms
+        </Link>
+        <div className="rounded-lg border border-red-800 bg-red-950/30 p-6 text-red-400" role="alert">
+          Could not load platform data. The database may be temporarily unreachable.
+        </div>
+      </div>
+    );
+  }
 
   const shops = Array.from(new Set(allRows.map((r) => r.shop).filter((s): s is string => !!s))).sort();
   const hasShops = shops.length > 0;
@@ -106,11 +125,18 @@ export default async function PlatformPage({
       {shopRows.length === 0 ? (
         <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 text-slate-400">No page data for this platform.</div>
       ) : (
-        <SearchablePageTable rows={shopRows} hasShops={hasShops} showKinds={!allKindsNull} />
+        <SectionErrorBoundary title="Page Table">
+          <SearchablePageTable rows={shopRows} hasShops={hasShops} showKinds={!allKindsNull} />
+        </SectionErrorBoundary>
       )}
 
-      <ManagedPagesSection endpointId={platform.id} initialPages={managedPages} />
-      <PlatformSettings endpoint={platform} />
+      <SectionErrorBoundary title="Managed Pages">
+        <ManagedPagesSection endpointId={platform.id} initialPages={managedPages} />
+      </SectionErrorBoundary>
+
+      <SectionErrorBoundary title="Platform Settings">
+        <PlatformSettings endpoint={platform} />
+      </SectionErrorBoundary>
     </div>
   );
 }
