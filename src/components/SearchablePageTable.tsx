@@ -43,10 +43,11 @@ export function SearchablePageTable({ rows, hasShops, showKinds }: { rows: PageR
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder="Search pages..."
+          aria-label="Search pages"
           className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:border-blue-500 focus:outline-none"
         />
       </div>
-      <table className="min-w-full text-sm">
+      <table aria-label="Pages" className="min-w-full text-sm">
         <thead className="bg-slate-800/50">
           <tr className="text-left text-xs uppercase text-slate-400">
             {!hasShops && <th className="px-4 py-3 font-medium">Shop ID</th>}

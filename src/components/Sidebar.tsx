@@ -147,10 +147,10 @@ export function Sidebar() {
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className={`hidden lg:flex border-r border-slate-800 bg-slate-900 flex-shrink-0 flex-col h-full transition-[width] duration-200 ${collapsed ? 'w-16' : 'w-64'}`}>
+      <aside aria-label="Main navigation" className={`hidden lg:flex border-r border-slate-800 bg-slate-900 flex-shrink-0 flex-col h-full transition-[width] duration-200 ${collapsed ? 'w-16' : 'w-64'}`}>
         <Logo compact={collapsed} />
 
-        <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
+        <nav aria-label="Primary" className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
           {navItems.slice(0, 2).map(item => (
             <NavLink key={item.href} {...item} collapsed={collapsed} onNav={closeMobile} />
           ))}
@@ -162,6 +162,7 @@ export function Sidebar() {
             <button
               onClick={toggle}
               className="p-1.5 rounded-md text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer"
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
               <SvgIcon d={ICONS.collapse} size={16} />
@@ -175,10 +176,10 @@ export function Sidebar() {
       {/* Mobile overlay */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/60" onClick={closeMobile} />
-          <aside className="relative w-64 h-full border-r border-slate-800 bg-slate-900 flex-shrink-0 flex flex-col">
+          <div className="absolute inset-0 bg-black/60" onClick={closeMobile} aria-label="Close navigation" role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeMobile(); } }} />
+          <aside aria-label="Mobile navigation" className="relative w-64 h-full border-r border-slate-800 bg-slate-900 flex-shrink-0 flex flex-col">
             <Logo />
-            <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
+            <nav aria-label="Primary" className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
               {navItems.slice(0, 2).map(item => (
                 <Link
                   key={item.href}
