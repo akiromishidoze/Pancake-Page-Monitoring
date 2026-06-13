@@ -199,17 +199,45 @@ describe('lockout module', () => {
       expect(r3.remainingMs).toBe(60 * 60 * 1000);
     });
 
-    it('caps at 24 hours for 5th+ lockout', async () => {
-      const { recordFailedAttempt } = await import('../lockout');
-      // Cycle through 5 lockouts
-      const durations = [5, 15, 60, 240, 1440];
-      for (let cycle = 0; cycle < 5; cycle++) {
+    it('permanently locks after 10 lockouts', async () => {
+      const { recordFailedAttempt, getLockoutStatus, PERMANENT_LOCKOUT_THRESHOLD } = await import('../lockout');
+      // 1st-9th lockout durations in minutes
+      const durations = [5, 15, 60, 240, 1440, 1440, 1440, 1440, 1440];
+      for (let cycle = 1; cycle < PERMANENT_LOCKOUT_THRESHOLD; cycle++) {
         for (let i = 0; i < 5; i++) await recordFailedAttempt('admin', '1.2.3.4');
-        if (cycle < 4) vi.advanceTimersByTime(durations[cycle] * 60 * 1000 + 1);
+        const status = await getLockoutStatus('admin');
+        expect(status.locked).toBe(true);
+        // Cycle 1-4 have escalating durations, 5-9 are 24h
+        const expected = durations[cycle - 1] * 60 * 1000;
+        expect(status.remainingMs).toBe(expected);
+        vi.advanceTimersByTime(expected + 1);
+        expect((await getLockoutStatus('admin')).locked).toBe(false);
       }
-      const r5 = await recordFailedAttempt('admin', '1.2.3.4');
-      expect(r5.locked).toBe(true);
-      expect(r5.remainingMs).toBe(24 * 60 * 60 * 1000);
+      // 10th lockout → permanent
+      for (let i = 0; i < 5; i++) await recordFailedAttempt('admin', '1.2.3.4');
+      const status = await getLockoutStatus('admin');
+      expect(status.locked).toBe(true);
+      expect(status.remainingMs).toBe(Infinity);
+      // Even after advancing time, stays locked
+      vi.advanceTimersByTime(365 * 24 * 60 * 60 * 1000);
+      expect((await getLockoutStatus('admin')).locked).toBe(true);
+      expect((await getLockoutStatus('admin')).remainingMs).toBe(Infinity);
+    });
+
+    it('resetAttempts unlocks permanently locked account', async () => {
+      const { recordFailedAttempt, resetAttempts, getLockoutStatus, PERMANENT_LOCKOUT_THRESHOLD } = await import('../lockout');
+      for (let cycle = 1; cycle < PERMANENT_LOCKOUT_THRESHOLD; cycle++) {
+        for (let i = 0; i < 5; i++) await recordFailedAttempt('admin', '1.2.3.4');
+        vi.advanceTimersByTime(1440 * 60 * 1000 + 1);
+      }
+      // 10th lockout → permanent
+      for (let i = 0; i < 5; i++) await recordFailedAttempt('admin', '1.2.3.4');
+      expect((await getLockoutStatus('admin')).locked).toBe(true);
+      expect((await getLockoutStatus('admin')).remainingMs).toBe(Infinity);
+      // Admin unlocks
+      await resetAttempts('admin');
+      expect((await getLockoutStatus('admin')).locked).toBe(false);
+      expect((await getLockoutStatus('admin')).attempts).toBe(0);
     });
   });
 });

@@ -21,6 +21,7 @@ const ROUTE_TIERS: Record<string, string | null> = {
   '/api/logout':                    'write',
   '/api/totp/disable':              'auth',
   '/api/totp/setup':                'auth',
+  '/api/unlock':                    'auth',
   '/api/notify-settings':           'write',
   '/api/test-notification':         'heavy',
   '/api/test-email-notification':   'heavy',

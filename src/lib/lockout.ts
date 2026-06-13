@@ -4,6 +4,7 @@ import { createLogger } from './logger';
 const log = createLogger('lockout');
 
 export const MAX_ATTEMPTS = 5;
+export const PERMANENT_LOCKOUT_THRESHOLD = 10;
 const LOCKOUT_DURATIONS_MS = [
   5 * 60 * 1000,      // 1st lockout: 5 minutes
   15 * 60 * 1000,     // 2nd lockout: 15 minutes
@@ -14,6 +15,7 @@ const LOCKOUT_DURATIONS_MS = [
 
 function getLockoutDuration(lockoutCount: number): number {
   if (lockoutCount <= 0) return 0;
+  if (lockoutCount >= PERMANENT_LOCKOUT_THRESHOLD) return Infinity;
   const idx = Math.min(lockoutCount - 1, LOCKOUT_DURATIONS_MS.length - 1);
   return LOCKOUT_DURATIONS_MS[idx];
 }
@@ -33,6 +35,12 @@ export async function recordFailedAttempt(identifier: string, ip: string): Promi
 
     if (row.rows.length > 0) {
       const entry = row.rows[0];
+
+      // Permanent lock — reject without counting another attempt
+      if (entry.lockout_count === -1) {
+        return { locked: true, remainingMs: Infinity };
+      }
+
       const lockoutUntil = new Date(entry.lockout_until).getTime();
 
       // If currently locked, reject without counting another attempt
@@ -45,17 +53,21 @@ export async function recordFailedAttempt(identifier: string, ip: string): Promi
       if (newAttempts >= MAX_ATTEMPTS) {
         const newLockoutCount = entry.lockout_count + 1;
         const duration = getLockoutDuration(newLockoutCount);
-        const lockoutUntilDate = new Date(now + duration);
+        const isPermanent = duration === Infinity;
+        const lockoutUntilDate = isPermanent
+          ? new Date('9999-12-31T23:59:59Z')
+          : new Date(now + duration);
 
         await pool.query(
           `UPDATE lockout_entries
            SET attempts = 0, lockout_count = $1, lockout_until = $2, last_ip = $3
            WHERE identifier = $4`,
-          [newLockoutCount, lockoutUntilDate.toISOString(), ip, identifier],
+          [isPermanent ? -1 : newLockoutCount, lockoutUntilDate.toISOString(), ip, identifier],
         );
 
-        log.warn({ identifier, ip, lockoutCount: newLockoutCount, durationMs: duration }, 'account locked due to too many failed login attempts');
-        return { locked: true, remainingMs: duration };
+        const label = isPermanent ? 'permanently' : 'temporarily';
+        log.warn({ identifier, ip, lockoutCount: newLockoutCount, durationMs: duration }, `account ${label} locked due to too many failed login attempts`);
+        return { locked: true, remainingMs: isPermanent ? Infinity : duration };
       }
 
       await pool.query(
@@ -102,6 +114,12 @@ export async function getLockoutStatus(identifier: string): Promise<{ locked: bo
     if (row.rows.length === 0) return { locked: false, remainingMs: 0, attempts: 0 };
 
     const entry = row.rows[0];
+
+    // Permanent lock (lockout_count = -1)
+    if (entry.lockout_count === -1) {
+      return { locked: true, remainingMs: Infinity, attempts: 0 };
+    }
+
     const lockoutUntil = new Date(entry.lockout_until).getTime();
     const now = Date.now();
 
