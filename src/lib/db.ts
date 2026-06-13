@@ -526,19 +526,22 @@ async function migratePageStatesPartitioning() {
 }
 
 let _partitionCache: Set<string> | null = null;
+let _partitionCacheAge = 0;
+const PARTITION_CACHE_TTL = 300_000; // 5 minutes
 
 export async function ensureMonthlyPartitions(): Promise<void> {
   await ensureMigrated();
 
-  if (!_partitionCache) {
+  const now = new Date();
+  if (!_partitionCache || Date.now() - _partitionCacheAge > PARTITION_CACHE_TTL) {
     const partitions = await pool.query(
       `SELECT inhrelid::regclass::text AS name FROM pg_inherits
        WHERE inhparent = 'page_states'::regclass`,
     );
     _partitionCache = new Set(partitions.rows.map((r: { name: string }) => r.name));
+    _partitionCacheAge = Date.now();
   }
 
-  const now = new Date();
   for (let offset = -3; offset <= 6; offset++) {
     const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
     const dNext = new Date(d.getFullYear(), d.getMonth() + 1, 1);
