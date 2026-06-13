@@ -1,12 +1,14 @@
 export const dynamic = 'force-dynamic';
 
 import { notFound, redirect } from 'next/navigation';
-import { getLatestPageStates, getEndpointBySlug, listPlatformPages, listEndpoints, upsertEndpoint } from '@/lib/db';
+import { getLatestPageStates, getEndpointBySlug, listPlatformPages, listEndpoints, upsertEndpoint, type PlatformPageRow } from '@/lib/db';
 import Link from 'next/link';
-import { ManagedPagesSection } from '@/components/ManagedPagesSection';
-import { PlatformSettings } from '@/components/PlatformSettings';
+import dyn from 'next/dynamic';
 import { SearchablePageTable } from '@/components/SearchablePageTable';
 import { SectionErrorBoundary } from '@/components/SectionErrorBoundary';
+
+const ManagedPagesSection = dyn(() => import('@/components/ManagedPagesSection').then(m => m.ManagedPagesSection));
+const PlatformSettings = dyn(() => import('@/components/PlatformSettings').then(m => m.PlatformSettings));
 
 type Row = {
   page_id: string;
@@ -51,7 +53,7 @@ export default async function PlatformPage({
   }
 
   let allRows: Row[];
-  let managedPages: { id: string; page_name: string; page_url: string; is_active: boolean }[];
+  let managedPages: PlatformPageRow[];
   try {
     [allRows, managedPages] = await Promise.all([
       loadRows(platform.id),

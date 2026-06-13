@@ -3,12 +3,14 @@ export const dynamic = 'force-dynamic';
 import { listEndpoints } from '@/lib/db';
 import { SectionErrorBoundary } from '@/components/SectionErrorBoundary';
 import { SettingsForm } from './SettingsForm';
-import { ChangeCredentials } from '@/components/ChangeCredentials';
 import { NotificationSettings } from '@/components/NotificationSettings';
 import { ConnectorsSettings } from '@/components/ConnectorsSettings';
 import { DataRetentionSettings } from '@/components/DataRetentionSettings';
-import { TwoFactorSetup } from '@/components/TwoFactorSetup';
-import { UserManagement } from '@/components/UserManagement';
+import dyn from 'next/dynamic';
+
+const TwoFactorSetup = dyn(() => import('@/components/TwoFactorSetup').then(m => m.TwoFactorSetup));
+const UserManagement = dyn(() => import('@/components/UserManagement').then(m => m.UserManagement));
+const ChangeCredentials = dyn(() => import('@/components/ChangeCredentials').then(m => m.ChangeCredentials));
 
 export default async function SettingsPage({
   searchParams,

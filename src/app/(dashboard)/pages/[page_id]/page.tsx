@@ -1,11 +1,13 @@
 import { getPageHistory } from '@/lib/db';
 import Link from 'next/link';
+import dyn from 'next/dynamic';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
-import { ActiveDonutChart } from '@/components/ActiveDonutChart';
-import { PageWaterfallChart } from '@/components/PageWaterfallChart';
 import { SectionErrorBoundary } from '@/components/SectionErrorBoundary';
-import type { SlimPage } from '@/lib/db';
+import type { SlimPage, PageStateRow } from '@/lib/db';
 import { formatWithTz } from '@/lib/format';
+
+const ActiveDonutChart = dyn(() => import('@/components/ActiveDonutChart').then(m => m.ActiveDonutChart));
+const PageWaterfallChart = dyn(() => import('@/components/PageWaterfallChart').then(m => m.PageWaterfallChart));
 
 export const dynamic = 'force-dynamic';
 
@@ -36,7 +38,7 @@ export default async function Page({
   const pageId = resolvedParams.page_id;
   const resolvedSearch = searchParams ? await searchParams : undefined;
   const shopFilter = resolvedSearch?.shop;
-  let rows: SlimPage[];
+  let rows: PageStateRow[];
   try {
     rows = await getPageHistory(pageId, 500);
   } catch {

@@ -144,7 +144,7 @@ export function TwoFactorSetup() {
 
           {qr && (
             <div className="flex justify-center">
-<img src={qr} alt="TOTP QR Code" className="w-48 h-48" />
+<img src={qr} alt="TOTP QR Code" loading="lazy" className="w-48 h-48" />
             </div>
           )}
 

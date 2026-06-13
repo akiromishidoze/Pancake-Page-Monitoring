@@ -47,13 +47,16 @@ const pool = new Proxy(_pool, {
       return (queryTextOrConfig: any, values?: any[], callback?: any) => {
         const signal = AbortSignal.timeout(QUERY_TIMEOUT);
         if (typeof queryTextOrConfig === 'string') {
-          return callback
-            ? _origQuery({ text: queryTextOrConfig, values, signal }, callback)
-            : _origQuery({ text: queryTextOrConfig, values, signal });
+          if (callback) {
+            return _origQuery({ text: queryTextOrConfig, values, signal } as any, callback);
+          }
+          return _origQuery({ text: queryTextOrConfig, values, signal } as any);
         }
-        return callback
-          ? _origQuery({ ...queryTextOrConfig, signal }, values, callback)
-          : _origQuery({ ...queryTextOrConfig, signal }, values);
+        const qc = { ...queryTextOrConfig, signal } as any;
+        if (callback) {
+          return _origQuery(qc, values as any[], callback);
+        }
+        return _origQuery(qc, values as any[]);
       };
     }
     return Reflect.get(target, prop, receiver);
