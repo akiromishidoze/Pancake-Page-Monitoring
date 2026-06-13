@@ -4,15 +4,16 @@ import { getSetting, setSetting, logAuditEntry } from '@/lib/db';
 import { RetentionSettingsSchema } from '@/lib/schemas';
 import { withAuth } from '@/lib/auth';
 import { rateLimitRoute } from '@/lib/rate-limit-guard';
+import { withCache } from '@/lib/api-cache';
 
-export const GET = withAuth(async (req: Request) => {
+export const GET = withAuth(withCache(async (req: Request) => {
     const rl = await rateLimitRoute(req); if (rl) return rl;
   const retentionDays = (await getSetting('retention_days')) || '90';
   return NextResponse.json({
     ok: true,
     settings: { retention_days: retentionDays },
   });
-});
+}));
 
 export const POST = withAuth(async (req: Request) => {
     const rl = await rateLimitRoute(req); if (rl) return rl;

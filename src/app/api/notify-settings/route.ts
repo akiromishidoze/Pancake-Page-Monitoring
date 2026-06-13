@@ -6,8 +6,9 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { NotifySettingsSchema } from '@/lib/schemas';
 import { requireApiAuth, withAuth } from '@/lib/auth';
 import { addNotification } from '@/lib/notifications';
+import { withCache } from '@/lib/api-cache';
 
-export const GET = withAuth(async () => {
+export const GET = withAuth(withCache(async () => {
     const slackWebhook = (await getSetting('notify_slack_webhook')) || '';
     const smtpHost = (await getSetting('notify_smtp_host')) || '';
     const smtpPort = (await getSetting('notify_smtp_port')) || '';
@@ -26,7 +27,7 @@ export const GET = withAuth(async () => {
       email_to: emailTo,
       email_configured: !!(smtpHost && smtpUser && emailTo),
     });
-});
+}));
 
 export async function POST(req: Request) {
   const auth = await requireApiAuth();

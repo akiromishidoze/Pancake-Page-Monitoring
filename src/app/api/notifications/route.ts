@@ -6,8 +6,9 @@ import { MarkNotificationsSchema } from '@/lib/schemas';
 import { logAuditEntry } from '@/lib/db';
 import { getClientIp } from '@/lib/rate-limit';
 import { rateLimitRoute } from '@/lib/rate-limit-guard';
+import { withCache, invalidateCache } from '@/lib/api-cache';
 
-export const GET = withAuth(async (req: Request) => {
+export const GET = withAuth(withCache(async (req: Request) => {
     const rl = await rateLimitRoute(req); if (rl) return rl;
   const url = new URL(req.url);
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '50', 10), 200);
@@ -20,7 +21,7 @@ export const GET = withAuth(async (req: Request) => {
   ]);
 
   return NextResponse.json({ ok: true, notifications, unreadCount });
-});
+}));
 
 export const PATCH = withAuth(async (req: Request) => {
     const rl = await rateLimitRoute(req); if (rl) return rl;
@@ -40,12 +41,14 @@ export const PATCH = withAuth(async (req: Request) => {
   const body = parsed.data;
   if (body.all) {
     await markAllAsRead();
+    invalidateCache('/api/notifications');
     void logAuditEntry('mark_notifications_read', 'notification', 'all', 'Marked all notifications as read', ip);
     return NextResponse.json({ ok: true });
   }
 
   if (body.id !== undefined) {
     await markAsRead(body.id);
+    invalidateCache('/api/notifications');
     void logAuditEntry('mark_notification_read', 'notification', String(body.id), `Marked notification #${body.id} as read`, ip);
     return NextResponse.json({ ok: true });
   }
@@ -65,6 +68,7 @@ export const DELETE = withAuth(async (req: Request) => {
     return apiError(ErrorCodes.INVALID_VALUE, 'Invalid id', 400);
   }
   await dismissNotification(id);
+  invalidateCache('/api/notifications');
   const ip = getClientIp(req);
   void logAuditEntry('dismiss_notification', 'notification', String(id), `Dismissed notification #${id}`, ip);
 

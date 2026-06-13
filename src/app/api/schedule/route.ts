@@ -5,12 +5,13 @@ import { ScheduleSchema } from '@/lib/schemas';
 import { withAuth } from '@/lib/auth';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { rateLimitRoute } from '@/lib/rate-limit-guard';
+import { withCache } from '@/lib/api-cache';
 
-export const GET = withAuth(async (req: Request) => {
+export const GET = withAuth(withCache(async (req: Request) => {
     const rl = await rateLimitRoute(req); if (rl) return rl;
   const interval = (await getSetting('schedule_interval')) || 'off';
   return NextResponse.json({ ok: true, interval });
-});
+}));
 
 export const POST = withAuth(async (req: Request) => {
     const ip = getClientIp(req);

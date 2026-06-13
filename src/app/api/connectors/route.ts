@@ -6,12 +6,13 @@ import { withAuth } from '@/lib/auth';
 import { addNotification } from '@/lib/notifications';
 import { getClientIp } from '@/lib/rate-limit';
 import { rateLimitRoute } from '@/lib/rate-limit-guard';
+import { withCache } from '@/lib/api-cache';
 
-export const GET = withAuth(async (req: Request) => {
+export const GET = withAuth(withCache(async (req: Request) => {
     const rl = await rateLimitRoute(req); if (rl) return rl;
   const connectors = await listPlatformConnectors();
   return NextResponse.json({ ok: true, connectors });
-});
+}));
 
 export const POST = withAuth(async (req: Request) => {
     const rl = await rateLimitRoute(req); if (rl) return rl;
