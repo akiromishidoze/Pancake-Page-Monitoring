@@ -32,11 +32,32 @@ const poolConfig: DbPoolConfig = {
   statement_timeout: parseInt(process.env.PG_STATEMENT_TIMEOUT || '30000', 10),
   pgbouncer: isPgBouncer || undefined,
 };
-const pool = new Pool(poolConfig);
+const _pool = new Pool(poolConfig);
 
 // Log connection errors without crashing
-pool.on('error', (err) => {
+_pool.on('error', (err) => {
   log.error({ err: err.message }, 'unexpected pool error');
+});
+
+const QUERY_TIMEOUT = parseInt(process.env.QUERY_TIMEOUT || '30000', 10);
+const _origQuery = _pool.query.bind(_pool);
+const pool = new Proxy(_pool, {
+  get(target, prop, receiver) {
+    if (prop === 'query') {
+      return (queryTextOrConfig: any, values?: any[], callback?: any) => {
+        const signal = AbortSignal.timeout(QUERY_TIMEOUT);
+        if (typeof queryTextOrConfig === 'string') {
+          return callback
+            ? _origQuery({ text: queryTextOrConfig, values, signal }, callback)
+            : _origQuery({ text: queryTextOrConfig, values, signal });
+        }
+        return callback
+          ? _origQuery({ ...queryTextOrConfig, signal }, values, callback)
+          : _origQuery({ ...queryTextOrConfig, signal }, values);
+      };
+    }
+    return Reflect.get(target, prop, receiver);
+  },
 });
 export { pool };
 

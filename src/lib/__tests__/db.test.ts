@@ -28,11 +28,13 @@ vi.mock('pg-connection-string', () => ({
   parse: vi.fn(() => ({ host: 'localhost', port: '5432' })),
 }));
 
+const textFromQuery = (sql: any): string =>
+  typeof sql === 'string' ? sql : sql?.text ?? '';
+
 const defaultQuery = async (sql: any) => {
-  if (typeof sql === 'string') {
-    if (sql.includes('AS cnt')) return { rows: [{ cnt: 0 }] };
-    if (sql.includes("relkind = 'p'")) return { rows: [{ relkind: 'p' }] };
-  }
+  const t = textFromQuery(sql);
+  if (t.includes('AS cnt')) return { rows: [{ cnt: 0 }] };
+  if (t.includes("relkind = 'p'")) return { rows: [{ relkind: 'p' }] };
   return { rows: [] };
 };
 
@@ -47,7 +49,7 @@ describe('db module', () => {
   describe('settings', () => {
     it('getSetting returns value', async () => {
       mockPool.query.mockImplementation(async (sql: any) => {
-        if (typeof sql === 'string' && sql.includes('SELECT value FROM settings')) {
+        if (textFromQuery(sql).includes('SELECT value FROM settings')) {
           return { rows: [{ value: 'test_val' }] };
         }
         return defaultQuery(sql);
@@ -58,8 +60,7 @@ describe('db module', () => {
       
       expect(val).toBe('test_val');
       expect(mockPool.query).toHaveBeenCalledWith(
-        expect.stringContaining('SELECT value FROM settings WHERE key = $1'),
-        ['test_key']
+        expect.objectContaining({ text: expect.stringContaining('SELECT value FROM settings WHERE key = $1'), values: ['test_key'] })
       );
     });
 
@@ -85,7 +86,7 @@ describe('db module', () => {
     it('listEndpoints returns endpoints', async () => {
       const mockEndpoints = [{ id: '1', name: 'ep1', api_key: 'key1' }];
       mockPool.query.mockImplementation(async (sql: any) => {
-        if (typeof sql === 'string' && sql.includes('SELECT * FROM endpoints')) {
+        if (textFromQuery(sql).includes('SELECT * FROM endpoints')) {
           return { rows: mockEndpoints };
         }
         return defaultQuery(sql);
@@ -95,7 +96,7 @@ describe('db module', () => {
       const eps = await listEndpoints();
       
       expect(eps).toEqual(mockEndpoints);
-      expect(mockPool.query).toHaveBeenCalledWith(expect.stringContaining('SELECT * FROM endpoints ORDER BY created_at DESC'), undefined);
+      expect(mockPool.query).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('SELECT * FROM endpoints ORDER BY created_at DESC') }));
     });
 
     it('upsertEndpoint creates new endpoint', async () => {
@@ -104,7 +105,7 @@ describe('db module', () => {
       const apiKeyHash = hashApiKey('key-123');
 
       mockPool.query.mockImplementation(async (sql: any) => {
-        if (typeof sql === 'string' && sql.includes('SELECT * FROM endpoints WHERE id')) {
+        if (textFromQuery(sql).includes('SELECT * FROM endpoints WHERE id')) {
           return { rows: [{ id: 'new-id', name: 'new-ep', api_key: encryptedKey, api_key_hash: apiKeyHash }] };
         }
         return defaultQuery(sql);
@@ -136,7 +137,7 @@ describe('db module', () => {
   describe('runs and pruning', () => {
     it('pruneOldRuns deletes old runs', async () => {
       mockPool.query.mockImplementation(async (sql: any) => {
-        if (typeof sql === 'string' && sql.includes('DELETE FROM runs')) {
+        if (textFromQuery(sql).includes('DELETE FROM runs')) {
           return { rowCount: 5, rows: [] };
         }
         return defaultQuery(sql);
@@ -147,7 +148,7 @@ describe('db module', () => {
       
       expect(count).toBe(5);
       const deleteCall = mockPool.query.mock.calls.find((call: any[]) => 
-        typeof call[0] === 'string' && call[0].includes('DELETE FROM runs WHERE generated_at < $1')
+        textFromQuery(call[0]).includes('DELETE FROM runs WHERE generated_at < $1')
       ) as any;
       expect(deleteCall).toBeDefined();
     });
@@ -156,7 +157,7 @@ describe('db module', () => {
   describe('insertSnapshot', () => {
     it('returns false if run already exists', async () => {
       mockPool.query.mockImplementation(async (sql: any) => {
-        if (typeof sql === 'string' && sql.includes('SELECT 1 FROM runs')) {
+        if (textFromQuery(sql).includes('SELECT 1 FROM runs')) {
           return { rows: [{ '?column?': 1 }] };
         }
         return defaultQuery(sql);
@@ -226,7 +227,7 @@ describe('db module', () => {
       await ensureMonthlyPartitions();
       
       const createCalls = mockPool.query.mock.calls.filter((call: any[]) => 
-        typeof call[0] === 'string' && call[0].includes('CREATE TABLE IF NOT EXISTS page_states_')
+        textFromQuery(call[0]).includes('CREATE TABLE IF NOT EXISTS page_states_')
       );
       // -3 to +6 is 10 partitions
       expect(createCalls.length).toBe(10);
@@ -254,22 +255,22 @@ describe('db module', () => {
       const { deleteEndpoint } = await import('../db');
       await deleteEndpoint('ep1');
       const deleteCalls = mockPool.query.mock.calls.filter((call: any[]) =>
-        typeof call[0] === 'string' && call[0].includes('DELETE FROM')
+        textFromQuery(call[0]).includes('DELETE FROM')
       );
       expect(deleteCalls.length).toBe(2);
-      expect(deleteCalls[0][0]).toContain('DELETE FROM platform_pages');
-      expect(deleteCalls[1][0]).toContain('DELETE FROM endpoints');
+      expect(deleteCalls[0][0].text).toContain('DELETE FROM platform_pages');
+      expect(deleteCalls[1][0].text).toContain('DELETE FROM endpoints');
     });
 
     it('touchEndpoint updates last_used_at', async () => {
       const { touchEndpoint } = await import('../db');
       await touchEndpoint('ep1');
       const updateCall = mockPool.query.mock.calls.find((call: any[]) =>
-        typeof call[0] === 'string' && call[0].includes('UPDATE endpoints SET last_used_at')
+        textFromQuery(call[0]).includes('UPDATE endpoints SET last_used_at')
       ) as any;
       expect(updateCall).toBeDefined();
-      expect(updateCall[1][1]).toBe('ep1');
-      expect(typeof updateCall[1][0]).toBe('string');
+      expect(updateCall[0].values[1]).toBe('ep1');
+      expect(typeof updateCall[0].values[0]).toBe('string');
     });
   });
 
@@ -278,7 +279,7 @@ describe('db module', () => {
       const { getLatestRun } = await import('../db');
       const result = await getLatestRun('ep1');
       const queryCall = mockPool.query.mock.calls.find((call: any[]) =>
-        typeof call[0] === 'string' && call[0].includes('ORDER BY generated_at DESC LIMIT 1')
+        textFromQuery(call[0]).includes('ORDER BY generated_at DESC LIMIT 1')
       ) as any;
       expect(queryCall).toBeDefined();
       expect(result).toBeUndefined();
@@ -286,7 +287,7 @@ describe('db module', () => {
 
     it('getRunHistory returns runs', async () => {
       mockPool.query.mockImplementation(async (sql: any) => {
-        if (typeof sql === 'string' && sql.includes('SELECT * FROM runs')) {
+        if (textFromQuery(sql).includes('SELECT * FROM runs')) {
           return { rows: [{ run_id: 'r1', endpoint_id: 'ep1' }] };
         }
         return defaultQuery(sql);
@@ -311,10 +312,10 @@ describe('db module', () => {
       expect(typeof token).toBe('string');
       expect(token.length).toBeGreaterThan(0);
       const insertCall = mockPool.query.mock.calls.find((call: any[]) =>
-        typeof call[0] === 'string' && call[0].includes('INSERT INTO sessions')
+        textFromQuery(call[0]).includes('INSERT INTO sessions')
       ) as any;
       expect(insertCall).toBeDefined();
-      expect(insertCall[1][1]).toBe('admin');
+      expect(insertCall[0].values[1]).toBe('admin');
     });
 
     it('getSessionRole returns null for missing token', async () => {
@@ -325,7 +326,7 @@ describe('db module', () => {
 
     it('getSessionRole returns role for valid token', async () => {
       mockPool.query.mockImplementation(async (sql: any) => {
-        if (typeof sql === 'string' && sql.includes('SELECT role FROM sessions')) {
+        if (textFromQuery(sql).includes('SELECT role FROM sessions')) {
           return { rows: [{ role: 'admin' }] };
         }
         return defaultQuery(sql);
@@ -351,17 +352,17 @@ describe('db module', () => {
       const { clearSessionToken } = await import('../db');
       await clearSessionToken('some-token');
       const deleteCall = mockPool.query.mock.calls.find((call: any[]) =>
-        typeof call[0] === 'string' && call[0].includes('DELETE FROM sessions WHERE token')
+        textFromQuery(call[0]).includes('DELETE FROM sessions WHERE token')
       ) as any;
       expect(deleteCall).toBeDefined();
-      expect(deleteCall[1]).toEqual(['some-token']);
+      expect(deleteCall[0].values).toEqual(['some-token']);
     });
 
     it('pruneExpiredSessions deletes expired', async () => {
       const { pruneExpiredSessions } = await import('../db');
       await pruneExpiredSessions();
       const deleteCall = mockPool.query.mock.calls.find((call: any[]) =>
-        typeof call[0] === 'string' && call[0].includes('DELETE FROM sessions WHERE expires_at')
+        textFromQuery(call[0]).includes('DELETE FROM sessions WHERE expires_at')
       ) as any;
       expect(deleteCall).toBeDefined();
     });
@@ -369,10 +370,10 @@ describe('db module', () => {
     it('createSessionToken includes password_version', async () => {
       // Return a version from settings
       mockPool.query.mockImplementation(async (sql: any) => {
-        if (typeof sql === 'string' && sql.includes('SELECT value FROM settings WHERE key = $1')) {
+        if (textFromQuery(sql).includes('SELECT value FROM settings WHERE key = $1')) {
           return { rows: [{ value: '3' }] };
         }
-        if (typeof sql === 'string' && sql.includes('INSERT INTO sessions')) {
+        if (textFromQuery(sql).includes('INSERT INTO sessions')) {
           return { rows: [] };
         }
         return defaultQuery(sql);
@@ -380,16 +381,16 @@ describe('db module', () => {
       const { createSessionToken } = await import('../db');
       await createSessionToken();
       const insertCall = mockPool.query.mock.calls.find((call: any[]) =>
-        typeof call[0] === 'string' && call[0].includes('INSERT INTO sessions')
+        textFromQuery(call[0]).includes('INSERT INTO sessions')
       ) as any;
       expect(insertCall).toBeDefined();
       // password_version is the 3rd value (token, role, password_version, ...)
-      expect(insertCall[1][2]).toBe(3);
+      expect(insertCall[0].values[2]).toBe(3);
     });
 
     it('validateSessionToken rejects expired session', async () => {
       mockPool.query.mockImplementation(async (sql: any) => {
-        if (typeof sql === 'string' && sql.includes('SELECT expires_at, password_version FROM sessions')) {
+        if (textFromQuery(sql).includes('SELECT expires_at, password_version FROM sessions')) {
           return { rows: [{ expires_at: new Date(Date.now() - 86_400_000).toISOString(), password_version: 1 }] };
         }
         return defaultQuery(sql);
@@ -401,10 +402,10 @@ describe('db module', () => {
 
     it('validateSessionToken rejects stale password_version', async () => {
       mockPool.query.mockImplementation(async (sql: any) => {
-        if (typeof sql === 'string' && sql.includes('SELECT value FROM settings WHERE key = $1')) {
+        if (textFromQuery(sql).includes('SELECT value FROM settings WHERE key = $1')) {
           return { rows: [{ value: '2' }] };
         }
-        if (typeof sql === 'string' && sql.includes('SELECT expires_at, password_version FROM sessions')) {
+        if (textFromQuery(sql).includes('SELECT expires_at, password_version FROM sessions')) {
           return { rows: [{ expires_at: new Date(Date.now() + 86_400_000).toISOString(), password_version: 1 }] };
         }
         return defaultQuery(sql);
@@ -416,10 +417,10 @@ describe('db module', () => {
 
     it('validateSessionToken accepts matching password_version', async () => {
       mockPool.query.mockImplementation(async (sql: any) => {
-        if (typeof sql === 'string' && sql.includes('SELECT value FROM settings WHERE key = $1')) {
+        if (textFromQuery(sql).includes('SELECT value FROM settings WHERE key = $1')) {
           return { rows: [{ value: '1' }] };
         }
-        if (typeof sql === 'string' && sql.includes('SELECT expires_at, password_version FROM sessions')) {
+        if (textFromQuery(sql).includes('SELECT expires_at, password_version FROM sessions')) {
           return { rows: [{ expires_at: new Date(Date.now() + 86_400_000).toISOString(), password_version: 1 }] };
         }
         return defaultQuery(sql);
@@ -433,7 +434,7 @@ describe('db module', () => {
       let version = 1;
       mockPool.query.mockImplementation(async (...args: unknown[]) => {
         const sql = args[0];
-        if (typeof sql === 'string' && sql.includes('SELECT value FROM settings WHERE key = $1')) {
+        if (textFromQuery(sql).includes('SELECT value FROM settings WHERE key = $1')) {
           return { rows: [{ value: String(version) }] };
         }
         if (typeof sql === 'object' && (sql as any).text?.includes('INSERT INTO settings') && (sql as any).values?.[0] === 'auth_password_version') {
@@ -453,7 +454,7 @@ describe('db module', () => {
       const { clearAllSessions } = await import('../db');
       await clearAllSessions();
       const deleteCall = mockPool.query.mock.calls.find((call: any[]) =>
-        typeof call[0] === 'string' && call[0].includes('DELETE FROM sessions')
+        textFromQuery(call[0]).includes('DELETE FROM sessions')
       ) as any;
       expect(deleteCall).toBeDefined();
     });
@@ -462,7 +463,7 @@ describe('db module', () => {
   describe('platform pages', () => {
     it('listPlatformPages returns pages', async () => {
       mockPool.query.mockImplementation(async (sql: any) => {
-        if (typeof sql === 'string' && sql.includes('SELECT * FROM platform_pages')) {
+        if (textFromQuery(sql).includes('SELECT * FROM platform_pages')) {
           return { rows: [{ id: 'p1', page_name: 'Test Page' }] };
         }
         return defaultQuery(sql);
@@ -476,10 +477,10 @@ describe('db module', () => {
       const { deletePlatformPage } = await import('../db');
       await deletePlatformPage('p1');
       const deleteCall = mockPool.query.mock.calls.find((call: any[]) =>
-        typeof call[0] === 'string' && call[0].includes('DELETE FROM platform_pages WHERE id')
+        textFromQuery(call[0]).includes('DELETE FROM platform_pages WHERE id')
       ) as any;
       expect(deleteCall).toBeDefined();
-      expect(deleteCall[1]).toEqual(['p1']);
+      expect(deleteCall[0].values).toEqual(['p1']);
     });
   });
 
@@ -500,10 +501,10 @@ describe('db module', () => {
       const { removeBotCakeOverride } = await import('../db');
       await removeBotCakeOverride('bp1');
       const deleteCall = mockPool.query.mock.calls.find((call: any[]) =>
-        typeof call[0] === 'string' && call[0].includes('DELETE FROM botcake_overrides WHERE page_id')
+        textFromQuery(call[0]).includes('DELETE FROM botcake_overrides WHERE page_id')
       ) as any;
       expect(deleteCall).toBeDefined();
-      expect(deleteCall[1]).toEqual(['bp1']);
+      expect(deleteCall[0].values).toEqual(['bp1']);
     });
   });
 });
