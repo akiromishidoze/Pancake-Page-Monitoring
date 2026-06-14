@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { apiCatch } from '@/lib/errors';
-import { getSetting, listEndpoints, pool } from '@/lib/db';
+import { getSetting, listEndpoints, readPool } from '@/lib/db';
 import { cors, corsOptions } from '@/lib/cors';
 import { getBotCakeApiHealth } from '@/lib/botcake';
 
@@ -16,7 +16,7 @@ export async function GET() {
   let dbLatencyMs: number | null = null;
   let dbError: string | null = null;
   try {
-    await pool.query('SELECT 1');
+    await readPool.query('SELECT 1');
     dbLatencyMs = Date.now() - dbStart;
   } catch (e) {
     dbError = e instanceof Error ? e.message : String(e);

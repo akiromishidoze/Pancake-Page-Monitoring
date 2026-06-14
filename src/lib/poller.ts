@@ -1,6 +1,6 @@
 import { fetchBotCakePages, checkBotCakeConversations, checkBotCakeToolsFlows, recordBotCakeApiHealth, invalidateBotCakeCaches, type BotCakePage } from './botcake';
 import { fetchPancakeShops, fetchPancakePages, fetchPancakeActivePageIds, fetchPancakeActivePageIdsFromCustomers, fetchCachedPancakeShops, mergePagesActivation, TARGET_SHOP_IDS, type PancakeShop, type PancakePage } from './pancake';
-import { insertSnapshot, setSetting, listEndpoints, getPancakeActivePageIds, getPreviousRunActiveCount, pool, getBotCakeOverrides, isBotCakeEndpoint, type SlimPage, type EndpointRow } from './db';
+import { insertSnapshot, setSetting, listEndpoints, getPancakeActivePageIds, getPreviousRunActiveCount, readPool, getBotCakeOverrides, isBotCakeEndpoint, type SlimPage, type EndpointRow } from './db';
 import { broadcastSSE } from './sse';
 import { createLogger } from './logger';
 import { addNotification } from './notifications';
@@ -31,7 +31,7 @@ function computeAdaptiveInterval(): number {
 
 async function checkActivityChange(): Promise<boolean> {
   try {
-    const result = await pool.query(`
+    const result = await readPool.query(`
       SELECT COALESCE(SUM(r.active_pages_count), 0) AS total
       FROM runs r
       WHERE r.generated_at = (
@@ -389,7 +389,7 @@ async function refreshPancake() {
   let anyShopHadData = false;
 
   async function restoreFromPreviousRun(sid: number, target: Map<number, Set<string>>): Promise<Set<string>> {
-    const prevRun = (await pool.query(`
+    const prevRun = (await readPool.query(`
       SELECT run_id FROM runs
       WHERE endpoint_id = $1 AND (active_pages > 0 OR active_pages IS NULL)
       ORDER BY generated_at DESC LIMIT 1
@@ -399,7 +399,7 @@ async function refreshPancake() {
       target.set(sid, empty);
       return empty;
     }
-    const prevActive = (await pool.query('SELECT page_id FROM page_states WHERE run_id = $1 AND is_activated IS TRUE', [prevRun.run_id])).rows as { page_id: string }[];
+    const prevActive = (await readPool.query('SELECT page_id FROM page_states WHERE run_id = $1 AND is_activated IS TRUE', [prevRun.run_id])).rows as { page_id: string }[];
     const ids = new Set(prevActive.map(p => p.page_id));
     if (ids.size > 0) {
       target.set(sid, ids);

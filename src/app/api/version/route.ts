@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cors, corsOptions } from '@/lib/cors';
 import { getPollerStatus } from '@/lib/poller';
-import { pool } from '@/lib/db';
+import { readPool } from '@/lib/db';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -24,7 +24,7 @@ export async function OPTIONS() {
 export async function GET() {
   let dbOk = false;
   try {
-    await pool.query('SELECT 1');
+    await readPool.query('SELECT 1');
     dbOk = true;
   } catch {
     // DB unavailable

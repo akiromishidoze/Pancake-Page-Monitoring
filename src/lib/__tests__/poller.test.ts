@@ -105,6 +105,7 @@ vi.mock('@/lib/db', () => ({
   getBotCakeOverrides: vi.fn(async () => new Map(mocks.overrides)),
   isBotCakeEndpoint: vi.fn((ep: Record<string, unknown>) => !!ep.fb_page_id || ep.id === 'botcake-platform' || ((ep.url as string) ?? '').includes('botcake.io')),
   pool: { query: vi.fn(async () => ({ rows: [] })), connect: vi.fn() },
+  readPool: { query: vi.fn(async () => ({ rows: [] })), connect: vi.fn() },
 }));
 
 vi.mock('@/lib/botcake', () => ({
@@ -442,8 +443,8 @@ describe('refreshPancake — error and edge-case paths', () => {
     });
     mocks.setPancakeOrdersFail(true);
     mocks.setPancakeCustomersFail(true);
-    const { pool } = await import('@/lib/db');
-    (pool.query as ReturnType<typeof vi.fn>).mockResolvedValue({ rows: [{ run_id: 'prev-run-1' }] });
+    const { readPool } = await import('@/lib/db');
+    (readPool.query as ReturnType<typeof vi.fn>).mockResolvedValue({ rows: [{ run_id: 'prev-run-1' }] });
     const mod = await import('@/lib/poller');
     const { addNotification } = await import('@/lib/notifications');
     await mod.refreshAll();

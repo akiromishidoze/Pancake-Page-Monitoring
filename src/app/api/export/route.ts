@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { pool, type RunRow } from '@/lib/db';
+import { readPool, type RunRow } from '@/lib/db';
 import { withAuth } from '@/lib/auth';
 import { rateLimitRoute } from '@/lib/rate-limit-guard';
 import { toCsv } from '@/lib/format';
@@ -15,10 +15,10 @@ export const GET = withAuth(async (req: Request) => {
     if (format === 'json') {
       let runs: RunRow[];
       if (endpointId) {
-        const r = await pool.query('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT $2', [endpointId, limit]);
+        const r = await readPool.query('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT $2', [endpointId, limit]);
         runs = r.rows;
       } else {
-        const r = await pool.query('SELECT * FROM runs ORDER BY generated_at DESC LIMIT $1', [limit]);
+        const r = await readPool.query('SELECT * FROM runs ORDER BY generated_at DESC LIMIT $1', [limit]);
         runs = r.rows;
       }
       return NextResponse.json({ ok: true, runs });
@@ -26,7 +26,7 @@ export const GET = withAuth(async (req: Request) => {
 
     let rows: Array<Record<string, unknown>>;
     if (endpointId) {
-      const r = await pool.query(`
+      const r = await readPool.query(`
         SELECT r.run_id, r.endpoint_id, r.generated_at, r.received_at, r.heartbeat_ok,
                r.run_quality, r.severity, r.canary_status, r.canary_alert,
                r.outage_suspected, r.alert_count, r.total_pages, r.active_pages, r.inactive_pages
@@ -36,7 +36,7 @@ export const GET = withAuth(async (req: Request) => {
       `, [endpointId, limit]);
       rows = r.rows;
     } else {
-      const r = await pool.query(`
+      const r = await readPool.query(`
         SELECT r.run_id, r.endpoint_id, r.generated_at, r.received_at, r.heartbeat_ok,
                r.run_quality, r.severity, r.canary_status, r.canary_alert,
                r.outage_suspected, r.alert_count, r.total_pages, r.active_pages, r.inactive_pages

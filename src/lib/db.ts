@@ -8,7 +8,6 @@ function randomId(): string {
   return randomBytes(16).toString('hex');
 }
 
-
 type DbPoolConfig = PoolConfig & { pgbouncer?: boolean | undefined };
 
 const log = createLogger('db');
@@ -19,7 +18,7 @@ const isPgBouncer = process.env.PGBOUNCER === 'true';
 if (isPgBouncer) log.info('PgBouncer mode enabled');
 const pgStatementTimeout = parseInt(process.env.PG_STATEMENT_TIMEOUT || '30000', 10);
 if (pgStatementTimeout !== 30000) log.info('PG_STATEMENT_TIMEOUT set to %d ms', pgStatementTimeout);
-const poolConfig: DbPoolConfig = {
+const basePoolConfig: DbPoolConfig = {
   host: parsed.host || '/var/run/postgresql',
   port: parsed.port ? parseInt(String(parsed.port), 10) : undefined,
   database: parsed.database || undefined,
@@ -32,39 +31,39 @@ const poolConfig: DbPoolConfig = {
   statement_timeout: parseInt(process.env.PG_STATEMENT_TIMEOUT || '30000', 10),
   pgbouncer: isPgBouncer || undefined,
 };
-const _pool = new Pool(poolConfig);
-
-// Log connection errors without crashing
-_pool.on('error', (err) => {
-  log.error({ err: err.message }, 'unexpected pool error');
-});
 
 const QUERY_TIMEOUT = parseInt(process.env.QUERY_TIMEOUT || '30000', 10);
 type QueryWithSignal = import('pg').QueryConfig & { signal: AbortSignal };
-const _origQuery = _pool.query.bind(_pool);
-const pool = new Proxy(_pool, {
-  get(target, prop, receiver) {
-    if (prop === 'query') {
-      return (queryTextOrConfig: string | QueryWithSignal, values?: unknown[], callback?: (err: Error | null, result: unknown) => void) => {
-        const signal = AbortSignal.timeout(QUERY_TIMEOUT);
-        if (typeof queryTextOrConfig === 'string') {
-          const qc: QueryWithSignal = { text: queryTextOrConfig, values, signal };
-          if (callback) {
-            return _origQuery(qc, callback);
+
+function createPool(connStr: string, label: string): Pool {
+  const p = new Pool({ ...basePoolConfig, connectionString: connStr });
+  p.on('error', (err) => log.error({ err: err.message, pool: label }, `unexpected ${label} pool error`));
+  const origQuery = p.query.bind(p);
+  return new Proxy(p, {
+    get(target, prop, receiver) {
+      if (prop === 'query') {
+        return (queryTextOrConfig: string | QueryWithSignal, values?: unknown[], callback?: (err: Error | null, result: unknown) => void) => {
+          const signal = AbortSignal.timeout(QUERY_TIMEOUT);
+          if (typeof queryTextOrConfig === 'string') {
+            const qc: QueryWithSignal = { text: queryTextOrConfig, values, signal };
+            if (callback) return origQuery(qc, callback);
+            return origQuery(qc);
           }
-          return _origQuery(qc);
-        }
-        const qc: QueryWithSignal = { ...queryTextOrConfig, signal };
-        if (callback) {
-          return _origQuery(qc, callback);
-        }
-        return _origQuery(qc);
-      };
-    }
-    return Reflect.get(target, prop, receiver);
-  },
-});
-export { pool };
+          const qc: QueryWithSignal = { ...queryTextOrConfig, signal };
+          if (callback) return origQuery(qc, callback);
+          return origQuery(qc);
+        };
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  }) as Pool;
+}
+
+const readConnectionString = process.env.DATABASE_READ_URL || connectionString;
+const writePool = createPool(connectionString, 'write');
+const readPool = createPool(readConnectionString, 'read');
+const pool = writePool;
+export { pool, readPool, writePool };
 
 export async function queryRows<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]> {
   await ensureMigrated();

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { pool } from '@/lib/db';
+import { readPool } from '@/lib/db';
 import { withAuth } from '@/lib/auth';
 import { rateLimitRoute } from '@/lib/rate-limit-guard';
 import { toCsv } from '@/lib/format';
@@ -14,10 +14,10 @@ export const GET = withAuth(async (req: Request, { params }: { params: Promise<{
 
   let rows: Array<Record<string, unknown>>;
   if (shop) {
-    const r = await pool.query('SELECT * FROM page_states WHERE page_id = $1 AND shop_label = $2 ORDER BY generated_at ASC', [pageId, shop]);
+    const r = await readPool.query('SELECT * FROM page_states WHERE page_id = $1 AND shop_label = $2 ORDER BY generated_at ASC', [pageId, shop]);
     rows = r.rows;
   } else {
-    const r = await pool.query('SELECT * FROM page_states WHERE page_id = $1 ORDER BY generated_at ASC', [pageId]);
+    const r = await readPool.query('SELECT * FROM page_states WHERE page_id = $1 ORDER BY generated_at ASC', [pageId]);
     rows = r.rows;
   }
 

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { pool, type RunRow } from '@/lib/db';
+import { readPool, type RunRow } from '@/lib/db';
 import { withAuth } from '@/lib/auth';
 import { rateLimitRoute } from '@/lib/rate-limit-guard';
 
@@ -14,14 +14,14 @@ export const GET = withAuth(async (req: Request) => {
   let total: number;
 
   if (endpointId) {
-    const r = await pool.query('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT $2 OFFSET $3', [endpointId, limit, offset]);
+    const r = await readPool.query('SELECT * FROM runs WHERE endpoint_id = $1 ORDER BY generated_at DESC LIMIT $2 OFFSET $3', [endpointId, limit, offset]);
     rows = r.rows;
-    const c = await pool.query('SELECT COUNT(*) as c FROM runs WHERE endpoint_id = $1', [endpointId]);
+    const c = await readPool.query('SELECT COUNT(*) as c FROM runs WHERE endpoint_id = $1', [endpointId]);
     total = parseInt(c.rows[0].c, 10);
   } else {
-    const r = await pool.query('SELECT * FROM runs ORDER BY generated_at DESC LIMIT $1 OFFSET $2', [limit, offset]);
+    const r = await readPool.query('SELECT * FROM runs ORDER BY generated_at DESC LIMIT $1 OFFSET $2', [limit, offset]);
     rows = r.rows;
-    const c = await pool.query('SELECT COUNT(*) as c FROM runs');
+    const c = await readPool.query('SELECT COUNT(*) as c FROM runs');
     total = parseInt(c.rows[0].c, 10);
   }
 

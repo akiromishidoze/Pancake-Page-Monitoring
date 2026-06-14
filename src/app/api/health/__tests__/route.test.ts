@@ -17,7 +17,7 @@ vi.mock('next/server', () => ({
 }));
 
 vi.mock('@/lib/db', () => ({
-  pool: { query: vi.fn() },
+  readPool: { query: vi.fn() },
   getSetting: vi.fn(async (key: string) => mockSettings.get(key) ?? null),
   listEndpoints: vi.fn(async () => []),
 }));
@@ -49,8 +49,8 @@ describe('GET /api/health', () => {
   });
 
   it('returns ok with db connected when healthy', async () => {
-    const { pool } = await import('@/lib/db');
-    (pool.query as ReturnType<typeof vi.fn>).mockResolvedValue({ rows: [] });
+    const { readPool } = await import('@/lib/db');
+    (readPool.query as ReturnType<typeof vi.fn>).mockResolvedValue({ rows: [] });
     const { GET } = await import('../route');
     const res = await GET();
     expect(res.status).toBe(200);
@@ -64,8 +64,8 @@ describe('GET /api/health', () => {
   });
 
   it('returns disconnected when db query fails', async () => {
-    const { pool } = await import('@/lib/db');
-    (pool.query as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('connection refused'));
+    const { readPool } = await import('@/lib/db');
+    (readPool.query as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('connection refused'));
     const { GET } = await import('../route');
     const res = await GET();
     expect(res.status).toBe(503);
@@ -76,9 +76,9 @@ describe('GET /api/health', () => {
   });
 
   it('reports stale endpoints', async () => {
-    const { pool } = await import('@/lib/db');
+    const { readPool } = await import('@/lib/db');
     const { listEndpoints, getSetting } = await import('@/lib/db');
-    (pool.query as ReturnType<typeof vi.fn>).mockResolvedValue({ rows: [] });
+    (readPool.query as ReturnType<typeof vi.fn>).mockResolvedValue({ rows: [] });
     (listEndpoints as ReturnType<typeof vi.fn>).mockResolvedValue([
       { id: 'ep-1', name: 'Test Endpoint', is_active: true },
     ]);
@@ -97,9 +97,9 @@ describe('GET /api/health', () => {
   });
 
   it('reports fresh endpoints as ok', async () => {
-    const { pool } = await import('@/lib/db');
+    const { readPool } = await import('@/lib/db');
     const { listEndpoints, getSetting } = await import('@/lib/db');
-    (pool.query as ReturnType<typeof vi.fn>).mockResolvedValue({ rows: [] });
+    (readPool.query as ReturnType<typeof vi.fn>).mockResolvedValue({ rows: [] });
     (listEndpoints as ReturnType<typeof vi.fn>).mockResolvedValue([
       { id: 'ep-1', name: 'Fresh Endpoint', is_active: true },
     ]);
@@ -116,9 +116,9 @@ describe('GET /api/health', () => {
   });
 
   it('returns ok false when no endpoint has data', async () => {
-    const { pool } = await import('@/lib/db');
+    const { readPool } = await import('@/lib/db');
     const { listEndpoints } = await import('@/lib/db');
-    (pool.query as ReturnType<typeof vi.fn>).mockResolvedValue({ rows: [] });
+    (readPool.query as ReturnType<typeof vi.fn>).mockResolvedValue({ rows: [] });
     (listEndpoints as ReturnType<typeof vi.fn>).mockResolvedValue([
       { id: 'ep-1', name: 'No Data', is_active: true },
     ]);
