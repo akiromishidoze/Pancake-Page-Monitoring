@@ -40,23 +40,25 @@ _pool.on('error', (err) => {
 });
 
 const QUERY_TIMEOUT = parseInt(process.env.QUERY_TIMEOUT || '30000', 10);
+type QueryWithSignal = import('pg').QueryConfig & { signal: AbortSignal };
 const _origQuery = _pool.query.bind(_pool);
 const pool = new Proxy(_pool, {
   get(target, prop, receiver) {
     if (prop === 'query') {
-      return (queryTextOrConfig: any, values?: any[], callback?: any) => {
+      return (queryTextOrConfig: string | QueryWithSignal, values?: unknown[], callback?: (err: Error | null, result: unknown) => void) => {
         const signal = AbortSignal.timeout(QUERY_TIMEOUT);
         if (typeof queryTextOrConfig === 'string') {
+          const qc: QueryWithSignal = { text: queryTextOrConfig, values, signal };
           if (callback) {
-            return _origQuery({ text: queryTextOrConfig, values, signal } as any, callback);
+            return _origQuery(qc, callback);
           }
-          return _origQuery({ text: queryTextOrConfig, values, signal } as any);
+          return _origQuery(qc);
         }
-        const qc = { ...queryTextOrConfig, signal } as any;
+        const qc: QueryWithSignal = { ...queryTextOrConfig, signal };
         if (callback) {
-          return _origQuery(qc, values as any[], callback);
+          return _origQuery(qc, callback);
         }
-        return _origQuery(qc, values as any[]);
+        return _origQuery(qc);
       };
     }
     return Reflect.get(target, prop, receiver);
@@ -597,6 +599,20 @@ export type SlimPage = {
   customer_count?: number;
 };
 
+// Extended input type that accepts alias field names from external data sources.
+// Normalized to canonical SlimPage before storage.
+type SlimPageInput = SlimPage & {
+  shop?: string | null;
+  kind?: string | null;
+  reason?: string | null;
+  id?: string | null;
+  response_time_ms?: number | null;
+  latency_ms?: number | null;
+  fetch_latency_ms?: number | null;
+  fetch_error_count?: number;
+  fetch_failed?: boolean;
+};
+
 export function toSlimPage(src: Record<string, unknown>): SlimPage {
   return {
     shop_label: (src.shop_label as string | null) ?? null,
@@ -686,37 +702,37 @@ export async function insertSnapshot(input: InsertSnapshotInput): Promise<{ inse
   const existing = await pool.query('SELECT 1 FROM runs WHERE run_id = $1', [input.run_id]);
   if (existing.rows.length > 0) return { inserted: false };
 
-  const allPagesMap = new Map<string, typeof input.active_pages[0] & { _is_active: boolean | null; response_ms: number | null; fetch_errors: number }>();
-  for (const p of input.active_pages) {
-    const pid = p.page_id ?? '';
+  const allPagesMap = new Map<string, SlimPageInput & { _is_active: boolean | null; response_ms: number | null; fetch_errors: number }>();
+  for (const p of input.active_pages as SlimPageInput[]) {
+    const pid = p.page_id ?? p.id ?? '';
     if (!allPagesMap.has(pid)) {
       allPagesMap.set(pid, {
         ...p,
         _is_active: true,
-        response_ms: p.response_ms ?? (p as any).response_time_ms ?? (p as any).latency_ms ?? (p as any).fetch_latency_ms ?? null,
-        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof (p as any).fetch_error_count === 'number' ? (p as any).fetch_error_count : typeof (p as any).fetch_failed === 'boolean' ? 1 : 0),
+        response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
+        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
       });
     }
   }
-  for (const p of input.inactive_pages) {
-    const pid = p.page_id ?? '';
+  for (const p of input.inactive_pages as SlimPageInput[]) {
+    const pid = p.page_id ?? p.id ?? '';
     if (!allPagesMap.has(pid)) {
       allPagesMap.set(pid, {
         ...p,
         _is_active: false,
-        response_ms: p.response_ms ?? (p as any).response_time_ms ?? (p as any).latency_ms ?? (p as any).fetch_latency_ms ?? null,
-        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof (p as any).fetch_error_count === 'number' ? (p as any).fetch_error_count : typeof (p as any).fetch_failed === 'boolean' ? 1 : 0),
+        response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
+        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
       });
     }
   }
-  for (const p of input.unknown_pages ?? []) {
-    const pid = p.page_id ?? '';
+  for (const p of (input.unknown_pages ?? []) as SlimPageInput[]) {
+    const pid = p.page_id ?? p.id ?? '';
     if (!allPagesMap.has(pid)) {
       allPagesMap.set(pid, {
         ...p,
         _is_active: null,
-        response_ms: p.response_ms ?? (p as any).response_time_ms ?? (p as any).latency_ms ?? (p as any).fetch_latency_ms ?? null,
-        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof (p as any).fetch_error_count === 'number' ? (p as any).fetch_error_count : typeof (p as any).fetch_failed === 'boolean' ? 1 : 0),
+        response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
+        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
       });
     }
   }
@@ -770,13 +786,13 @@ export async function insertSnapshot(input: InsertSnapshotInput): Promise<{ inse
         rows.push(`(${placeholders})`);
         values.push(
           input.run_id,
-          p.page_id ?? '',
-          p.shop_label ?? (p as any).shop ?? null,
+          p.page_id ?? p.id ?? '',
+          p.shop_label ?? p.shop ?? null,
           p.name ?? null,
-          p.activity_kind ?? (p as any).kind ?? null,
+          p.activity_kind ?? p.kind ?? null,
           p._is_active,
           p.is_canary ?? false,
-          p.activation_reason ?? (p as any).reason ?? null,
+          p.activation_reason ?? p.reason ?? null,
           p.state_change ?? null,
           p.activity_kind_change ?? null,
           p.last_order_at
@@ -785,8 +801,8 @@ export async function insertSnapshot(input: InsertSnapshotInput): Promise<{ inse
           p.last_customer_activity_at
             ? (new Date(input.generated_at).getTime() - new Date(p.last_customer_activity_at).getTime()) / (1000 * 60 * 60)
             : null,
-          p.response_ms ?? (p as any).response_time_ms ?? (p as any).latency_ms ?? (p as any).fetch_latency_ms ?? null,
-          typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof (p as any).fetch_error_count === 'number' ? (p as any).fetch_error_count : null),
+          p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
+          typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : null),
           input.generated_at,
           p.customer_count ?? null,
         );
