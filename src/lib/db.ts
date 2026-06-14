@@ -1,5 +1,5 @@
 import { Pool, type PoolConfig } from 'pg';
-import { parse } from 'pg-connection-string';
+import { parse as parsePgConnectionString } from 'pg-connection-string';
 import { createLogger } from './logger';
 import { randomBytes } from 'crypto';
 import { encrypt, decrypt, hashApiKey } from './crypto';
@@ -8,35 +8,39 @@ function randomId(): string {
   return randomBytes(16).toString('hex');
 }
 
-type DbPoolConfig = PoolConfig & { pgbouncer?: boolean | undefined };
-
 const log = createLogger('db');
 
-const connectionString = process.env.DATABASE_URL || '';
-const parsed = parse(connectionString);
+const connectionString = process.env.DATABASE_URL || undefined;
 const isPgBouncer = process.env.PGBOUNCER === 'true';
 if (isPgBouncer) log.info('PgBouncer mode enabled');
 const pgStatementTimeout = parseInt(process.env.PG_STATEMENT_TIMEOUT || '30000', 10);
 if (pgStatementTimeout !== 30000) log.info('PG_STATEMENT_TIMEOUT set to %d ms', pgStatementTimeout);
-const basePoolConfig: DbPoolConfig = {
-  host: parsed.host || '/var/run/postgresql',
-  port: parsed.port ? parseInt(String(parsed.port), 10) : undefined,
-  database: parsed.database || undefined,
-  user: parsed.user || process.env.USER || undefined,
-  password: parsed.password || undefined,
-  ssl: parsed.ssl === true || parsed.ssl === 'true' ? { rejectUnauthorized: false } : (parsed.ssl ? { rejectUnauthorized: false } : undefined),
+
+const poolDefaults = {
   max: isPgBouncer ? 5 : 20,
   connectionTimeoutMillis: 10_000,
   idleTimeoutMillis: 30_000,
-  statement_timeout: parseInt(process.env.PG_STATEMENT_TIMEOUT || '30000', 10),
-  pgbouncer: isPgBouncer || undefined,
-};
+  statement_timeout: pgStatementTimeout,
+  ...(isPgBouncer ? { pgbouncer: true as const } : {}),
+} satisfies Partial<PoolConfig>;
 
 const QUERY_TIMEOUT = parseInt(process.env.QUERY_TIMEOUT || '30000', 10);
 type QueryWithSignal = import('pg').QueryConfig & { signal: AbortSignal };
 
-function createPool(connStr: string, label: string): Pool {
-  const p = new Pool({ ...basePoolConfig, connectionString: connStr });
+function createPool(connStr: string | undefined, label: string): Pool {
+  const cfg: PoolConfig = { ...poolDefaults };
+  if (connStr) {
+    const parsed = parsePgConnectionString(connStr);
+    if (parsed.host) {
+      cfg.connectionString = connStr;
+    } else {
+      cfg.host = '/var/run/postgresql';
+      cfg.port = parsed.port ? parseInt(parsed.port, 10) : 5432;
+      cfg.database = parsed.database || undefined;
+      cfg.user = parsed.user || undefined;
+    }
+  }
+  const p = new Pool(cfg);
   p.on('error', (err) => log.error({ err: err.message, pool: label }, `unexpected ${label} pool error`));
   const origQuery = p.query.bind(p);
   return new Proxy(p, {
