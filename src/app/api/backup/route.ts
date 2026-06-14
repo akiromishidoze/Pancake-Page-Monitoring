@@ -2,8 +2,11 @@
 // GET  /api/backup — list recent backups
 
 import { NextResponse } from 'next/server';
-import { withAuth } from '@/lib/auth';
+import { withAuth, requireApiAuth } from '@/lib/auth';
 import { rateLimitRoute } from '@/lib/rate-limit-guard';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { backup } from '@/lib/backup';
+import { logAuditEntry } from '@/lib/db';
 
 export const POST = withAuth(async (req: Request) => {
     const ip = getClientIp(req);

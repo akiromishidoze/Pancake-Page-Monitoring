@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { pool } from '@/lib/db';
 import { withAuth } from '@/lib/auth';
 import { rateLimitRoute } from '@/lib/rate-limit-guard';
+import { toCsv } from '@/lib/format';
 
 export const GET = withAuth(async (req: Request, { params }: { params: Promise<{ pageId: string }> }) => {
     const rl = await rateLimitRoute(req); if (rl) return rl;

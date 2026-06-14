@@ -5,6 +5,15 @@ import { useState, useEffect, FormEvent } from 'react';
 export function TwoFactorSetup() {
   const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [secret, setSecret] = useState('');
+  const [qr, setQr] = useState('');
+  const [uri, setUri] = useState('');
+  const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [showSetup, setShowSetup] = useState(false);
+  const [showDisable, setShowDisable] = useState(false);
 
   useEffect(() => {
     (async () => {
