@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { Suspense } from 'react';
 import { getLatestRun, getRunCount, getSetting, listEndpoints, getEndpoint, getLatestPageStates, getLatestPageStatesForEndpoints, getRecentRuns, getRunHistory, getRunHistories, getBotCakeOverrides, isBotCakeEndpoint, isPancakeEndpoint, type PageStateRow, type RunRow, type EndpointRow } from '@/lib/db';
 import { StatusCard } from '@/components/StatusCard';
@@ -9,7 +8,6 @@ import { formatWithTz } from '@/lib/format';
 export const dynamic = 'force-dynamic';
 import { LiveTimeAgo } from '@/components/LiveTimeAgo';
 import { ActiveDonutChart } from '@/components/ActiveDonutChart';
-import { PageWaterfallChart } from '@/components/PageWaterfallChart';
 import { EndpointFilter } from '@/components/EndpointFilter';
 import { AlertSparkline } from '@/components/AlertSparkline';
 import { ActiveTrendChart } from '@/components/ActiveTrendChart';
@@ -200,7 +198,6 @@ async function BotCakeSection({ endpointId }: { endpointId: string }) {
   if (pages.length === 0) return null;
 
   const overrideMap = new Map<string, boolean>();
-  let botCakeHistory: RunRow[] = [];
   let breakdown: { label: string; count: number; color: string }[] = [];
   let botCakeTrend: { label: string; data: { time: string; active: number; inactive: number; total: number }[] }[] = [];
   let apiHealthy = false;
@@ -210,8 +207,6 @@ async function BotCakeSection({ endpointId }: { endpointId: string }) {
       tryDb(() => getRunHistory(endpointId, 200), []),
       tryDb(() => getBotCakeOverrides(), new Map()),
     ]);
-    botCakeHistory = bcHistory;
-
     for (const [pid, ov] of overrides) {
       overrideMap.set(pid, ov.is_active);
     }

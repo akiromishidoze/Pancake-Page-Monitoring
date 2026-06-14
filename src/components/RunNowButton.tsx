@@ -57,7 +57,7 @@ export function RunNowButton() {
         toast('Failed to load schedule');
       }
     })();
-  }, []);
+  }, [toast]);
 
   async function handleScheduleChange(newInterval: string) {
     setSchedule(newInterval);
@@ -69,7 +69,7 @@ export function RunNowButton() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ interval: newInterval }),
       });
-    } catch (err) {
+    } catch {
       toast('Failed to update schedule');
     } finally {
       setIsUpdatingSchedule(false);

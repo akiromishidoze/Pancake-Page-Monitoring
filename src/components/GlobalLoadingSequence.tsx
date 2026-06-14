@@ -44,7 +44,7 @@ export function GlobalLoadingSequence() {
       window.removeEventListener('run-started', onRunStarted);
       document.body.classList.remove('is-fetching-data');
     };
-  }, []);
+  }, [toast]);
 
   if (isRunning) {
     return (

@@ -99,6 +99,7 @@ export function BotCakePageList({ pages, overrides = new Map() }: { pages: BotCa
     const active = pages.filter(p => getEffectiveActive(p)).sort((a, b) => (a.page_name ?? a.page_id).localeCompare(b.page_name ?? b.page_id));
     const inactive = pages.filter(p => !getEffectiveActive(p)).sort((a, b) => (a.page_name ?? a.page_id).localeCompare(b.page_name ?? b.page_id));
     return [...active, ...inactive];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pages, localOverrides]);
 
   const filtered = useMemo(() => {

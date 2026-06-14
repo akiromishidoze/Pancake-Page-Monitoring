@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
+import { ErrorCodes, apiError } from '@/lib/errors';
 import { validateCredentials, hashPassword, withAuth, getSessionUser } from '@/lib/auth';
 import { getUserByEmail, updateUserPassword, updateUserEmail, incrementPasswordVersion, clearAllSessions, logAuditEntry } from '@/lib/db';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';

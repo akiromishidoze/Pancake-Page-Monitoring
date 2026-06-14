@@ -1,4 +1,4 @@
-import { listPlatformConnectors, getPlatformConnector, getEndpoint, insertSnapshot, toSlimPage } from './db';
+import { listPlatformConnectors, getPlatformConnector, insertSnapshot, toSlimPage } from './db';
 import { broadcastSSE } from './sse';
 import { createLogger } from './logger';
 

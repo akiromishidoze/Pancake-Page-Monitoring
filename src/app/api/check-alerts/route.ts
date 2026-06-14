@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
+import { ErrorCodes, apiError } from '@/lib/errors';
 import { getLatestRun } from '@/lib/db';
 import { checkAlertsForRun } from '@/lib/notify';
 import { withAuth } from '@/lib/auth';

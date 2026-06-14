@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
+import { ErrorCodes, apiError } from '@/lib/errors';
 import { getSetting } from '@/lib/db';
 import { sendAlert } from '@/lib/notify';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';

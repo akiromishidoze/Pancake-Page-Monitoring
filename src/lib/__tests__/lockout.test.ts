@@ -183,7 +183,7 @@ describe('lockout module', () => {
     });
 
     it('third lockout is 1 hour', async () => {
-      const { recordFailedAttempt, getLockoutStatus } = await import('../lockout');
+      const { recordFailedAttempt, getLockoutStatus: _getLockoutStatus } = await import('../lockout');
       // First lockout
       for (let i = 0; i < 5; i++) await recordFailedAttempt('admin', '1.2.3.4');
       vi.advanceTimersByTime(5 * 60 * 1000 + 1);

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
+import { ErrorCodes, apiError } from '@/lib/errors';
 import { withAuth } from '@/lib/auth';
 import { getNotifications, markAsRead, markAllAsRead, dismissNotification, getUnreadCount } from '@/lib/notifications';
 import { MarkNotificationsSchema } from '@/lib/schemas';

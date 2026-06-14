@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ErrorCodes, apiError, apiCatch, requireJson } from '@/lib/errors';
 import { withAuth } from '@/lib/auth';
-import { listUsers, createUser, getUserCount, logAuditEntry } from '@/lib/db';
+import { listUsers, createUser, logAuditEntry } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
 import { UserCreateSchema } from '@/lib/schemas';
 import { getClientIp } from '@/lib/rate-limit';

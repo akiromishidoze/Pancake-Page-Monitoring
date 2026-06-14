@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { apiError, apiCatch } from '@/lib/errors';
 import { queryRows } from '@/lib/db';
 import { withAuth } from '@/lib/auth';
 import { rateLimitRoute } from '@/lib/rate-limit-guard';

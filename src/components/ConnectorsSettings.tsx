@@ -38,7 +38,7 @@ export function ConnectorsSettings() {
         toast('Failed to load connectors');
       }
     })();
-  }, []);
+  }, [toast]);
 
   async function save(data: Partial<Connector>) {
     setError('');

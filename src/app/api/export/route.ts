@@ -1,9 +1,5 @@
 import { NextResponse } from 'next/server';
-import { toCsv } from '@/lib/format';
-import { apiCatch } from '@/lib/errors';
-import { pool, type RunRow } from '@/lib/db';
 import { withAuth } from '@/lib/auth';
-import { addNotification } from '@/lib/notifications';
 import { rateLimitRoute } from '@/lib/rate-limit-guard';
 
 export const GET = withAuth(async (req: Request) => {

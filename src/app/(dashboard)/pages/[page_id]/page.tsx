@@ -193,25 +193,6 @@ export default async function Page({
   // Recent incidents (most recent first)
   const recentIncidents = incidents.slice(-10).reverse();
 
-  // Flapping detector: count state changes in recent windows (1h, 24h)
-  const nowMs = Date.now();
-  const start1h = nowMs - 3600 * 1000;
-  const start24h = nowMs - 24 * 3600 * 1000;
-  let changes1h = 0;
-  let changes24h = 0;
-  for (let i = 1; i < rows.length; i++) {
-    const prev = rows[i - 1];
-    const cur = rows[i];
-    const tPrev = Date.parse(prev.generated_at);
-    const tCur = Date.parse(cur.generated_at);
-    if (isNaN(tPrev) || isNaN(tCur)) continue;
-    if (prev.is_activated !== cur.is_activated) {
-      if (tCur >= start1h) changes1h++;
-      if (tCur >= start24h) changes24h++;
-    }
-  }
-  const flapping = changes1h >= 3 || changes24h >= 10;
-
   // For activity charts: produce counts from latest snapshot if present
   const activePages = rows.filter(r => r.is_activated).map(r => ({
     name: r.page_name ?? '—',

@@ -39,7 +39,7 @@ export function NotificationSettings() {
         toast('Failed to load notification settings');
       }
     })();
-  }, []);
+  }, [toast]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();

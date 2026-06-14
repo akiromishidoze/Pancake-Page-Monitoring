@@ -41,7 +41,7 @@ vi.mock('@/lib/db', () => {
   return {
     getSetting: vi.fn(async (key: string) => store.get(key) ?? null),
     setSetting: vi.fn(async (key: string, value: string) => { store.set(key, value); }),
-    createSessionToken: vi.fn(async (role?: string) => {
+    createSessionToken: vi.fn(async (_role?: string) => {
       const token = randomBytes(16).toString('hex');
       const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
       sessionTokens.set(token, expires);

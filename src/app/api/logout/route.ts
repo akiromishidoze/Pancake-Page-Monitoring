@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { apiCatch } from '@/lib/errors';
 import { cookies } from 'next/headers';
-import { clearSession, withAuth } from '@/lib/auth';
+import { withAuth, clearSession } from '@/lib/auth';
 import { logAuditEntry } from '@/lib/db';
 import { SESSION_COOKIE_NAME, SESSION_COOKIE_OPTIONS } from '@/lib/session';
 import { rateLimitRoute } from '@/lib/rate-limit-guard';

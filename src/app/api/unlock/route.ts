@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { apiCatch } from '@/lib/errors';
 import { withAuth } from '@/lib/auth';
 import { resetAttempts } from '@/lib/lockout';
 import { logAuditEntry } from '@/lib/db';

@@ -22,7 +22,7 @@ export function DataRetentionSettings() {
         toast('Failed to load retention settings');
       }
     })();
-  }, []);
+  }, [toast]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();

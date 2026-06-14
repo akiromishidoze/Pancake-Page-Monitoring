@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { getSetting, setSetting, createSessionToken, validateSessionToken, clearSessionToken, getUserByEmail, getUserById, createUser, getUserCount } from './db';
+import { getSetting, createSessionToken, validateSessionToken, clearSessionToken, getUserByEmail, createUser, getUserCount } from './db';
 import { ErrorCodes, apiCatch, apiError, requireJson } from './errors';
 import { checkCsrf } from './csrf';
 import { SESSION_COOKIE_NAME } from './session';
@@ -99,6 +99,7 @@ export async function getSessionUser(): Promise<{ id: number; email: string; rol
   return getSessionTokenUser(token);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RouteHandler = (...args: any[]) => Promise<Response>;
 
 const handlerLog = createLogger('handler');

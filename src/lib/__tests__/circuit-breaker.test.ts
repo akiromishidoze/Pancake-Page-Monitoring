@@ -17,6 +17,7 @@ describe('circuit-breaker module', () => {
   });
 
   it('recordSuccess resets failure count', async () => {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { shouldAttempt, recordFailure, recordSuccess, getBreakerState } = await import('@/lib/circuit-breaker');
     recordFailure('test');
     recordFailure('test');
@@ -64,7 +65,7 @@ describe('circuit-breaker module', () => {
   });
 
   it('recordFailure on HALF_OPEN transitions back to OPEN', async () => {
-    const { shouldAttempt, recordFailure, getBreakerState, recordSuccess } = await import('@/lib/circuit-breaker');
+    const { shouldAttempt, recordFailure, getBreakerState, recordSuccess: _recordSuccess } = await import('@/lib/circuit-breaker');
     // Open the circuit
     recordFailure('test');
     recordFailure('test');

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 import React from 'react';
@@ -20,12 +21,12 @@ const mockPush = vi.fn();
 const mockRefresh = vi.fn();
 
 let sseListeners: Record<string, (e: Event) => void> = {};
-let onSSEError: ((e: Event) => void) | null = null;
+let _onSSEError: ((e: Event) => void) | null = null;
 
 class MockEventSource {
   constructor(_url: string) {
     sseListeners = {};
-    onSSEError = null;
+    _onSSEError = null;
   }
   addEventListener(event: string, handler: (e: Event) => void) {
     sseListeners[event] = handler;
@@ -59,7 +60,7 @@ describe('Pagination', () => {
 
   it('shows Previous button only when not on first page', async () => {
     const { Pagination } = await import('../Pagination');
-    const { rerender } = render(<Pagination page={1} totalPages={5} />);
+    const { rerender: _rerender } = render(<Pagination page={1} totalPages={5} />);
     expect(screen.queryByText('Previous')).not.toBeInTheDocument();
     expect(screen.getByText('Next')).toBeInTheDocument();
 

@@ -5,9 +5,6 @@ import { refreshBotCake } from '@/lib/poller';
 import { broadcastSSE } from '@/lib/sse';
 import { cors, corsOptions } from '@/lib/cors';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
-import { createLogger } from '@/lib/logger';
-
-const log = createLogger('botcake-refresh');
 
 function addSecurityHeaders(res: NextResponse): NextResponse {
   res.headers.set('Referrer-Policy', 'no-referrer');

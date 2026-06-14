@@ -66,13 +66,13 @@ const pool = new Proxy(_pool, {
 });
 export { pool };
 
-export async function queryRows<T = any>(text: string, params?: unknown[]): Promise<T[]> {
+export async function queryRows<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]> {
   await ensureMigrated();
   const r = await pool.query(text, params);
   return r.rows as T[];
 }
 
-export async function queryRow<T = any>(text: string, params?: unknown[]): Promise<T | undefined> {
+export async function queryRow<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T | undefined> {
   await ensureMigrated();
   const r = await pool.query(text, params);
   return r.rows[0] as T | undefined;
@@ -884,7 +884,6 @@ export async function getPancakeActivePageIds(): Promise<Set<string>> {
   const latestRunIds = await latestGoodRunIds();
   if (latestRunIds.length === 0) return new Set<string>();
   const placeholders = latestRunIds.map((_, i) => `$${i + 1}`).join(',');
-  const r = await pool.query(`SELECT page_id FROM page_states WHERE run_id IN (${placeholders}) AND is_activated IS TRUE`, latestRunIds);
   const rows = await queryRows<{ page_id: string }>(`SELECT page_id FROM page_states WHERE run_id IN (${placeholders}) AND is_activated IS TRUE`, latestRunIds);
   return new Set(rows.map(r => r.page_id));
 }
@@ -1080,11 +1079,6 @@ export async function touchEndpoint(id: string): Promise<void> {
 
 export async function getPreviousRunActiveCount(endpointId: string): Promise<number | null> {
   await ensureMigrated();
-  const r = await pool.query(`
-    SELECT active_pages FROM runs
-    WHERE endpoint_id = $1
-    ORDER BY generated_at DESC LIMIT 1 OFFSET 1
-  `, [endpointId]);
   const row = await queryRow<{ active_pages: number }>(`
     SELECT active_pages FROM runs
     WHERE endpoint_id = $1

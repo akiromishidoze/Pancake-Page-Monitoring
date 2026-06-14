@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
+import { ErrorCodes, apiError } from '@/lib/errors';
 import { listPlatformConnectors, upsertPlatformConnector, logAuditEntry } from '@/lib/db';
 import { ConnectorCreateSchema } from '@/lib/schemas';
 import { withAuth } from '@/lib/auth';

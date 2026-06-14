@@ -2,7 +2,7 @@
 // POST /api/endpoints — create or update an endpoint
 
 import { NextResponse } from 'next/server';
-import { ErrorCodes, apiError, apiCatch } from '@/lib/errors';
+import { ErrorCodes, apiError } from '@/lib/errors';
 import { listEndpoints, upsertEndpoint, logAuditEntry } from '@/lib/db';
 import { EndpointCreateSchema } from '@/lib/schemas';
 import { withAuth } from '@/lib/auth';
@@ -13,9 +13,9 @@ import { rateLimitRoute } from '@/lib/rate-limit-guard';
 export const GET = withAuth(async (req: Request) => {
     const rl = await rateLimitRoute(req); if (rl) return rl;
   const endpoints = await listEndpoints();
-  const safe = endpoints.map(({ api_key_hash, ...e }) => ({
-    ...e,
-    api_key: e.api_key ? `${e.api_key.slice(0, 8)}...${e.api_key.slice(-4)}` : null,
+  const safe = endpoints.map(({ api_key_hash: _hash, ...rest }) => ({
+    ...rest,
+    api_key: rest.api_key ? `${rest.api_key.slice(0, 8)}...${rest.api_key.slice(-4)}` : null,
   }));
   return NextResponse.json({ ok: true, endpoints: safe });
 });

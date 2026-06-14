@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 import { getSetting, queryRow, type RunRow } from './db';
-import { decrypt, encrypt } from './crypto';
+import { decrypt } from './crypto';
 import { createLogger } from './logger';
 import { addNotification } from './notifications';
 
