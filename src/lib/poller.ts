@@ -204,11 +204,11 @@ async function refreshSingleBotCake(endpoint: EndpointRow): Promise<boolean> {
   for (const p of bcResult.pages) {
     if (pancakeActive.has(p.page_id)) {
       activePages.push({
-        page_id: p.page_id, id: p.page_id,
+        page_id: p.page_id,
         name: p.name,
-        shop_label: null, shop: null,
-        activity_kind: null, kind: null,
-        activation_reason: 'pancake-activity', reason: null,
+        shop_label: null,
+        activity_kind: null,
+        activation_reason: 'pancake-activity',
         state_change: null, activity_kind_change: null,
         is_canary: false,
         response_ms: null, fetch_errors: 0,
@@ -218,11 +218,11 @@ async function refreshSingleBotCake(endpoint: EndpointRow): Promise<boolean> {
     } else if (convResult.has(p.page_id)) {
       const convInfo = convResult.get(p.page_id)!;
       activePages.push({
-        page_id: p.page_id, id: p.page_id,
+        page_id: p.page_id,
         name: p.name,
-        shop_label: null, shop: null,
-        activity_kind: null, kind: null,
-        activation_reason: 'has-conversations', reason: null,
+        shop_label: null,
+        activity_kind: null,
+        activation_reason: 'has-conversations',
         state_change: null, activity_kind_change: null,
         is_canary: false,
         response_ms: null, fetch_errors: 0,
@@ -232,11 +232,11 @@ async function refreshSingleBotCake(endpoint: EndpointRow): Promise<boolean> {
       });
     } else if (toolsActive.has(p.page_id)) {
       activePages.push({
-        page_id: p.page_id, id: p.page_id,
+        page_id: p.page_id,
         name: p.name,
-        shop_label: null, shop: null,
-        activity_kind: null, kind: null,
-        activation_reason: 'has-tools', reason: null,
+        shop_label: null,
+        activity_kind: null,
+        activation_reason: 'has-tools',
         state_change: null, activity_kind_change: null,
         is_canary: false,
         response_ms: null, fetch_errors: 0,
@@ -245,11 +245,11 @@ async function refreshSingleBotCake(endpoint: EndpointRow): Promise<boolean> {
       });
     } else {
       inactivePages.push({
-        page_id: p.page_id, id: p.page_id,
+        page_id: p.page_id,
         name: p.name,
-        shop_label: null, shop: null,
-        activity_kind: null, kind: null,
-        activation_reason: 'no-activity', reason: null,
+        shop_label: null,
+        activity_kind: null,
+        activation_reason: 'no-activity',
         state_change: null, activity_kind_change: null,
         is_canary: false,
         response_ms: null, fetch_errors: 0,
@@ -265,7 +265,7 @@ async function refreshSingleBotCake(endpoint: EndpointRow): Promise<boolean> {
     const remainingActive: SlimPage[] = [];
     const remainingInactive: SlimPage[] = [];
     for (const p of activePages) {
-      const ov = overrides.get(p.page_id ?? p.id ?? '');
+      const ov = overrides.get(p.page_id ?? '');
       if (ov && !ov.is_active) {
         p.activation_reason = 'manual-override';
         remainingInactive.push(p);
@@ -274,7 +274,7 @@ async function refreshSingleBotCake(endpoint: EndpointRow): Promise<boolean> {
       }
     }
     for (const p of inactivePages) {
-      const ov = overrides.get(p.page_id ?? p.id ?? '');
+      const ov = overrides.get(p.page_id ?? '');
       if (ov && ov.is_active) {
         p.activation_reason = 'manual-override';
         remainingActive.push(p);
@@ -484,11 +484,11 @@ async function refreshPancake() {
         const apiActive = p.is_activated === true;
         const activation_reason = hasOrders ? 'pancake-activity' : (apiActive ? 'api-active' : 'no-activity');
         const base = {
-          shop_label: ep.shop_label ?? null, shop: ep.shop_label ?? null,
+          shop_label: ep.shop_label ?? null,
           name: p.name,
-          page_id: p.id, id: p.id,
-          activity_kind: null, kind: null,
-          activation_reason, reason: null,
+          page_id: p.id,
+          activity_kind: null,
+          activation_reason,
           last_order_at: null, last_customer_activity_at: null,
           state_change: null, activity_kind_change: null,
           is_canary: false,

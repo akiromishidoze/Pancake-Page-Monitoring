@@ -582,14 +582,10 @@ export async function ensureMonthlyPartitions(): Promise<void> {
 // ──── Types ────────────────────────────────────────────────────────────
 
 export type SlimPage = {
-  shop?: string | null;
   shop_label?: string | null;
   name: string;
   page_id?: string | null;
-  id?: string | null;
-  kind?: string | null;
   activity_kind?: string | null;
-  reason?: string | null;
   activation_reason?: string | null;
   last_order_at?: string | null;
   last_customer_activity_at?: string | null;
@@ -597,26 +593,17 @@ export type SlimPage = {
   activity_kind_change?: string | null;
   is_canary?: boolean;
   response_ms?: number | null;
-  response_time_ms?: number | null;
-  latency_ms?: number | null;
-  fetch_latency_ms?: number | null;
   fetch_errors?: number;
-  fetch_error_count?: number;
-  fetch_failed?: boolean;
   customer_count?: number;
 };
 
 export function toSlimPage(src: Record<string, unknown>): SlimPage {
   return {
     shop_label: (src.shop_label as string | null) ?? null,
-    shop: (src.shop as string | null) ?? (src.shop_label as string | null) ?? null,
     name: (src.name as string) ?? (src.page_name as string) ?? 'Unknown',
     page_id: (src.page_id as string) ?? (src.id as string) ?? '',
-    id: (src.page_id as string) ?? (src.id as string) ?? '',
     activity_kind: (src.activity_kind as string | null) ?? (src.kind as string | null) ?? null,
-    kind: (src.activity_kind as string | null) ?? (src.kind as string | null) ?? null,
     activation_reason: (src.activation_reason as string | null) ?? (src.reason as string | null) ?? null,
-    reason: (src.activation_reason as string | null) ?? (src.reason as string | null) ?? null,
     last_order_at: (src.last_order_at as string | null) ?? null,
     last_customer_activity_at: (src.last_customer_activity_at as string | null) ?? null,
     state_change: (src.state_change as string | null) ?? null,
@@ -645,7 +632,7 @@ export type RunRow = {
   active_pages: number | null;
   inactive_pages: number | null;
   receiver_sd_size_bytes: number | null;
-  raw_summary: string;
+  raw_summary: string | null;
 };
 
 export type PageStateRow = {
@@ -701,35 +688,35 @@ export async function insertSnapshot(input: InsertSnapshotInput): Promise<{ inse
 
   const allPagesMap = new Map<string, typeof input.active_pages[0] & { _is_active: boolean | null; response_ms: number | null; fetch_errors: number }>();
   for (const p of input.active_pages) {
-    const pid = p.page_id ?? p.id ?? '';
+    const pid = p.page_id ?? '';
     if (!allPagesMap.has(pid)) {
       allPagesMap.set(pid, {
         ...p,
         _is_active: true,
-        response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
-        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
+        response_ms: p.response_ms ?? (p as any).response_time_ms ?? (p as any).latency_ms ?? (p as any).fetch_latency_ms ?? null,
+        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof (p as any).fetch_error_count === 'number' ? (p as any).fetch_error_count : typeof (p as any).fetch_failed === 'boolean' ? 1 : 0),
       });
     }
   }
   for (const p of input.inactive_pages) {
-    const pid = p.page_id ?? p.id ?? '';
+    const pid = p.page_id ?? '';
     if (!allPagesMap.has(pid)) {
       allPagesMap.set(pid, {
         ...p,
         _is_active: false,
-        response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
-        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
+        response_ms: p.response_ms ?? (p as any).response_time_ms ?? (p as any).latency_ms ?? (p as any).fetch_latency_ms ?? null,
+        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof (p as any).fetch_error_count === 'number' ? (p as any).fetch_error_count : typeof (p as any).fetch_failed === 'boolean' ? 1 : 0),
       });
     }
   }
   for (const p of input.unknown_pages ?? []) {
-    const pid = p.page_id ?? p.id ?? '';
+    const pid = p.page_id ?? '';
     if (!allPagesMap.has(pid)) {
       allPagesMap.set(pid, {
         ...p,
         _is_active: null,
-        response_ms: p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
-        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : p.fetch_failed ? 1 : 0),
+        response_ms: p.response_ms ?? (p as any).response_time_ms ?? (p as any).latency_ms ?? (p as any).fetch_latency_ms ?? null,
+        fetch_errors: typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof (p as any).fetch_error_count === 'number' ? (p as any).fetch_error_count : typeof (p as any).fetch_failed === 'boolean' ? 1 : 0),
       });
     }
   }
@@ -783,13 +770,13 @@ export async function insertSnapshot(input: InsertSnapshotInput): Promise<{ inse
         rows.push(`(${placeholders})`);
         values.push(
           input.run_id,
-          p.page_id ?? p.id ?? '',
-          p.shop_label ?? p.shop ?? null,
+          p.page_id ?? '',
+          p.shop_label ?? (p as any).shop ?? null,
           p.name ?? null,
-          p.activity_kind ?? p.kind ?? null,
+          p.activity_kind ?? (p as any).kind ?? null,
           p._is_active,
           p.is_canary ?? false,
-          p.activation_reason ?? p.reason ?? null,
+          p.activation_reason ?? (p as any).reason ?? null,
           p.state_change ?? null,
           p.activity_kind_change ?? null,
           p.last_order_at
@@ -798,8 +785,8 @@ export async function insertSnapshot(input: InsertSnapshotInput): Promise<{ inse
           p.last_customer_activity_at
             ? (new Date(input.generated_at).getTime() - new Date(p.last_customer_activity_at).getTime()) / (1000 * 60 * 60)
             : null,
-          p.response_ms ?? p.response_time_ms ?? p.latency_ms ?? p.fetch_latency_ms ?? null,
-          typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof p.fetch_error_count === 'number' ? p.fetch_error_count : null),
+          p.response_ms ?? (p as any).response_time_ms ?? (p as any).latency_ms ?? (p as any).fetch_latency_ms ?? null,
+          typeof p.fetch_errors === 'number' ? p.fetch_errors : (typeof (p as any).fetch_error_count === 'number' ? (p as any).fetch_error_count : null),
           input.generated_at,
           p.customer_count ?? null,
         );
